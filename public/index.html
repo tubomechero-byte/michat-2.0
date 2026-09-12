@@ -45,7 +45,7 @@ button,input{font:inherit}
 .chatHeader{height:70px;padding:12px 18px;border-bottom:1px solid #ddd;display:flex;align-items:center;gap:12px}
 .chatInfo{flex:1;min-width:0}.chatTitle{font-weight:bold}.chatSubtitle{margin-top:3px;font-size:13px;color:#777}
 .chatTools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-.toolBtn{border:0;background:#f0f2f5;border-radius:8px;padding:7px 9px;cursor:pointer}
+.toolBtn{border:0;background:#f0f2f5;border-radius:8px;padding:7px 9px;cursor:pointer}.callBtn{background:#25d366;color:#fff}.hangBtn{background:#b00020;color:#fff}
 #messages{flex:1;overflow-y:auto;padding:20px;background:#e5ddd5}
 .empty{height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:#666}
 .messageRow{display:flex;margin:7px 0}.mine{justify-content:flex-end}
@@ -120,6 +120,8 @@ button,input{font:inherit}
           <div id="chatSubtitle" class="chatSubtitle">Usa «Nuevo chat» para iniciar una conversación.</div>
         </div>
         <div class="chatTools">
+          <button id="callButton" class="toolBtn callBtn hidden">📞 Llamar</button>
+          <button id="hangupButton" class="toolBtn hangBtn hidden">📵 Colgar</button>
           <button id="blockCurrentButton" class="toolBtn hidden">🚫 Bloquear</button>
         </div>
       </header>
@@ -198,6 +200,20 @@ const chatTitle = $("chatTitle");
 const chatSubtitle = $("chatSubtitle");
 const headerAvatar = $("headerAvatar");
 const blockCurrentButton = $("blockCurrentButton");
+const callButton = $("callButton");
+const hangupButton = $("hangupButton");
+const incomingCallModal = $("incomingCallModal");
+const incomingCallText = $("incomingCallText");
+const acceptCallButton = $("acceptCallButton");
+const rejectCallButton = $("rejectCallButton");
+const callError = $("callError");
+const remoteAudio = $("remoteAudio");
+
+let peerConnection = null;
+let localStream = null;
+let callPeer = "";
+let callState = "idle";
+let pendingOffer = null;
 const layout = $("layout");
 const notifications = $("notifications");
 
@@ -341,6 +357,8 @@ function openChat(username, displayName, online, profileImage="") {
   headerAvatar.innerHTML = profileImage ? `<img src="${esc(profileImage)}" alt="">` : esc(displayName.charAt(0).toUpperCase());
   blockCurrentButton.classList.remove("hidden");
   blockCurrentButton.textContent = "🚫 Bloquear";
+  callButton.classList.remove("hidden");
+  hangupButton.classList.add("hidden");
   $("layout").classList.add("mobileChat");
   messageInput.disabled=false;
   sendButton.disabled=false;
@@ -446,6 +464,196 @@ function showNotification(from,text,username){
   notifications.appendChild(n);
   setTimeout(()=>n.remove(),6000);
 }
+
+
+const rtcConfig = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" }
+  ]
+};
+
+async function ensureMicrophone() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    throw new Error("Este navegador no permite usar el micrófono aquí.");
+  }
+  if (!localStream) {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  }
+  return localStream;
+}
+
+async function startPeer(initiator) {
+  peerConnection = new RTCPeerConnection(rtcConfig);
+  const stream = await ensureMicrophone();
+  stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
+  peerConnection.ontrack = e => {
+    if (e.streams && e.streams[0]) remoteAudio.srcObject = e.streams[0];
+  };
+  peerConnection.onicecandidate = e => {
+    if (e.candidate && callPeer) socket.emit("callIceCandidate", { to: callPeer, candidate: e.candidate });
+  };
+  peerConnection.onconnectionstatechange = () => {
+    const state = peerConnection?.connectionState;
+    if (["failed", "disconnected", "closed"].includes(state)) {
+      cleanupCall(false);
+    }
+  };
+  if (initiator) {
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+    socket.emit("callOffer", { to: callPeer, offer: peerConnection.localDescription });
+  }
+}
+
+async function callUser() {
+  if (!selectedUser || callState !== "idle") return;
+  callPeer = selectedUser;
+  callState = "calling";
+  callButton.classList.add("hidden");
+  hangupButton.classList.remove("hidden");
+  chatSubtitle.textContent = "📞 Llamando...";
+  try {
+    await ensureMicrophone();
+    socket.emit("callRequest", { to: callPeer });
+  } catch (e) {
+    cleanupCall(false);
+    showNotification("Sistema", e.message || "No se pudo usar el micrófono.", "");
+  }
+}
+
+async function acceptCall() {
+  if (!callPeer) return;
+  incomingCallModal.style.display = "none";
+  callState = "in-call";
+  callButton.classList.add("hidden");
+  hangupButton.classList.remove("hidden");
+  try {
+    await ensureMicrophone();
+    socket.emit("callAccept", { to: callPeer });
+    await startPeer(false);
+    if (pendingOffer) {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(pendingOffer));
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      socket.emit("callAnswer", { to: callPeer, answer: peerConnection.localDescription });
+      pendingOffer = null;
+    }
+    chatSubtitle.textContent = "📞 En llamada";
+  } catch (e) {
+    cleanupCall(false);
+    showNotification("Sistema", e.message || "No se pudo iniciar la llamada.", "");
+  }
+}
+
+function rejectCall() {
+  incomingCallModal.style.display = "none";
+  if (callPeer) socket.emit("callReject", { to: callPeer });
+  cleanupCall(false);
+}
+
+function cleanupCall(notifyRemote = true) {
+  if (notifyRemote && callPeer) socket.emit("callEnd", { to: callPeer });
+  if (peerConnection) {
+    try { peerConnection.close(); } catch {}
+  }
+  peerConnection = null;
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+  }
+  localStream = null;
+  remoteAudio.srcObject = null;
+  pendingOffer = null;
+  callState = "idle";
+  callPeer = "";
+  hangupButton.classList.add("hidden");
+  if (selectedUser) {
+    callButton.classList.remove("hidden");
+    const user = allUsers.find(u => u.username === selectedUser);
+    if (user) chatSubtitle.textContent = user.online ? "● En línea" : "○ Desconectado";
+  } else {
+    callButton.classList.add("hidden");
+  }
+}
+
+callButton.onclick = callUser;
+hangupButton.onclick = () => cleanupCall(true);
+acceptCallButton.onclick = acceptCall;
+rejectCallButton.onclick = rejectCall;
+
+socket.on("callError", msg => {
+  cleanupCall(false);
+  showNotification("Llamada", msg, "");
+});
+
+socket.on("incomingCall", async data => {
+  if (callState !== "idle") {
+    socket.emit("callReject", { to: data.from });
+    return;
+  }
+  callPeer = data.from;
+  incomingCallText.textContent = `${data.fromDisplay || data.from} te está llamando.`;
+  callError.textContent = "";
+  incomingCallModal.style.display = "flex";
+  showNotification("Llamada entrante", `${data.fromDisplay || data.from} te está llamando`, data.from);
+});
+
+socket.on("callAccepted", async data => {
+  try {
+    callState = "in-call";
+    chatSubtitle.textContent = "📞 Conectando...";
+    await startPeer(true);
+  } catch (e) {
+    cleanupCall(true);
+    showNotification("Llamada", e.message || "No se pudo iniciar la llamada.", "");
+  }
+});
+
+socket.on("callRejected", () => {
+  showNotification("Llamada", "La otra persona rechazó la llamada.", "");
+  cleanupCall(false);
+});
+
+socket.on("callOffer", async data => {
+  try {
+    if (!peerConnection) {
+      pendingOffer = data.offer;
+      return;
+    }
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    socket.emit("callAnswer", { to: data.from, answer: peerConnection.localDescription });
+    chatSubtitle.textContent = "📞 En llamada";
+  } catch (e) {
+    showNotification("Llamada", "Error al conectar la llamada.", "");
+    cleanupCall(true);
+  }
+});
+
+socket.on("callAnswer", async data => {
+  try {
+    if (!peerConnection) return;
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+    chatSubtitle.textContent = "📞 En llamada";
+  } catch (e) {
+    cleanupCall(true);
+  }
+});
+
+socket.on("callIceCandidate", async data => {
+  try {
+    if (peerConnection && data.candidate) {
+      await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+    }
+  } catch {}
+});
+
+socket.on("callEnded", () => {
+  showNotification("Llamada", "La llamada ha terminado.", "");
+  cleanupCall(false);
+});
+
 
 blockCurrentButton.onclick=()=>{
   if(!selectedUser)return;
@@ -562,6 +770,7 @@ function urlBase64ToUint8(base64){
 }
 
 $("logoutButton").onclick=async()=>{
+  cleanupCall(false);
   const token=localStorage.getItem("chatToken");
   try{await fetch("/api/logout",{method:"POST",headers:{Authorization:"Bearer "+token}});}catch{}
   localStorage.removeItem("chatToken");
@@ -570,6 +779,7 @@ $("logoutButton").onclick=async()=>{
 };
 
 $("backButton").onclick=()=>layout.classList.remove("mobileChat");
+window.addEventListener("beforeunload", () => cleanupCall(false));
 checkSession();
 </script>
 </body>
