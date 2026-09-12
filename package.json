@@ -1,0 +1,14 @@
+{
+  "name": "mi-chat",
+  "version": "2.0.0",
+  "description": "Chat privado con cuentas, perfiles, bloqueo, historial y notificaciones push",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1",
+    "web-push": "^3.6.7"
+  }
+}
