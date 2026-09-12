@@ -5,14 +5,15 @@ self.addEventListener("activate", event => event.waitUntil(self.clients.claim())
 self.addEventListener("push", event => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch {}
-
-  const title = data.from ? `💬 ${data.from}` : "Mi Chat";
-  const body = data.message || "Tienes un nuevo mensaje.";
-
+  const isCall = data.type === "call";
+  const title = isCall ? `📞 ${data.from || "Llamada entrante"}` : (data.from ? `💬 ${data.from}` : "Mi Chat");
+  const body = isCall ? "Llamada entrante" : (data.message || "Tienes un nuevo mensaje.");
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
-      data: { username: data.username || "" }
+      tag: isCall ? "incoming-call" : "chat-message",
+      renotify: true,
+      data: { username: data.username || "", type: data.type || "message" }
     })
   );
 });
