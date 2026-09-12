@@ -42,6 +42,10 @@ ensure(SESSIONS_FILE, {});
 ensure(PUSH_FILE, []);
 ensure(STORIES_FILE, []);
 
+// =====================================================
+// ARCHIVOS / DATOS
+// =====================================================
+
 function read(file, fallback) {
   try {
     return JSON.parse(
@@ -100,16 +104,12 @@ function saveStories(data) {
   write(STORIES_FILE, data);
 }
 
-function activeStories() {
+function cleanExpiredStories() {
   const now = Date.now();
 
-  return allStories().filter(
-    story => story.expiresAt > now
+  const active = allStories().filter(
+    story => Number(story.expiresAt) > now
   );
-}
-
-function cleanExpiredStories() {
-  const active = activeStories();
 
   saveStories(active);
 
@@ -130,9 +130,28 @@ function getUser(username) {
   const name = norm(username);
 
   return users().find(
-    user => norm(user.username) === name
+    user =>
+      norm(user.username) === name
   );
 }
+
+function socketIdFor(username) {
+  const wanted = norm(username);
+
+  for (
+    const [socketId, name] of online.entries()
+  ) {
+    if (norm(name) === wanted) {
+      return socketId;
+    }
+  }
+
+  return null;
+}
+
+// =====================================================
+// CONTRASEÑAS
+// =====================================================
 
 function passwordHash(password) {
   const salt =
@@ -164,6 +183,10 @@ function validPassword(password, salt, hash) {
     return false;
   }
 }
+
+// =====================================================
+// SESIONES
+// =====================================================
 
 function newSession(username) {
   const data = sessions();
@@ -204,11 +227,13 @@ function deleteSession(token) {
 }
 
 function authToken(req) {
-  const auth =
+  const authorization =
     req.headers.authorization || "";
 
-  if (auth.startsWith("Bearer ")) {
-    return auth.slice(7);
+  if (
+    authorization.startsWith("Bearer ")
+  ) {
+    return authorization.slice(7);
   }
 
   return "";
@@ -237,347 +262,25 @@ app.use(
 const online = new Map();
 
 // =====================================================
-// PUSH
+// BLOQUEOS
 // =====================================================
 
-const vapidPublic =
-  process.env.VAPID_PUBLIC_KEY || "";
+function isBlocked(a, b) {
+  const user = getUser(a);
 
-const vapidPrivate =
-  process.env.VAPID_PRIVATE_KEY || "";
-
-const vapidSubject =
-  process.env.VAPID_SUBJECT ||
-  "mailto:admin@example.com";
-
-if (vapidPublic && vapidPrivate) {
-  webpush.setVapidDetails(
-    vapidSubject,
-    vapidPublic,
-    vapidPrivate
+  return !!(
+    user &&
+    Array.isArray(user.blockedUsers) &&
+    user.blockedUsers.includes(norm(b))
   );
 }
 
-function sendPushToUser(username, payload) {
-  if (!vapidPublic || !vapidPrivate) {
-    return;
-  }
-
-  const subscriptions = pushSubs();
-
-  for (const item of subscriptions) {
-    if (
-      norm(item.username) !==
-      norm(username)
-    ) {
-      continue;
-    }
-
-    webpush
-      .sendNotification(
-        item.subscription,
-        JSON.stringify(payload)
-      )
-      .catch(() => {});
-  }
-}
-
-// =====================================================
-// LISTA DE USUARIOS
-// =====================================================
-
-function sendUserList() {
-  const list = users().map(user => ({
-    username: user.username,
-    displayName:
-      user.displayName || user.username,
-    profileImage:
-      user.profileImage || "",
-    online:
-      [...online.values()].some(
-        name =>
-          norm(name) ===
-          norm(user.username)
-      )
-  }));
-
-  io.emit("userList", list);
-}
-
-// =====================================================
-// REGISTRO
-// =====================================================
-
-app.post("/api/register", (req, res) => {
-  const displayName =
-    String(
-      req.body.username || ""
-    ).trim();
-
-  const password =
-    String(
-      req.body.password || ""
-    );
-
-  if (
-    displayName.length < 3 ||
-    displayName.length > 24
-  ) {
-    return res.status(400).json({
-      error:
-        "El nombre debe tener entre 3 y 24 caracteres."
-    });
-  }
-
-  if (!/^[a-zA-Z0-9_]+$/.test(displayName)) {
-    return res.status(400).json({
-      error:
-        "Solo letras, números y _."
-    });
-  }
-
-  if (password.length < 6) {
-    return res.status(400).json({
-      error:
-        "La contraseña debe tener al menos 6 caracteres."
-    });
-  }
-
-  const username = norm(displayName);
-
-  const list = users();
-
-  if (
-    list.some(
-      user =>
-        norm(user.username) ===
-        username
-    )
-  ) {
-    return res.status(400).json({
-      error:
-        "Ese usuario ya existe."
-    });
-  }
-
-  const p = passwordHash(password);
-
-  list.push({
-    username,
-    displayName,
-    salt: p.salt,
-    passwordHash: p.hash,
-    profileImage: "",
-    blockedUsers: [],
-    contacts: [],
-    createdAt: Date.now()
-  });
-
-  saveUsers(list);
-
-  const token =
-    newSession(username);
-
-  sendUserList();
-
-  res.json({
-    success: true,
-    username: displayName,
-    token
-  });
-});
-
-// =====================================================
-// LOGIN
-// =====================================================
-
-app.post("/api/login", (req, res) => {
-  const username =
-    norm(req.body.username);
-
-  const password =
-    String(
-      req.body.password || ""
-    );
-
-  const user =
-    getUser(username);
-
-  if (
-    !user ||
-    !validPassword(
-      password,
-      user.salt,
-      user.passwordHash
-    )
-  ) {
-    return res.status(401).json({
-      error:
-        "Usuario o contraseña incorrectos."
-    });
-  }
-
-  const list = users();
-
-  const index =
-    list.findIndex(
-      item =>
-        norm(item.username) ===
-        norm(user.username)
-    );
-
-  if (
-    index >= 0 &&
-    !Array.isArray(list[index].contacts)
-  ) {
-    list[index].contacts = [];
-    saveUsers(list);
-  }
-
-  const token =
-    newSession(user.username);
-
-  res.json({
-    success: true,
-    username: user.displayName,
-    token
-  });
-});
-
-// =====================================================
-// SESIÓN
-// =====================================================
-
-app.get("/api/session", (req, res) => {
-  const user =
-    sessionUser(authToken(req));
-
-  if (!user) {
-    return res.status(401).json({
-      loggedIn: false
-    });
-  }
-
-  res.json({
-    loggedIn: true,
-    username: user.displayName,
-    profileImage:
-      user.profileImage || ""
-  });
-});
-
-// =====================================================
-// LOGOUT
-// =====================================================
-
-app.post("/api/logout", (req, res) => {
-  deleteSession(
-    authToken(req)
+function isEitherBlocked(a, b) {
+  return (
+    isBlocked(a, b) ||
+    isBlocked(b, a)
   );
-
-  res.json({
-    success: true
-  });
-});
-
-// =====================================================
-// PERFIL
-// =====================================================
-
-app.get("/api/profile", (req, res) => {
-  const user =
-    sessionUser(authToken(req));
-
-  if (!user) {
-    return res.status(401).json({
-      error:
-        "No autorizado"
-    });
-  }
-
-  res.json({
-    username: user.username,
-    displayName: user.displayName,
-    profileImage:
-      user.profileImage || ""
-  });
-});
-
-app.post("/api/profile", (req, res) => {
-  const user =
-    sessionUser(authToken(req));
-
-  if (!user) {
-    return res.status(401).json({
-      error:
-        "No autorizado"
-    });
-  }
-
-  const displayName =
-    String(
-      req.body.displayName ||
-      user.displayName
-    ).trim();
-
-  const profileImage =
-    String(
-      req.body.profileImage ||
-      ""
-    );
-
-  if (
-    displayName.length < 3 ||
-    displayName.length > 24
-  ) {
-    return res.status(400).json({
-      error:
-        "Nombre inválido."
-    });
-  }
-
-  if (
-    profileImage.length >
-    800000
-  ) {
-    return res.status(400).json({
-      error:
-        "La imagen es demasiado grande."
-    });
-  }
-
-  const list = users();
-
-  const index =
-    list.findIndex(
-      item =>
-        norm(item.username) ===
-        norm(user.username)
-    );
-
-  if (index < 0) {
-    return res.status(404).json({
-      error:
-        "Usuario no encontrado."
-    });
-  }
-
-  list[index].displayName =
-    displayName;
-
-  list[index].profileImage =
-    profileImage;
-
-  saveUsers(list);
-
-  sendUserList();
-
-  res.json({
-    success: true,
-    displayName,
-    profileImage
-  });
-});
+}
 
 // =====================================================
 // CONTACTOS
@@ -591,12 +294,12 @@ function getContactList(username) {
     return [];
   }
 
-  const names =
+  const contactNames =
     Array.isArray(user.contacts)
       ? user.contacts
       : [];
 
-  return names
+  return contactNames
     .map(name => getUser(name))
     .filter(Boolean)
     .filter(
@@ -627,6 +330,460 @@ function getContactList(username) {
     }));
 }
 
+// =====================================================
+// LISTA DE USUARIOS
+// =====================================================
+
+function sendUserList() {
+  const list =
+    users().map(user => ({
+      username:
+        user.username,
+
+      displayName:
+        user.displayName ||
+        user.username,
+
+      profileImage:
+        user.profileImage ||
+        "",
+
+      online:
+        [...online.values()].some(
+          name =>
+            norm(name) ===
+            norm(user.username)
+        )
+    }));
+
+  io.emit(
+    "userList",
+    list
+  );
+}
+
+// =====================================================
+// PUSH
+// =====================================================
+
+const vapidPublic =
+  process.env.VAPID_PUBLIC_KEY || "";
+
+const vapidPrivate =
+  process.env.VAPID_PRIVATE_KEY || "";
+
+const vapidSubject =
+  process.env.VAPID_SUBJECT ||
+  "mailto:admin@example.com";
+
+if (
+  vapidPublic &&
+  vapidPrivate
+) {
+  webpush.setVapidDetails(
+    vapidSubject,
+    vapidPublic,
+    vapidPrivate
+  );
+}
+
+function sendPushToUser(
+  username,
+  payload
+) {
+  if (
+    !vapidPublic ||
+    !vapidPrivate
+  ) {
+    return;
+  }
+
+  const subscriptions =
+    pushSubs();
+
+  for (
+    const item of subscriptions
+  ) {
+    if (
+      norm(item.username) !==
+      norm(username)
+    ) {
+      continue;
+    }
+
+    webpush
+      .sendNotification(
+        item.subscription,
+        JSON.stringify(payload)
+      )
+      .catch(() => {});
+  }
+}
+
+// =====================================================
+// REGISTRO
+// =====================================================
+
+app.post(
+  "/api/register",
+  (req, res) => {
+    const displayName =
+      String(
+        req.body.username || ""
+      ).trim();
+
+    const password =
+      String(
+        req.body.password || ""
+      );
+
+    if (
+      displayName.length < 3 ||
+      displayName.length > 24
+    ) {
+      return res.status(400).json({
+        error:
+          "El nombre debe tener entre 3 y 24 caracteres."
+      });
+    }
+
+    if (
+      !/^[a-zA-Z0-9_]+$/.test(
+        displayName
+      )
+    ) {
+      return res.status(400).json({
+        error:
+          "Solo letras, números y _."
+      });
+    }
+
+    if (
+      password.length < 6
+    ) {
+      return res.status(400).json({
+        error:
+          "La contraseña debe tener al menos 6 caracteres."
+      });
+    }
+
+    const username =
+      norm(displayName);
+
+    const list =
+      users();
+
+    if (
+      list.some(
+        user =>
+          norm(
+            user.username
+          ) === username
+      )
+    ) {
+      return res.status(400).json({
+        error:
+          "Ese usuario ya existe."
+      });
+    }
+
+    const p =
+      passwordHash(
+        password
+      );
+
+    list.push({
+      username,
+      displayName,
+
+      salt:
+        p.salt,
+
+      passwordHash:
+        p.hash,
+
+      profileImage:
+        "",
+
+      blockedUsers:
+        [],
+
+      contacts:
+        [],
+
+      createdAt:
+        Date.now()
+    });
+
+    saveUsers(list);
+
+    const token =
+      newSession(
+        username
+      );
+
+    sendUserList();
+
+    res.json({
+      success: true,
+      username:
+        displayName,
+      token
+    });
+  }
+);
+
+// =====================================================
+// LOGIN
+// =====================================================
+
+app.post(
+  "/api/login",
+  (req, res) => {
+    const username =
+      norm(
+        req.body.username
+      );
+
+    const password =
+      String(
+        req.body.password || ""
+      );
+
+    const user =
+      getUser(username);
+
+    if (
+      !user ||
+      !validPassword(
+        password,
+        user.salt,
+        user.passwordHash
+      )
+    ) {
+      return res.status(401).json({
+        error:
+          "Usuario o contraseña incorrectos."
+      });
+    }
+
+    const list =
+      users();
+
+    const index =
+      list.findIndex(
+        item =>
+          norm(
+            item.username
+          ) ===
+          norm(
+            user.username
+          )
+      );
+
+    if (index >= 0) {
+      if (
+        !Array.isArray(
+          list[index].contacts
+        )
+      ) {
+        list[index].contacts = [];
+      }
+
+      if (
+        !Array.isArray(
+          list[index].blockedUsers
+        )
+      ) {
+        list[index].blockedUsers = [];
+      }
+
+      saveUsers(list);
+    }
+
+    const token =
+      newSession(
+        user.username
+      );
+
+    res.json({
+      success: true,
+      username:
+        user.displayName,
+      token
+    });
+  }
+);
+
+// =====================================================
+// SESIÓN
+// =====================================================
+
+app.get(
+  "/api/session",
+  (req, res) => {
+    const user =
+      sessionUser(
+        authToken(req)
+      );
+
+    if (!user) {
+      return res.status(401).json({
+        loggedIn: false
+      });
+    }
+
+    res.json({
+      loggedIn: true,
+
+      username:
+        user.displayName,
+
+      profileImage:
+        user.profileImage ||
+        ""
+    });
+  }
+);
+
+// =====================================================
+// LOGOUT
+// =====================================================
+
+app.post(
+  "/api/logout",
+  (req, res) => {
+    deleteSession(
+      authToken(req)
+    );
+
+    res.json({
+      success: true
+    });
+  }
+);
+
+// =====================================================
+// PERFIL
+// =====================================================
+
+app.get(
+  "/api/profile",
+  (req, res) => {
+    const user =
+      sessionUser(
+        authToken(req)
+      );
+
+    if (!user) {
+      return res.status(401).json({
+        error:
+          "No autorizado"
+      });
+    }
+
+    res.json({
+      username:
+        user.username,
+
+      displayName:
+        user.displayName,
+
+      profileImage:
+        user.profileImage ||
+        ""
+    });
+  }
+);
+
+app.post(
+  "/api/profile",
+  (req, res) => {
+    const user =
+      sessionUser(
+        authToken(req)
+      );
+
+    if (!user) {
+      return res.status(401).json({
+        error:
+          "No autorizado"
+      });
+    }
+
+    const displayName =
+      String(
+        req.body.displayName ||
+        user.displayName
+      ).trim();
+
+    const profileImage =
+      String(
+        req.body.profileImage ||
+        ""
+      );
+
+    if (
+      displayName.length < 3 ||
+      displayName.length > 24
+    ) {
+      return res.status(400).json({
+        error:
+          "Nombre inválido."
+      });
+    }
+
+    if (
+      profileImage.length >
+      800000
+    ) {
+      return res.status(400).json({
+        error:
+          "La imagen es demasiado grande."
+      });
+    }
+
+    const list =
+      users();
+
+    const index =
+      list.findIndex(
+        item =>
+          norm(item.username) ===
+          norm(user.username)
+      );
+
+    if (index < 0) {
+      return res.status(404).json({
+        error:
+          "Usuario no encontrado."
+      });
+    }
+
+    list[index].displayName =
+      displayName;
+
+    list[index].profileImage =
+      profileImage;
+
+    saveUsers(list);
+
+    sendUserList();
+
+    res.json({
+      success: true,
+
+      displayName,
+
+      profileImage
+    });
+  }
+);
+
+// =====================================================
+// CONTACTOS - LISTAR
+// =====================================================
+
 app.get(
   "/api/contacts",
   (req, res) => {
@@ -650,6 +807,10 @@ app.get(
   }
 );
 
+// =====================================================
+// CONTACTOS - AÑADIR
+// =====================================================
+
 app.post(
   "/api/contacts/add",
   (req, res) => {
@@ -666,7 +827,9 @@ app.post(
     }
 
     const target =
-      norm(req.body.username);
+      norm(
+        req.body.username
+      );
 
     if (!target) {
       return res.status(400).json({
@@ -707,7 +870,8 @@ app.post(
       });
     }
 
-    const list = users();
+    const list =
+      users();
 
     const index =
       list.findIndex(
@@ -728,7 +892,8 @@ app.post(
         list[index].contacts
       )
     ) {
-      list[index].contacts = [];
+      list[index].contacts =
+        [];
     }
 
     if (
@@ -744,31 +909,33 @@ app.post(
       });
     }
 
-    list[index].contacts.push(target);
+    list[index].contacts.push(
+      target
+    );
 
     saveUsers(list);
 
+    const contact =
+      getContactList(
+        user.username
+      ).find(
+        item =>
+          norm(
+            item.username
+          ) === target
+      );
+
     res.json({
       success: true,
-
       contact:
-        getContactList(
-          user.username
-        ).find(
-          contact =>
-            norm(
-              contact.username
-            ) === target
-        )
+        contact || null
     });
-
-    io.to(
-      getSocketId(
-        user.username
-      )
-    );
   }
 );
+
+// =====================================================
+// CONTACTOS - ELIMINAR
+// =====================================================
 
 app.post(
   "/api/contacts/remove",
@@ -786,9 +953,19 @@ app.post(
     }
 
     const target =
-      norm(req.body.username);
+      norm(
+        req.body.username
+      );
 
-    const list = users();
+    if (!target) {
+      return res.status(400).json({
+        error:
+          "Usuario inválido."
+      });
+    }
+
+    const list =
+      users();
 
     const index =
       list.findIndex(
@@ -821,17 +998,6 @@ app.post(
     });
   }
 );
-
-function getSocketId(username) {
-  const entry =
-    [...online.entries()].find(
-      ([, name]) =>
-        norm(name) ===
-        norm(username)
-    );
-
-  return entry ? entry[0] : null;
-}
 
 // =====================================================
 // PUSH
@@ -881,6 +1047,7 @@ app.post(
       list.push({
         username:
           user.username,
+
         subscription
       });
     }
@@ -889,6 +1056,7 @@ app.post(
 
     res.json({
       success: true,
+
       enabled:
         !!(
           vapidPublic &&
@@ -907,6 +1075,7 @@ app.get(
           vapidPublic &&
           vapidPrivate
         ),
+
       publicKey:
         vapidPublic
     });
@@ -932,12 +1101,15 @@ app.get(
       });
     }
 
-    const stories =
-      cleanExpiredStories();
-
-    res.json(stories);
+    res.json(
+      cleanExpiredStories()
+    );
   }
 );
+
+// =====================================================
+// CREAR HISTORIA
+// =====================================================
 
 app.post(
   "/api/stories",
@@ -969,7 +1141,7 @@ app.post(
     const background =
       String(
         req.body.background ||
-        ""
+        "#075e54"
       ).trim();
 
     if (!content) {
@@ -985,7 +1157,7 @@ app.post(
     ) {
       return res.status(400).json({
         error:
-          "El texto puede tener como máximo 500 caracteres."
+          "La historia de texto puede tener hasta 500 caracteres."
       });
     }
 
@@ -1014,7 +1186,7 @@ app.post(
     const list =
       cleanExpiredStories();
 
-    const ownStories =
+    const ownCount =
       list.filter(
         story =>
           norm(
@@ -1023,9 +1195,11 @@ app.post(
           norm(
             user.username
           )
-      );
+      ).length;
 
-    if (ownStories.length >= 20) {
+    if (
+      ownCount >= 20
+    ) {
       return res.status(400).json({
         error:
           "Has alcanzado el límite de 20 historias activas."
@@ -1058,11 +1232,7 @@ app.post(
 
       content,
 
-      background:
-        type === "text"
-          ? background ||
-            "#075e54"
-          : "",
+      background,
 
       createdAt:
         now,
@@ -1074,13 +1244,18 @@ app.post(
           60 *
           1000,
 
-      // QUIÉNES HAN VISTO LA HISTORIA
-      views: []
+      // Usuarios que han visto esta historia
+      views:
+        []
     };
 
-    list.push(story);
+    list.push(
+      story
+    );
 
-    saveStories(list);
+    saveStories(
+      list
+    );
 
     io.emit(
       "storyCreated",
@@ -1124,8 +1299,8 @@ app.post(
     const index =
       list.findIndex(
         story =>
-          story.id ===
-          req.params.id
+          String(story.id) ===
+          String(req.params.id)
       );
 
     if (index < 0) {
@@ -1138,18 +1313,6 @@ app.post(
     const story =
       list[index];
 
-    // El dueño no cuenta como espectador
-    if (
-      norm(story.username) ===
-      norm(user.username)
-    ) {
-      return res.json({
-        success: true,
-        viewed: false,
-        owner: true
-      });
-    }
-
     if (
       !Array.isArray(
         story.views
@@ -1158,15 +1321,35 @@ app.post(
       story.views = [];
     }
 
+    // El dueño no cuenta como espectador
+    if (
+      norm(story.username) ===
+      norm(user.username)
+    ) {
+      saveStories(list);
+
+      return res.json({
+        success: true,
+        owner: true,
+        viewed: false,
+        views:
+          story.views
+      });
+    }
+
     const alreadyViewed =
       story.views.some(
         view =>
-          norm(view.username) ===
-          norm(user.username)
+          norm(
+            view.username
+          ) ===
+          norm(
+            user.username
+          )
       );
 
     if (!alreadyViewed) {
-      story.views.push({
+      const view = {
         username:
           user.username,
 
@@ -1180,13 +1363,18 @@ app.post(
 
         viewedAt:
           Date.now()
-      });
+      };
 
-      saveStories(list);
+      story.views.push(
+        view
+      );
 
-      // Informar al dueño de que alguien ha visto
+      saveStories(
+        list
+      );
+
       const ownerSocket =
-        getSocketId(
+        socketIdFor(
           story.username
         );
 
@@ -1194,30 +1382,36 @@ app.post(
         io.to(
           ownerSocket
         ).emit(
-          "storyViewAdded",
+          "storyViewed",
           {
             storyId:
               story.id,
 
-            view:
-              story.views[
-                story.views.length - 1
-              ]
+            view,
+
+            views:
+              story.views
           }
         );
       }
+    } else {
+      saveStories(
+        list
+      );
     }
 
     res.json({
       success: true,
+      owner: false,
       viewed: true,
-      owner: false
+      views:
+        story.views
     });
   }
 );
 
 // =====================================================
-// OBTENER ESPECTADORES DE UNA HISTORIA
+// VER ESPECTADORES
 // =====================================================
 
 app.get(
@@ -1241,8 +1435,8 @@ app.get(
     const story =
       list.find(
         item =>
-          item.id ===
-          req.params.id
+          String(item.id) ===
+          String(req.params.id)
       );
 
     if (!story) {
@@ -1262,22 +1456,20 @@ app.get(
       });
     }
 
+    const views =
+      Array.isArray(
+        story.views
+      )
+        ? story.views
+        : [];
+
     res.json({
       success: true,
 
       count:
-        Array.isArray(
-          story.views
-        )
-          ? story.views.length
-          : 0,
+        views.length,
 
-      views:
-        Array.isArray(
-          story.views
-        )
-          ? story.views
-          : []
+      views
     });
   }
 );
@@ -1307,8 +1499,8 @@ app.delete(
     const index =
       list.findIndex(
         story =>
-          story.id ===
-          req.params.id
+          String(story.id) ===
+          String(req.params.id)
       );
 
     if (index < 0) {
@@ -1332,15 +1524,21 @@ app.delete(
       });
     }
 
-    list.splice(index, 1);
+    const deleted =
+      list.splice(
+        index,
+        1
+      )[0];
 
-    saveStories(list);
+    saveStories(
+      list
+    );
 
     io.emit(
       "storyDeleted",
       {
         id:
-          req.params.id
+          deleted.id
       }
     );
 
@@ -1379,6 +1577,7 @@ io.on(
           );
         }
 
+        // Cerrar otra conexión del mismo usuario
         for (
           const [
             socketId,
@@ -1434,7 +1633,7 @@ io.on(
         );
 
         socket.emit(
-          "storiesUpdated",
+          "storiesData",
           cleanExpiredStories()
         );
 
@@ -1462,6 +1661,168 @@ io.on(
         if (!me) {
           return;
         }
+
+        socket.emit(
+          "contactsUpdated",
+          getContactList(me)
+        );
+      }
+    );
+
+    socket.on(
+      "addContact",
+      username => {
+        const me =
+          online.get(
+            socket.id
+          );
+
+        const target =
+          norm(username);
+
+        if (!me || !target) {
+          return;
+        }
+
+        if (
+          target ===
+          norm(me)
+        ) {
+          return socket.emit(
+            "contactError",
+            "No puedes añadirte a ti mismo."
+          );
+        }
+
+        if (!getUser(target)) {
+          return socket.emit(
+            "contactError",
+            "Ese usuario no existe."
+          );
+        }
+
+        if (
+          isEitherBlocked(
+            me,
+            target
+          )
+        ) {
+          return socket.emit(
+            "contactError",
+            "No puedes añadir a este usuario."
+          );
+        }
+
+        const list =
+          users();
+
+        const index =
+          list.findIndex(
+            user =>
+              norm(
+                user.username
+              ) ===
+              norm(me)
+          );
+
+        if (index < 0) {
+          return;
+        }
+
+        if (
+          !Array.isArray(
+            list[index].contacts
+          )
+        ) {
+          list[index].contacts =
+            [];
+        }
+
+        if (
+          !list[index].contacts.some(
+            name =>
+              norm(name) ===
+              target
+          )
+        ) {
+          list[index].contacts.push(
+            target
+          );
+
+          saveUsers(list);
+        }
+
+        socket.emit(
+          "contactAdded",
+          getContactList(me).find(
+            contact =>
+              norm(
+                contact.username
+              ) ===
+              target
+          ) || {
+            username:
+              target
+          }
+        );
+
+        socket.emit(
+          "contactsUpdated",
+          getContactList(me)
+        );
+      }
+    );
+
+    socket.on(
+      "removeContact",
+      username => {
+        const me =
+          online.get(
+            socket.id
+          );
+
+        const target =
+          norm(username);
+
+        if (!me || !target) {
+          return;
+        }
+
+        const list =
+          users();
+
+        const index =
+          list.findIndex(
+            user =>
+              norm(
+                user.username
+              ) ===
+              norm(me)
+          );
+
+        if (index < 0) {
+          return;
+        }
+
+        list[index].contacts =
+          (
+            list[index].contacts ||
+            []
+          ).filter(
+            name =>
+              norm(name) !==
+              target
+          );
+
+        saveUsers(list);
+
+        socket.emit(
+          "contactRemoved",
+          {
+            username:
+              target
+          }
+        );
 
         socket.emit(
           "contactsUpdated",
@@ -1549,14 +1910,6 @@ io.on(
           );
         }
 
-        const onlineNow =
-          [...online.values()]
-            .some(
-              name =>
-                norm(name) ===
-                target
-            );
-
         socket.emit(
           "userFound",
           {
@@ -1571,7 +1924,12 @@ io.on(
               "",
 
             online:
-              onlineNow
+              [...online.values()]
+                .some(
+                  name =>
+                    norm(name) ===
+                    target
+                )
           }
         );
       }
@@ -1638,7 +1996,10 @@ io.on(
             )
             .filter(
               message =>
-                !message.deletedFor?.includes(
+                !(
+                  message.deletedFor ||
+                  []
+                ).includes(
                   norm(me)
                 )
             );
@@ -1669,14 +2030,12 @@ io.on(
           );
 
         const to =
-          norm(
-            data?.to
-          );
+          norm(data?.to);
 
         const text =
           String(
             data?.message ||
-              ""
+            ""
           ).trim();
 
         if (
@@ -1696,7 +2055,8 @@ io.on(
         }
 
         if (
-          to === norm(me)
+          to ===
+          norm(me)
         ) {
           return socket.emit(
             "messageError",
@@ -1775,25 +2135,16 @@ io.on(
           list
         );
 
-        for (
-          const [
-            socketId,
-            username
-          ] of online.entries()
-        ) {
-          if (
-            norm(username) ===
-            to
-          ) {
-            io.to(
-              socketId
-            ).emit(
-              "privateMessage",
-              message
-            );
+        const targetSocket =
+          socketIdFor(to);
 
-            break;
-          }
+        if (targetSocket) {
+          io.to(
+            targetSocket
+          ).emit(
+            "privateMessage",
+            message
+          );
         }
 
         socket.emit(
@@ -1821,7 +2172,7 @@ io.on(
     );
 
     // =================================================
-    // LEÍDOS
+    // MARCAR LEÍDO
     // =================================================
 
     socket.on(
@@ -1833,9 +2184,7 @@ io.on(
           );
 
         const other =
-          norm(
-            otherUsername
-          );
+          norm(otherUsername);
 
         if (!me) {
           return;
@@ -1850,10 +2199,12 @@ io.on(
           if (
             norm(
               message.from
-            ) === other &&
+            ) ===
+              other &&
             norm(
               message.to
-            ) === norm(me)
+            ) ===
+              norm(me)
           ) {
             message.read =
               true;
@@ -2026,12 +2377,11 @@ io.on(
 
         list[index].contacts =
           (
-            list[index]
-              .contacts ||
+            list[index].contacts ||
             []
           ).filter(
-            username =>
-              norm(username) !==
+            name =>
+              norm(name) !==
               target
           );
 
@@ -2072,10 +2422,7 @@ io.on(
         const target =
           norm(username);
 
-        if (
-          !me ||
-          !target
-        ) {
+        if (!me || !target) {
           return;
         }
 
@@ -2125,7 +2472,7 @@ io.on(
     );
 
     // =================================================
-    // BLOQUEADOS
+    // LISTA DE BLOQUEADOS
     // =================================================
 
     socket.on(
@@ -2201,12 +2548,7 @@ io.on(
         }
 
         const targetSocket =
-          [...online.entries()]
-            .find(
-              ([, username]) =>
-                norm(username) ===
-                target
-            );
+          socketIdFor(target);
 
         if (!targetSocket) {
           return socket.emit(
@@ -2216,7 +2558,7 @@ io.on(
         }
 
         io.to(
-          targetSocket[0]
+          targetSocket
         ).emit(
           "incomingCall",
           {
@@ -2251,6 +2593,10 @@ io.on(
       }
     );
 
+    // =================================================
+    // ACEPTAR LLAMADA
+    // =================================================
+
     socket.on(
       "callAccept",
       ({ to }) => {
@@ -2270,12 +2616,7 @@ io.on(
         }
 
         const targetSocket =
-          [...online.entries()]
-            .find(
-              ([, username]) =>
-                norm(username) ===
-                target
-            );
+          socketIdFor(target);
 
         if (!targetSocket) {
           return socket.emit(
@@ -2285,7 +2626,7 @@ io.on(
         }
 
         io.to(
-          targetSocket[0]
+          targetSocket
         ).emit(
           "callAccepted",
           {
@@ -2300,6 +2641,10 @@ io.on(
         );
       }
     );
+
+    // =================================================
+    // RECHAZAR
+    // =================================================
 
     socket.on(
       "callReject",
@@ -2320,28 +2665,25 @@ io.on(
         }
 
         const targetSocket =
-          [...online.entries()]
-            .find(
-              ([, username]) =>
-                norm(username) ===
-                target
-            );
+          socketIdFor(target);
 
         if (targetSocket) {
           io.to(
-            targetSocket[0]
+            targetSocket
           ).emit(
             "callRejected",
             {
               from:
-                norm(
-                  rejecter
-                )
+                norm(rejecter)
             }
           );
         }
       }
     );
+
+    // =================================================
+    // OFFER
+    // =================================================
 
     socket.on(
       "callOffer",
@@ -2363,16 +2705,11 @@ io.on(
         }
 
         const targetSocket =
-          [...online.entries()]
-            .find(
-              ([, username]) =>
-                norm(username) ===
-                target
-            );
+          socketIdFor(target);
 
         if (targetSocket) {
           io.to(
-            targetSocket[0]
+            targetSocket
           ).emit(
             "callOffer",
             {
@@ -2385,6 +2722,10 @@ io.on(
         }
       }
     );
+
+    // =================================================
+    // ANSWER
+    // =================================================
 
     socket.on(
       "callAnswer",
@@ -2406,16 +2747,11 @@ io.on(
         }
 
         const targetSocket =
-          [...online.entries()]
-            .find(
-              ([, username]) =>
-                norm(username) ===
-                target
-            );
+          socketIdFor(target);
 
         if (targetSocket) {
           io.to(
-            targetSocket[0]
+            targetSocket
           ).emit(
             "callAnswer",
             {
@@ -2428,6 +2764,10 @@ io.on(
         }
       }
     );
+
+    // =================================================
+    // ICE
+    // =================================================
 
     socket.on(
       "callIceCandidate",
@@ -2449,16 +2789,11 @@ io.on(
         }
 
         const targetSocket =
-          [...online.entries()]
-            .find(
-              ([, username]) =>
-                norm(username) ===
-                target
-            );
+          socketIdFor(target);
 
         if (targetSocket) {
           io.to(
-            targetSocket[0]
+            targetSocket
           ).emit(
             "callIceCandidate",
             {
@@ -2471,6 +2806,10 @@ io.on(
         }
       }
     );
+
+    // =================================================
+    // COLGAR
+    // =================================================
 
     socket.on(
       "callEnd",
@@ -2491,16 +2830,11 @@ io.on(
         }
 
         const targetSocket =
-          [...online.entries()]
-            .find(
-              ([, username]) =>
-                norm(username) ===
-                target
-            );
+          socketIdFor(target);
 
         if (targetSocket) {
           io.to(
-            targetSocket[0]
+            targetSocket
           ).emit(
             "callEnded",
             {
@@ -2513,7 +2847,7 @@ io.on(
     );
 
     // =================================================
-    // DESCONEXIÓN
+    // DESCONECTAR
     // =================================================
 
     socket.on(
@@ -2530,7 +2864,56 @@ io.on(
 );
 
 // =====================================================
-// LIMPIEZA AUTOMÁTICA DE HISTORIAS
+// NO LEÍDOS
+// =====================================================
+
+function unreadCountsFor(
+  username
+) {
+  const counts = {};
+
+  const blocked =
+    getUser(username)
+      ?.blockedUsers ||
+    [];
+
+  for (
+    const message of messages()
+  ) {
+    if (
+      norm(message.to) ===
+        norm(username) &&
+      !message.read &&
+      !blocked.includes(
+        norm(message.from)
+      )
+    ) {
+      const from =
+        norm(message.from);
+
+      counts[from] =
+        (counts[from] || 0) +
+        1;
+    }
+  }
+
+  return counts;
+}
+
+function emitUnread(
+  socket,
+  username
+) {
+  socket.emit(
+    "unreadCounts",
+    unreadCountsFor(
+      username
+    )
+  );
+}
+
+// =====================================================
+// LIMPIEZA HISTORIAS
 // =====================================================
 
 setInterval(
@@ -2542,7 +2925,8 @@ setInterval(
       cleanExpiredStories();
 
     if (
-      before !== after.length
+      before !==
+      after.length
     ) {
       io.emit(
         "storiesUpdated",
@@ -2554,7 +2938,7 @@ setInterval(
 );
 
 // =====================================================
-// SERVIR INDEX.HTML
+// INDEX
 // =====================================================
 
 app.get(
@@ -2587,7 +2971,7 @@ app.get(
 );
 
 // =====================================================
-// ARRANCAR
+// SERVIDOR
 // =====================================================
 
 server.listen(
