@@ -413,6 +413,89 @@ io.on("connection", socket => {
     socket.emit("blockedUsers", getUser(me)?.blockedUsers || []);
   });
 
+
+
+  // ======================================
+  // LLAMADAS DE VOZ (WebRTC)
+  // ======================================
+
+  socket.on("callRequest", ({ to }) => {
+    const caller = online.get(socket.id);
+    const target = norm(to);
+    if (!caller || !target) return;
+    if (target === norm(caller)) return socket.emit("callError", "No puedes llamarte a ti mismo.");
+    if (isEitherBlocked(caller, target)) return socket.emit("callError", "No puedes contactar con este usuario.");
+    const targetUser = getUser(target);
+    if (!targetUser) return socket.emit("callError", "Ese usuario no existe.");
+
+    const targetSocket = [...online.entries()].find(([, name]) => norm(name) === target);
+    if (!targetSocket) return socket.emit("callError", "El usuario está desconectado.");
+
+    io.to(targetSocket[0]).emit("incomingCall", {
+      from: norm(caller),
+      fromDisplay: getUser(caller)?.displayName || caller
+    });
+
+    sendPushToUser(target, {
+      type: "call",
+      from: getUser(caller)?.displayName || caller,
+      username: norm(caller),
+      message: "Llamada entrante"
+    });
+  });
+
+  socket.on("callAccept", ({ to }) => {
+    const callee = online.get(socket.id);
+    const target = norm(to);
+    if (!callee || !target) return;
+    const targetSocket = [...online.entries()].find(([, name]) => norm(name) === target);
+    if (!targetSocket) return socket.emit("callError", "El usuario ya no está conectado.");
+    io.to(targetSocket[0]).emit("callAccepted", {
+      from: norm(callee),
+      fromDisplay: getUser(callee)?.displayName || callee
+    });
+  });
+
+  socket.on("callReject", ({ to }) => {
+    const rejecter = online.get(socket.id);
+    const target = norm(to);
+    if (!rejecter || !target) return;
+    const targetSocket = [...online.entries()].find(([, name]) => norm(name) === target);
+    if (targetSocket) io.to(targetSocket[0]).emit("callRejected", { from: norm(rejecter) });
+  });
+
+  socket.on("callOffer", ({ to, offer }) => {
+    const sender = online.get(socket.id);
+    const target = norm(to);
+    if (!sender || !target || !offer) return;
+    const targetSocket = [...online.entries()].find(([, name]) => norm(name) === target);
+    if (targetSocket) io.to(targetSocket[0]).emit("callOffer", { from: norm(sender), offer });
+  });
+
+  socket.on("callAnswer", ({ to, answer }) => {
+    const sender = online.get(socket.id);
+    const target = norm(to);
+    if (!sender || !target || !answer) return;
+    const targetSocket = [...online.entries()].find(([, name]) => norm(name) === target);
+    if (targetSocket) io.to(targetSocket[0]).emit("callAnswer", { from: norm(sender), answer });
+  });
+
+  socket.on("callIceCandidate", ({ to, candidate }) => {
+    const sender = online.get(socket.id);
+    const target = norm(to);
+    if (!sender || !target || !candidate) return;
+    const targetSocket = [...online.entries()].find(([, name]) => norm(name) === target);
+    if (targetSocket) io.to(targetSocket[0]).emit("callIceCandidate", { from: norm(sender), candidate });
+  });
+
+  socket.on("callEnd", ({ to }) => {
+    const sender = online.get(socket.id);
+    const target = norm(to);
+    if (!sender || !target) return;
+    const targetSocket = [...online.entries()].find(([, name]) => norm(name) === target);
+    if (targetSocket) io.to(targetSocket[0]).emit("callEnded", { from: norm(sender) });
+  });
+
   socket.on("disconnect", () => {
     online.delete(socket.id);
     sendUserList();
