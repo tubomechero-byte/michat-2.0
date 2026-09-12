@@ -12,14 +12,40 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 
-const DATA_DIR = path.join(__dirname, "data");
-const USERS_FILE = path.join(DATA_DIR, "users.json");
-const MESSAGES_FILE = path.join(DATA_DIR, "messages.json");
-const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
-const PUSH_FILE = path.join(DATA_DIR, "push.json");
-const STORIES_FILE = path.join(DATA_DIR, "stories.json");
+// =====================================================
+// ARCHIVOS
+// =====================================================
 
-fs.mkdirSync(DATA_DIR, { recursive: true });
+const DATA_DIR = path.join(__dirname, "data");
+
+const USERS_FILE = path.join(
+  DATA_DIR,
+  "users.json"
+);
+
+const MESSAGES_FILE = path.join(
+  DATA_DIR,
+  "messages.json"
+);
+
+const SESSIONS_FILE = path.join(
+  DATA_DIR,
+  "sessions.json"
+);
+
+const PUSH_FILE = path.join(
+  DATA_DIR,
+  "push.json"
+);
+
+const STORIES_FILE = path.join(
+  DATA_DIR,
+  "stories.json"
+);
+
+fs.mkdirSync(DATA_DIR, {
+  recursive: true
+});
 
 function ensure(file, value) {
   if (!fs.existsSync(file)) {
@@ -37,10 +63,17 @@ ensure(SESSIONS_FILE, {});
 ensure(PUSH_FILE, []);
 ensure(STORIES_FILE, []);
 
+// =====================================================
+// FUNCIONES DE ARCHIVOS
+// =====================================================
+
 function read(file, fallback) {
   try {
     return JSON.parse(
-      fs.readFileSync(file, "utf8")
+      fs.readFileSync(
+        file,
+        "utf8"
+      )
     );
   } catch {
     return fallback;
@@ -50,84 +83,141 @@ function read(file, fallback) {
 function write(file, data) {
   fs.writeFileSync(
     file,
-    JSON.stringify(data, null, 2),
+    JSON.stringify(
+      data,
+      null,
+      2
+    ),
     "utf8"
   );
 }
 
 function users() {
-  return read(USERS_FILE, []);
+  return read(
+    USERS_FILE,
+    []
+  );
 }
 
 function saveUsers(data) {
-  write(USERS_FILE, data);
+  write(
+    USERS_FILE,
+    data
+  );
 }
 
 function messages() {
-  return read(MESSAGES_FILE, []);
+  return read(
+    MESSAGES_FILE,
+    []
+  );
 }
 
 function saveMessages(data) {
-  write(MESSAGES_FILE, data);
+  write(
+    MESSAGES_FILE,
+    data
+  );
 }
 
 function sessions() {
-  return read(SESSIONS_FILE, {});
+  return read(
+    SESSIONS_FILE,
+    {}
+  );
 }
 
 function saveSessions(data) {
-  write(SESSIONS_FILE, data);
+  write(
+    SESSIONS_FILE,
+    data
+  );
 }
 
 function pushSubs() {
-  return read(PUSH_FILE, []);
+  return read(
+    PUSH_FILE,
+    []
+  );
 }
 
 function savePushSubs(data) {
-  write(PUSH_FILE, data);
+  write(
+    PUSH_FILE,
+    data
+  );
 }
 
 function allStories() {
-  return read(STORIES_FILE, []);
+  return read(
+    STORIES_FILE,
+    []
+  );
 }
 
 function saveStories(data) {
-  write(STORIES_FILE, data);
+  write(
+    STORIES_FILE,
+    data
+  );
+}
+
+function activeStories() {
+  const now =
+    Date.now();
+
+  return allStories().filter(
+    story =>
+      story.expiresAt > now
+  );
 }
 
 function cleanExpiredStories() {
-  const now = Date.now();
-
-  const active = allStories().filter(
-    story => story.expiresAt > now
-  );
+  const active =
+    activeStories();
 
   saveStories(active);
 
   return active;
 }
 
+// =====================================================
+// UTILIDADES
+// =====================================================
+
 function norm(value) {
-  return String(value || "")
+  return String(
+    value || ""
+  )
     .trim()
     .toLowerCase();
 }
 
 function getUser(username) {
-  const name = norm(username);
+  const name =
+    norm(username);
 
   return users().find(
-    user => norm(user.username) === name
+    user =>
+      norm(
+        user.username
+      ) === name
   );
 }
 
 function passwordHash(password) {
   const salt =
-    crypto.randomBytes(16).toString("hex");
+    crypto
+      .randomBytes(16)
+      .toString("hex");
 
   const hash =
     crypto
-      .scryptSync(password, salt, 64)
+      .scryptSync(
+        password,
+        salt,
+        64
+      )
       .toString("hex");
 
   return {
@@ -136,16 +226,30 @@ function passwordHash(password) {
   };
 }
 
-function validPassword(password, salt, hash) {
+function validPassword(
+  password,
+  salt,
+  hash
+) {
   try {
     const got =
       crypto
-        .scryptSync(password, salt, 64)
+        .scryptSync(
+          password,
+          salt,
+          64
+        )
         .toString("hex");
 
     return crypto.timingSafeEqual(
-      Buffer.from(got, "hex"),
-      Buffer.from(hash, "hex")
+      Buffer.from(
+        got,
+        "hex"
+      ),
+      Buffer.from(
+        hash,
+        "hex"
+      )
     );
   } catch {
     return false;
@@ -153,14 +257,18 @@ function validPassword(password, salt, hash) {
 }
 
 function newSession(username) {
-  const data = sessions();
+  const data =
+    sessions();
 
   const token =
-    crypto.randomBytes(32).toString("hex");
+    crypto
+      .randomBytes(32)
+      .toString("hex");
 
   data[token] = {
     username,
-    createdAt: Date.now()
+    createdAt:
+      Date.now()
   };
 
   saveSessions(data);
@@ -173,17 +281,21 @@ function sessionUser(token) {
     return null;
   }
 
-  const session = sessions()[token];
+  const session =
+    sessions()[token];
 
   if (!session) {
     return null;
   }
 
-  return getUser(session.username);
+  return getUser(
+    session.username
+  );
 }
 
 function deleteSession(token) {
-  const data = sessions();
+  const data =
+    sessions();
 
   delete data[token];
 
@@ -192,14 +304,23 @@ function deleteSession(token) {
 
 function authToken(req) {
   const auth =
-    req.headers.authorization || "";
+    req.headers.authorization ||
+    "";
 
-  if (auth.startsWith("Bearer ")) {
+  if (
+    auth.startsWith(
+      "Bearer "
+    )
+  ) {
     return auth.slice(7);
   }
 
   return "";
 }
+
+// =====================================================
+// EXPRESS
+// =====================================================
 
 app.use(
   express.json({
@@ -209,9 +330,16 @@ app.use(
 
 app.use(
   express.static(
-    path.join(__dirname, "public")
+    path.join(
+      __dirname,
+      "public"
+    )
   )
 );
+
+// =====================================================
+// USUARIOS CONECTADOS
+// =====================================================
 
 const online = new Map();
 
@@ -220,16 +348,21 @@ const online = new Map();
 // =====================================================
 
 const vapidPublic =
-  process.env.VAPID_PUBLIC_KEY || "";
+  process.env.VAPID_PUBLIC_KEY ||
+  "";
 
 const vapidPrivate =
-  process.env.VAPID_PRIVATE_KEY || "";
+  process.env.VAPID_PRIVATE_KEY ||
+  "";
 
 const vapidSubject =
   process.env.VAPID_SUBJECT ||
   "mailto:admin@example.com";
 
-if (vapidPublic && vapidPrivate) {
+if (
+  vapidPublic &&
+  vapidPrivate
+) {
   webpush.setVapidDetails(
     vapidSubject,
     vapidPublic,
@@ -237,14 +370,23 @@ if (vapidPublic && vapidPrivate) {
   );
 }
 
-function sendPushToUser(username, payload) {
-  if (!vapidPublic || !vapidPrivate) {
+function sendPushToUser(
+  username,
+  payload
+) {
+  if (
+    !vapidPublic ||
+    !vapidPrivate
+  ) {
     return;
   }
 
-  const subscriptions = pushSubs();
+  const subscriptions =
+    pushSubs();
 
-  for (const item of subscriptions) {
+  for (
+    const item of subscriptions
+  ) {
     if (
       norm(item.username) !==
       norm(username)
@@ -255,274 +397,719 @@ function sendPushToUser(username, payload) {
     webpush
       .sendNotification(
         item.subscription,
-        JSON.stringify(payload)
+        JSON.stringify(
+          payload
+        )
       )
       .catch(() => {});
   }
 }
 
 // =====================================================
+// LISTA DE USUARIOS
+// =====================================================
+
+function sendUserList() {
+  const list =
+    users().map(user => ({
+      username:
+        user.username,
+
+      displayName:
+        user.displayName ||
+        user.username,
+
+      profileImage:
+        user.profileImage ||
+        "",
+
+      online:
+        [...online.values()]
+          .some(
+            name =>
+              norm(name) ===
+              norm(
+                user.username
+              )
+          )
+    }));
+
+  io.emit(
+    "userList",
+    list
+  );
+}
+
+// =====================================================
 // REGISTRO
 // =====================================================
 
-app.post("/api/register", (req, res) => {
-  const displayName =
-    String(
-      req.body.username || ""
-    ).trim();
+app.post(
+  "/api/register",
+  (req, res) => {
+    const displayName =
+      String(
+        req.body.username ||
+        ""
+      ).trim();
 
-  const password =
-    String(
-      req.body.password || ""
-    );
+    const password =
+      String(
+        req.body.password ||
+        ""
+      );
 
-  if (
-    displayName.length < 3 ||
-    displayName.length > 24
-  ) {
-    return res.status(400).json({
-      error:
-        "El nombre debe tener entre 3 y 24 caracteres."
+    if (
+      displayName.length < 3 ||
+      displayName.length > 24
+    ) {
+      return res.status(400).json({
+        error:
+          "El nombre debe tener entre 3 y 24 caracteres."
+      });
+    }
+
+    if (
+      !/^[a-zA-Z0-9_]+$/.test(
+        displayName
+      )
+    ) {
+      return res.status(400).json({
+        error:
+          "Solo letras, números y _."
+      });
+    }
+
+    if (
+      password.length < 6
+    ) {
+      return res.status(400).json({
+        error:
+          "La contraseña debe tener al menos 6 caracteres."
+      });
+    }
+
+    const username =
+      norm(displayName);
+
+    const list =
+      users();
+
+    if (
+      list.some(
+        user =>
+          norm(
+            user.username
+          ) === username
+      )
+    ) {
+      return res.status(400).json({
+        error:
+          "Ese usuario ya existe."
+      });
+    }
+
+    const p =
+      passwordHash(
+        password
+      );
+
+    list.push({
+      username,
+      displayName,
+      salt: p.salt,
+      passwordHash:
+        p.hash,
+
+      profileImage: "",
+
+      blockedUsers: [],
+
+      // =================================================
+      // CONTACTOS DEL USUARIO
+      // =================================================
+
+      contacts: [],
+
+      createdAt:
+        Date.now()
+    });
+
+    saveUsers(list);
+
+    const token =
+      newSession(
+        username
+      );
+
+    sendUserList();
+
+    res.json({
+      success: true,
+      username:
+        displayName,
+      token
     });
   }
-
-  if (!/^[a-zA-Z0-9_]+$/.test(displayName)) {
-    return res.status(400).json({
-      error:
-        "Solo letras, números y _."
-    });
-  }
-
-  if (password.length < 6) {
-    return res.status(400).json({
-      error:
-        "La contraseña debe tener al menos 6 caracteres."
-    });
-  }
-
-  const username = norm(displayName);
-
-  const list = users();
-
-  if (
-    list.some(
-      user =>
-        norm(user.username) === username
-    )
-  ) {
-    return res.status(400).json({
-      error:
-        "Ese usuario ya existe."
-    });
-  }
-
-  const p = passwordHash(password);
-
-  list.push({
-    username,
-    displayName,
-    salt: p.salt,
-    passwordHash: p.hash,
-    profileImage: "",
-    blockedUsers: [],
-    createdAt: Date.now()
-  });
-
-  saveUsers(list);
-
-  const token =
-    newSession(username);
-
-  sendUserList();
-
-  res.json({
-    success: true,
-    username: displayName,
-    token
-  });
-});
+);
 
 // =====================================================
 // LOGIN
 // =====================================================
 
-app.post("/api/login", (req, res) => {
-  const username =
-    norm(req.body.username);
+app.post(
+  "/api/login",
+  (req, res) => {
+    const username =
+      norm(
+        req.body.username
+      );
 
-  const password =
-    String(
-      req.body.password || ""
-    );
+    const password =
+      String(
+        req.body.password ||
+        ""
+      );
 
-  const user =
-    getUser(username);
+    const user =
+      getUser(username);
 
-  if (
-    !user ||
-    !validPassword(
-      password,
-      user.salt,
-      user.passwordHash
-    )
-  ) {
-    return res.status(401).json({
-      error:
-        "Usuario o contraseña incorrectos."
+    if (
+      !user ||
+      !validPassword(
+        password,
+        user.salt,
+        user.passwordHash
+      )
+    ) {
+      return res.status(401).json({
+        error:
+          "Usuario o contraseña incorrectos."
+      });
+    }
+
+    // Compatibilidad con usuarios antiguos
+    if (
+      !Array.isArray(
+        user.contacts
+      )
+    ) {
+      const list =
+        users();
+
+      const index =
+        list.findIndex(
+          item =>
+            norm(
+              item.username
+            ) ===
+            norm(
+              user.username
+            )
+        );
+
+      if (index >= 0) {
+        list[index].contacts =
+          [];
+
+        saveUsers(list);
+      }
+    }
+
+    const token =
+      newSession(
+        user.username
+      );
+
+    res.json({
+      success: true,
+      username:
+        user.displayName,
+      token
     });
   }
-
-  const token =
-    newSession(user.username);
-
-  res.json({
-    success: true,
-    username: user.displayName,
-    token
-  });
-});
+);
 
 // =====================================================
 // SESIÓN
 // =====================================================
 
-app.get("/api/session", (req, res) => {
-  const user =
-    sessionUser(
-      authToken(req)
-    );
+app.get(
+  "/api/session",
+  (req, res) => {
+    const user =
+      sessionUser(
+        authToken(req)
+      );
 
-  if (!user) {
-    return res.status(401).json({
-      loggedIn: false
+    if (!user) {
+      return res.status(401).json({
+        loggedIn: false
+      });
+    }
+
+    res.json({
+      loggedIn: true,
+
+      username:
+        user.displayName,
+
+      profileImage:
+        user.profileImage ||
+        ""
     });
   }
-
-  res.json({
-    loggedIn: true,
-    username: user.displayName,
-    profileImage:
-      user.profileImage || ""
-  });
-});
+);
 
 // =====================================================
 // LOGOUT
 // =====================================================
 
-app.post("/api/logout", (req, res) => {
-  deleteSession(
-    authToken(req)
-  );
+app.post(
+  "/api/logout",
+  (req, res) => {
+    deleteSession(
+      authToken(req)
+    );
 
-  res.json({
-    success: true
-  });
-});
+    res.json({
+      success: true
+    });
+  }
+);
 
 // =====================================================
 // PERFIL
 // =====================================================
 
-app.get("/api/profile", (req, res) => {
-  const user =
-    sessionUser(
-      authToken(req)
-    );
+app.get(
+  "/api/profile",
+  (req, res) => {
+    const user =
+      sessionUser(
+        authToken(req)
+      );
 
-  if (!user) {
-    return res.status(401).json({
-      error:
-        "No autorizado"
+    if (!user) {
+      return res.status(401).json({
+        error:
+          "No autorizado"
+      });
+    }
+
+    res.json({
+      username:
+        user.username,
+
+      displayName:
+        user.displayName,
+
+      profileImage:
+        user.profileImage ||
+        ""
     });
   }
+);
 
-  res.json({
-    username: user.username,
-    displayName: user.displayName,
-    profileImage:
-      user.profileImage || ""
-  });
-});
+app.post(
+  "/api/profile",
+  (req, res) => {
+    const user =
+      sessionUser(
+        authToken(req)
+      );
 
-app.post("/api/profile", (req, res) => {
-  const user =
-    sessionUser(
-      authToken(req)
-    );
+    if (!user) {
+      return res.status(401).json({
+        error:
+          "No autorizado"
+      });
+    }
 
-  if (!user) {
-    return res.status(401).json({
-      error:
-        "No autorizado"
+    const displayName =
+      String(
+        req.body.displayName ||
+        user.displayName
+      ).trim();
+
+    const profileImage =
+      String(
+        req.body.profileImage ||
+        ""
+      );
+
+    if (
+      displayName.length < 3 ||
+      displayName.length > 24
+    ) {
+      return res.status(400).json({
+        error:
+          "Nombre inválido."
+      });
+    }
+
+    if (
+      profileImage.length >
+      800000
+    ) {
+      return res.status(400).json({
+        error:
+          "La imagen es demasiado grande."
+      });
+    }
+
+    const list =
+      users();
+
+    const index =
+      list.findIndex(
+        item =>
+          norm(
+            item.username
+          ) ===
+          norm(
+            user.username
+          )
+      );
+
+    if (index < 0) {
+      return res.status(404).json({
+        error:
+          "Usuario no encontrado."
+      });
+    }
+
+    list[index].displayName =
+      displayName;
+
+    list[index].profileImage =
+      profileImage;
+
+    saveUsers(list);
+
+    sendUserList();
+
+    res.json({
+      success: true,
+
+      displayName,
+
+      profileImage
     });
   }
-
-  const displayName =
-    String(
-      req.body.displayName ||
-      user.displayName
-    ).trim();
-
-  const profileImage =
-    String(
-      req.body.profileImage || ""
-    );
-
-  if (
-    displayName.length < 3 ||
-    displayName.length > 24
-  ) {
-    return res.status(400).json({
-      error:
-        "Nombre inválido."
-    });
-  }
-
-  if (
-    profileImage.length > 800000
-  ) {
-    return res.status(400).json({
-      error:
-        "La imagen es demasiado grande."
-    });
-  }
-
-  const list = users();
-
-  const index =
-    list.findIndex(
-      item =>
-        norm(item.username) ===
-        norm(user.username)
-    );
-
-  if (index < 0) {
-    return res.status(404).json({
-      error:
-        "Usuario no encontrado."
-    });
-  }
-
-  list[index].displayName =
-    displayName;
-
-  list[index].profileImage =
-    profileImage;
-
-  saveUsers(list);
-
-  sendUserList();
-
-  res.json({
-    success: true,
-    displayName,
-    profileImage
-  });
-});
+);
 
 // =====================================================
-// PUSH SUBSCRIBE
+// CONTACTOS - OBTENER
+// =====================================================
+
+app.get(
+  "/api/contacts",
+  (req, res) => {
+    const user =
+      sessionUser(
+        authToken(req)
+      );
+
+    if (!user) {
+      return res.status(401).json({
+        error:
+          "No autorizado"
+      });
+    }
+
+    const list =
+      users();
+
+    const currentIndex =
+      list.findIndex(
+        item =>
+          norm(
+            item.username
+          ) ===
+          norm(
+            user.username
+          )
+      );
+
+    if (currentIndex < 0) {
+      return res.status(404).json({
+        error:
+          "Usuario no encontrado."
+      });
+    }
+
+    if (
+      !Array.isArray(
+        list[currentIndex].contacts
+      )
+    ) {
+      list[currentIndex].contacts =
+        [];
+
+      saveUsers(list);
+    }
+
+    const contactNames =
+      list[currentIndex]
+        .contacts || [];
+
+    const contacts =
+      contactNames
+        .map(
+          username =>
+            getUser(username)
+        )
+        .filter(Boolean)
+        .map(
+          contact => ({
+            username:
+              contact.username,
+
+            displayName:
+              contact.displayName ||
+              contact.username,
+
+            profileImage:
+              contact.profileImage ||
+              "",
+
+            online:
+              [...online.values()]
+                .some(
+                  name =>
+                    norm(name) ===
+                    norm(
+                      contact.username
+                    )
+                )
+          })
+        );
+
+    res.json(
+      contacts
+    );
+  }
+);
+
+// =====================================================
+// CONTACTOS - AÑADIR
+// =====================================================
+
+app.post(
+  "/api/contacts/add",
+  (req, res) => {
+    const user =
+      sessionUser(
+        authToken(req)
+      );
+
+    if (!user) {
+      return res.status(401).json({
+        error:
+          "No autorizado"
+      });
+    }
+
+    const target =
+      norm(
+        req.body.username
+      );
+
+    if (!target) {
+      return res.status(400).json({
+        error:
+          "Escribe un nombre de usuario."
+      });
+    }
+
+    if (
+      target ===
+      norm(
+        user.username
+      )
+    ) {
+      return res.status(400).json({
+        error:
+          "No puedes añadirte a ti mismo."
+      });
+    }
+
+    const targetUser =
+      getUser(target);
+
+    if (!targetUser) {
+      return res.status(404).json({
+        error:
+          "Ese usuario no existe."
+      });
+    }
+
+    if (
+      isEitherBlocked(
+        user.username,
+        target
+      )
+    ) {
+      return res.status(400).json({
+        error:
+          "No puedes añadir a este usuario."
+      });
+    }
+
+    const list =
+      users();
+
+    const index =
+      list.findIndex(
+        item =>
+          norm(
+            item.username
+          ) ===
+          norm(
+            user.username
+          )
+      );
+
+    if (index < 0) {
+      return res.status(404).json({
+        error:
+          "Usuario no encontrado."
+      });
+    }
+
+    if (
+      !Array.isArray(
+        list[index].contacts
+      )
+    ) {
+      list[index].contacts =
+        [];
+    }
+
+    if (
+      list[index].contacts.some(
+        item =>
+          norm(item) ===
+          target
+      )
+    ) {
+      return res.status(400).json({
+        error:
+          "Ese usuario ya está en tus contactos."
+      });
+    }
+
+    list[index].contacts.push(
+      target
+    );
+
+    saveUsers(list);
+
+    const contact =
+      getUser(target);
+
+    res.json({
+      success: true,
+
+      contact: {
+        username:
+          contact.username,
+
+        displayName:
+          contact.displayName ||
+          contact.username,
+
+        profileImage:
+          contact.profileImage ||
+          "",
+
+        online:
+          [...online.values()]
+            .some(
+              name =>
+                norm(name) ===
+                norm(
+                  contact.username
+                )
+            )
+      }
+    });
+  }
+);
+
+// =====================================================
+// CONTACTOS - ELIMINAR
+// =====================================================
+
+app.post(
+  "/api/contacts/remove",
+  (req, res) => {
+    const user =
+      sessionUser(
+        authToken(req)
+      );
+
+    if (!user) {
+      return res.status(401).json({
+        error:
+          "No autorizado"
+      });
+    }
+
+    const target =
+      norm(
+        req.body.username
+      );
+
+    if (!target) {
+      return res.status(400).json({
+        error:
+          "Usuario inválido."
+      });
+    }
+
+    const list =
+      users();
+
+    const index =
+      list.findIndex(
+        item =>
+          norm(
+            item.username
+          ) ===
+          norm(
+            user.username
+          )
+      );
+
+    if (index < 0) {
+      return res.status(404).json({
+        error:
+          "Usuario no encontrado."
+      });
+    }
+
+    list[index].contacts =
+      (
+        list[index].contacts ||
+        []
+      ).filter(
+        username =>
+          norm(username) !==
+          target
+      );
+
+    saveUsers(list);
+
+    res.json({
+      success: true
+    });
+  }
+);
+
+// =====================================================
+// PUSH
 // =====================================================
 
 app.post(
@@ -553,14 +1140,16 @@ app.post(
       });
     }
 
-    const list = pushSubs();
+    const list =
+      pushSubs();
 
     const exists =
       list.some(
         item =>
           item.username ===
             user.username &&
-          item.subscription.endpoint ===
+          item.subscription
+            .endpoint ===
             subscription.endpoint
       );
 
@@ -568,6 +1157,7 @@ app.post(
       list.push({
         username:
           user.username,
+
         subscription
       });
     }
@@ -576,6 +1166,7 @@ app.post(
 
     res.json({
       success: true,
+
       enabled:
         !!(
           vapidPublic &&
@@ -594,6 +1185,7 @@ app.get(
           vapidPublic &&
           vapidPrivate
         ),
+
       publicKey:
         vapidPublic
     });
@@ -601,7 +1193,7 @@ app.get(
 );
 
 // =====================================================
-// HISTORIAS - HTTP
+// HISTORIAS
 // =====================================================
 
 app.get(
@@ -622,7 +1214,9 @@ app.get(
     const stories =
       cleanExpiredStories();
 
-    res.json(stories);
+    res.json(
+      stories
+    );
   }
 );
 
@@ -642,18 +1236,21 @@ app.post(
     }
 
     const type =
-      req.body.type === "image"
+      req.body.type ===
+      "image"
         ? "image"
         : "text";
 
     const content =
       String(
-        req.body.content || ""
+        req.body.content ||
+        ""
       ).trim();
 
     const background =
       String(
-        req.body.background || ""
+        req.body.background ||
+        ""
       ).trim();
 
     if (!content) {
@@ -698,15 +1295,19 @@ app.post(
     const list =
       cleanExpiredStories();
 
-    const userStories =
+    const userStoryCount =
       list.filter(
         story =>
-          norm(story.username) ===
-          norm(user.username)
-      );
+          norm(
+            story.username
+          ) ===
+          norm(
+            user.username
+          )
+      ).length;
 
     if (
-      userStories.length >= 20
+      userStoryCount >= 20
     ) {
       return res.status(400).json({
         error:
@@ -751,10 +1352,15 @@ app.post(
 
       expiresAt:
         now +
-        24 * 60 * 60 * 1000
+        24 *
+          60 *
+          60 *
+          1000
     };
 
-    list.push(story);
+    list.push(
+      story
+    );
 
     saveStories(list);
 
@@ -808,8 +1414,12 @@ app.delete(
     }
 
     if (
-      norm(list[index].username) !==
-      norm(user.username)
+      norm(
+        list[index].username
+      ) !==
+      norm(
+        user.username
+      )
     ) {
       return res.status(403).json({
         error:
@@ -817,17 +1427,12 @@ app.delete(
       });
     }
 
-    const removed =
-      list.splice(index, 1)[0];
+    list.splice(
+      index,
+      1
+    );
 
     saveStories(list);
-
-    io.emit(
-      "storyDeleted",
-      {
-        id: removed.id
-      }
-    );
 
     io.emit(
       "storiesUpdated",
@@ -839,100 +1444,6 @@ app.delete(
     });
   }
 );
-
-// =====================================================
-// LISTA DE USUARIOS
-// =====================================================
-
-function sendUserList() {
-  const list =
-    users().map(user => ({
-      username:
-        user.username,
-
-      displayName:
-        user.displayName ||
-        user.username,
-
-      profileImage:
-        user.profileImage ||
-        "",
-
-      online:
-        [...online.values()]
-          .some(
-            name =>
-              norm(name) ===
-              norm(user.username)
-          )
-    }));
-
-  io.emit(
-    "userList",
-    list
-  );
-}
-
-// =====================================================
-// MENSAJES NO LEÍDOS
-// =====================================================
-
-function unreadCountsFor(username) {
-  const counts = {};
-
-  const blocks =
-    getUser(username)
-      ?.blockedUsers || [];
-
-  for (
-    const message of messages()
-  ) {
-    if (
-      norm(message.to) ===
-        norm(username) &&
-      !message.read &&
-      !blocks.includes(
-        norm(message.from)
-      )
-    ) {
-      const from =
-        norm(message.from);
-
-      counts[from] =
-        (counts[from] || 0) + 1;
-    }
-  }
-
-  return counts;
-}
-
-function emitUnread(
-  socket,
-  username
-) {
-  socket.emit(
-    "unreadCounts",
-    unreadCountsFor(username)
-  );
-}
-
-function isBlocked(a, b) {
-  const user =
-    getUser(a);
-
-  return !!(
-    user &&
-    (user.blockedUsers || [])
-      .includes(norm(b))
-  );
-}
-
-function isEitherBlocked(a, b) {
-  return (
-    isBlocked(a, b) ||
-    isBlocked(b, a)
-  );
-}
 
 // =====================================================
 // SOCKET.IO
@@ -965,9 +1476,12 @@ io.on(
           ] of online.entries()
         ) {
           if (
-            socketId !== socket.id &&
+            socketId !==
+              socket.id &&
             norm(username) ===
-              norm(user.username)
+              norm(
+                user.username
+              )
           ) {
             online.delete(
               socketId
@@ -1010,16 +1524,46 @@ io.on(
           user.username
         );
 
-        // Enviar historias al conectarse
         socket.emit(
           "storiesUpdated",
           cleanExpiredStories()
+        );
+
+        // Enviar contactos al entrar
+        socket.emit(
+          "contactsUpdated",
+          getContactList(
+            user.username
+          )
         );
       }
     );
 
     // =================================================
-    // HISTORIAS - SOCKET
+    // CONTACTOS POR SOCKET
+    // =================================================
+
+    socket.on(
+      "getContacts",
+      () => {
+        const me =
+          online.get(
+            socket.id
+          );
+
+        if (!me) {
+          return;
+        }
+
+        socket.emit(
+          "contactsUpdated",
+          getContactList(me)
+        );
+      }
+    );
+
+    // =================================================
+    // HISTORIAS POR SOCKET
     // =================================================
 
     socket.on(
@@ -1034,12 +1578,9 @@ io.on(
           return;
         }
 
-        const stories =
-          cleanExpiredStories();
-
         socket.emit(
           "storiesData",
-          stories
+          cleanExpiredStories()
         );
       }
     );
@@ -1056,7 +1597,9 @@ io.on(
             socket.id
           );
 
-        if (!me) return;
+        if (!me) {
+          return;
+        }
 
         const target =
           norm(username);
@@ -1068,7 +1611,8 @@ io.on(
         }
 
         if (
-          target === norm(me)
+          target ===
+          norm(me)
         ) {
           return socket.emit(
             "userFoundError",
@@ -1138,7 +1682,9 @@ io.on(
           );
 
         const other =
-          norm(otherUsername);
+          norm(
+            otherUsername
+          );
 
         if (
           !me ||
@@ -1217,11 +1763,14 @@ io.on(
           );
 
         const to =
-          norm(data?.to);
+          norm(
+            data?.to
+          );
 
         const text =
           String(
-            data?.message || ""
+            data?.message ||
+              ""
           ).trim();
 
         if (
@@ -1294,25 +1843,30 @@ io.on(
           read:
             false,
 
-          deletedFor:
-            []
+          deletedFor: []
         };
 
         const list =
           messages();
 
-        list.push(message);
+        list.push(
+          message
+        );
 
         if (
-          list.length > 50000
+          list.length >
+          50000
         ) {
           list.splice(
             0,
-            list.length - 50000
+            list.length -
+              50000
           );
         }
 
-        saveMessages(list);
+        saveMessages(
+          list
+        );
 
         for (
           const [
@@ -1360,7 +1914,7 @@ io.on(
     );
 
     // =================================================
-    // LEÍDOS
+    // MARCAR COMO LEÍDO
     // =================================================
 
     socket.on(
@@ -1372,7 +1926,9 @@ io.on(
           );
 
         const other =
-          norm(otherUsername);
+          norm(
+            otherUsername
+          );
 
         if (!me) {
           return;
@@ -1392,11 +1948,14 @@ io.on(
               message.to
             ) === norm(me)
           ) {
-            message.read = true;
+            message.read =
+              true;
           }
         }
 
-        saveMessages(list);
+        saveMessages(
+          list
+        );
 
         emitUnread(
           socket,
@@ -1427,15 +1986,20 @@ io.on(
         const index =
           list.findIndex(
             message =>
-              message.id === id
+              message.id ===
+              id
           );
 
-        if (index < 0) {
+        if (
+          index < 0
+        ) {
           return;
         }
 
         if (
-          norm(list[index].from) !==
+          norm(
+            list[index].from
+          ) !==
           norm(me)
         ) {
           return socket.emit(
@@ -1444,11 +2008,15 @@ io.on(
           );
         }
 
-        list[index].deletedFor =
+        list[index]
+          .deletedFor =
           Array.from(
             new Set([
-              ...(list[index]
-                .deletedFor || []),
+              ...(
+                list[index]
+                  .deletedFor ||
+                []
+              ),
               norm(me)
             ])
           );
@@ -1459,7 +2027,9 @@ io.on(
         list[index].deleted =
           true;
 
-        saveMessages(list);
+        saveMessages(
+          list
+        );
 
         const target =
           list[index].to;
@@ -1482,10 +2052,12 @@ io.on(
               "messageDeleted",
               {
                 id:
-                  list[index].id,
+                  list[index]
+                    .id,
 
                 message:
-                  list[index].message
+                  list[index]
+                    .message
               }
             );
           }
@@ -1529,20 +2101,41 @@ io.on(
               norm(me)
           );
 
-        if (index < 0) {
+        if (
+          index < 0
+        ) {
           return;
         }
 
-        list[index].blockedUsers =
+        list[index]
+          .blockedUsers =
           Array.from(
             new Set([
-              ...(list[index]
-                .blockedUsers || []),
+              ...(
+                list[index]
+                  .blockedUsers ||
+                []
+              ),
               target
             ])
           );
 
-        saveUsers(list);
+        // Si bloqueas a alguien,
+        // también desaparece de tus contactos
+        list[index].contacts =
+          (
+            list[index]
+              .contacts ||
+            []
+          ).filter(
+            username =>
+              norm(username) !==
+              target
+          );
+
+        saveUsers(
+          list
+        );
 
         socket.emit(
           "blockUpdated",
@@ -1553,6 +2146,11 @@ io.on(
             blocked:
               true
           }
+        );
+
+        socket.emit(
+          "contactsUpdated",
+          getContactList(me)
         );
 
         sendUserList();
@@ -1574,7 +2172,10 @@ io.on(
         const target =
           norm(username);
 
-        if (!me || !target) {
+        if (
+          !me ||
+          !target
+        ) {
           return;
         }
 
@@ -1590,21 +2191,27 @@ io.on(
               norm(me)
           );
 
-        if (index < 0) {
+        if (
+          index < 0
+        ) {
           return;
         }
 
-        list[index].blockedUsers =
+        list[index]
+          .blockedUsers =
           (
             list[index]
-              .blockedUsers || []
+              .blockedUsers ||
+            []
           ).filter(
             item =>
               norm(item) !==
               target
           );
 
-        saveUsers(list);
+        saveUsers(
+          list
+        );
 
         socket.emit(
           "blockUpdated",
@@ -1748,6 +2355,10 @@ io.on(
       }
     );
 
+    // =================================================
+    // ACEPTAR
+    // =================================================
+
     socket.on(
       "callAccept",
       ({ to }) => {
@@ -1774,7 +2385,9 @@ io.on(
                 target
             );
 
-        if (!targetSocket) {
+        if (
+          !targetSocket
+        ) {
           return socket.emit(
             "callError",
             "El usuario ya no está conectado."
@@ -1797,6 +2410,10 @@ io.on(
         );
       }
     );
+
+    // =================================================
+    // RECHAZAR
+    // =================================================
 
     socket.on(
       "callReject",
@@ -1824,19 +2441,27 @@ io.on(
                 target
             );
 
-        if (targetSocket) {
+        if (
+          targetSocket
+        ) {
           io.to(
             targetSocket[0]
           ).emit(
             "callRejected",
             {
               from:
-                norm(rejecter)
+                norm(
+                  rejecter
+                )
             }
           );
         }
       }
     );
+
+    // =================================================
+    // WEBRTC OFFER
+    // =================================================
 
     socket.on(
       "callOffer",
@@ -1865,7 +2490,9 @@ io.on(
                 target
             );
 
-        if (targetSocket) {
+        if (
+          targetSocket
+        ) {
           io.to(
             targetSocket[0]
           ).emit(
@@ -1880,6 +2507,10 @@ io.on(
         }
       }
     );
+
+    // =================================================
+    // WEBRTC ANSWER
+    // =================================================
 
     socket.on(
       "callAnswer",
@@ -1908,7 +2539,9 @@ io.on(
                 target
             );
 
-        if (targetSocket) {
+        if (
+          targetSocket
+        ) {
           io.to(
             targetSocket[0]
           ).emit(
@@ -1923,6 +2556,10 @@ io.on(
         }
       }
     );
+
+    // =================================================
+    // ICE
+    // =================================================
 
     socket.on(
       "callIceCandidate",
@@ -1951,7 +2588,9 @@ io.on(
                 target
             );
 
-        if (targetSocket) {
+        if (
+          targetSocket
+        ) {
           io.to(
             targetSocket[0]
           ).emit(
@@ -1966,6 +2605,10 @@ io.on(
         }
       }
     );
+
+    // =================================================
+    // TERMINAR LLAMADA
+    // =================================================
 
     socket.on(
       "callEnd",
@@ -1993,7 +2636,9 @@ io.on(
                 target
             );
 
-        if (targetSocket) {
+        if (
+          targetSocket
+        ) {
           io.to(
             targetSocket[0]
           ).emit(
@@ -2025,7 +2670,141 @@ io.on(
 );
 
 // =====================================================
-// LIMPIEZA DE HISTORIAS
+// CONTACTOS
+// =====================================================
+
+function getContactList(username) {
+  const user =
+    getUser(username);
+
+  if (!user) {
+    return [];
+  }
+
+  const contactNames =
+    Array.isArray(
+      user.contacts
+    )
+      ? user.contacts
+      : [];
+
+  return contactNames
+    .map(
+      username =>
+        getUser(username)
+    )
+    .filter(Boolean)
+    .filter(
+      contact =>
+        !isEitherBlocked(
+          username,
+          contact.username
+        )
+    )
+    .map(
+      contact => ({
+        username:
+          contact.username,
+
+        displayName:
+          contact.displayName ||
+          contact.username,
+
+        profileImage:
+          contact.profileImage ||
+          "",
+
+        online:
+          [...online.values()]
+            .some(
+              name =>
+                norm(name) ===
+                norm(
+                  contact.username
+                )
+            )
+      })
+    );
+}
+
+// =====================================================
+// MENSAJES NO LEÍDOS
+// =====================================================
+
+function unreadCountsFor(
+  username
+) {
+  const counts = {};
+
+  const blocks =
+    getUser(username)
+      ?.blockedUsers || [];
+
+  for (
+    const message of messages()
+  ) {
+    if (
+      norm(message.to) ===
+        norm(username) &&
+      !message.read &&
+      !blocks.includes(
+        norm(message.from)
+      )
+    ) {
+      const from =
+        norm(message.from);
+
+      counts[from] =
+        (
+          counts[from] ||
+          0
+        ) + 1;
+    }
+  }
+
+  return counts;
+}
+
+function emitUnread(
+  socket,
+  username
+) {
+  socket.emit(
+    "unreadCounts",
+    unreadCountsFor(
+      username
+    )
+  );
+}
+
+// =====================================================
+// BLOQUEOS
+// =====================================================
+
+function isBlocked(a, b) {
+  const user =
+    getUser(a);
+
+  return !!(
+    user &&
+    (
+      user.blockedUsers ||
+      []
+    ).includes(
+      norm(b)
+    )
+  );
+}
+
+function isEitherBlocked(a, b) {
+  return (
+    isBlocked(a, b) ||
+    isBlocked(b, a)
+  );
+}
+
+// =====================================================
+// LIMPIEZA HISTORIAS
 // =====================================================
 
 setInterval(
@@ -2037,7 +2816,8 @@ setInterval(
       cleanExpiredStories();
 
     if (
-      before !== after.length
+      before !==
+      after.length
     ) {
       io.emit(
         "storiesUpdated",
@@ -2049,7 +2829,7 @@ setInterval(
 );
 
 // =====================================================
-// SERVIR INDEX
+// INDEX.HTML
 // =====================================================
 
 app.get(
