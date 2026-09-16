@@ -1,3 +1,4 @@
+
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -5,2981 +6,526 @@ const webpush = require("web-push");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const { initializeApp, cert, getApps } = require("firebase-admin/app");
+const { getMessaging } = require("firebase-admin/messaging");
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
-
 const PORT = process.env.PORT || 3000;
 
-// =====================================================
-// ARCHIVOS
-// =====================================================
-
 const DATA_DIR = path.join(__dirname, "data");
-
-const USERS_FILE = path.join(DATA_DIR, "users.json");
-const MESSAGES_FILE = path.join(DATA_DIR, "messages.json");
-const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
-const PUSH_FILE = path.join(DATA_DIR, "push.json");
-const STORIES_FILE = path.join(DATA_DIR, "stories.json");
+const FILES = {
+  users: path.join(DATA_DIR, "users.json"),
+  messages: path.join(DATA_DIR, "messages.json"),
+  sessions: path.join(DATA_DIR, "sessions.json"),
+  push: path.join(DATA_DIR, "push.json"),
+  stories: path.join(DATA_DIR, "stories.json"),
+  fcm: path.join(DATA_DIR, "fcm.json")
+};
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 function ensure(file, value) {
-  if (!fs.existsSync(file)) {
-    fs.writeFileSync(
-      file,
-      JSON.stringify(value, null, 2),
-      "utf8"
-    );
-  }
+  if (!fs.existsSync(file)) fs.writeFileSync(file, JSON.stringify(value, null, 2), "utf8");
 }
-
-ensure(USERS_FILE, []);
-ensure(MESSAGES_FILE, []);
-ensure(SESSIONS_FILE, {});
-ensure(PUSH_FILE, []);
-ensure(STORIES_FILE, []);
-
-// =====================================================
-// ARCHIVOS / DATOS
-// =====================================================
+ensure(FILES.users, []);
+ensure(FILES.messages, []);
+ensure(FILES.sessions, {});
+ensure(FILES.push, []);
+ensure(FILES.stories, []);
+ensure(FILES.fcm, {});
 
 function read(file, fallback) {
-  try {
-    return JSON.parse(
-      fs.readFileSync(file, "utf8")
-    );
-  } catch {
-    return fallback;
-  }
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); }
+  catch { return fallback; }
 }
-
 function write(file, data) {
-  fs.writeFileSync(
-    file,
-    JSON.stringify(data, null, 2),
-    "utf8"
-  );
+  fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
 }
+const users = () => read(FILES.users, []);
+const messages = () => read(FILES.messages, []);
+const sessions = () => read(FILES.sessions, {});
+const pushSubs = () => read(FILES.push, []);
+const stories = () => read(FILES.stories, []);
+const fcmTokens = () => read(FILES.fcm, {});
 
-function users() {
-  return read(USERS_FILE, []);
+function saveUsers(v){ write(FILES.users, v); }
+function saveMessages(v){ write(FILES.messages, v); }
+function saveSessions(v){ write(FILES.sessions, v); }
+function savePushSubs(v){ write(FILES.push, v); }
+function saveStories(v){ write(FILES.stories, v); }
+function saveFcmTokens(v){ write(FILES.fcm, v); }
+
+function norm(v) { return String(v || "").trim().toLowerCase(); }
+function getUser(username) { const n = norm(username); return users().find(u => norm(u.username) === n); }
+
+function passwordHash(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+  return { salt, hash };
 }
-
-function saveUsers(data) {
-  write(USERS_FILE, data);
+function validPassword(password, salt, hash) {
+  try {
+    const got = crypto.scryptSync(password, salt, 64).toString("hex");
+    return crypto.timingSafeEqual(Buffer.from(got, "hex"), Buffer.from(hash, "hex"));
+  } catch { return false; }
 }
-
-function messages() {
-  return read(MESSAGES_FILE, []);
+function newSession(username) {
+  const data = sessions();
+  const token = crypto.randomBytes(32).toString("hex");
+  data[token] = { username, createdAt: Date.now() };
+  saveSessions(data);
+  return token;
 }
-
-function saveMessages(data) {
-  write(MESSAGES_FILE, data);
+function sessionUser(token) {
+  if (!token) return null;
+  const s = sessions()[token];
+  return s ? getUser(s.username) : null;
 }
-
-function sessions() {
-  return read(SESSIONS_FILE, {});
+function deleteSession(token) {
+  const data = sessions();
+  delete data[token];
+  saveSessions(data);
 }
-
-function saveSessions(data) {
-  write(SESSIONS_FILE, data);
+function authToken(req) {
+  const a = req.headers.authorization || "";
+  return a.startsWith("Bearer ") ? a.slice(7) : "";
 }
-
-function pushSubs() {
-  return read(PUSH_FILE, []);
+function onlineUsername(socketId) { return online.get(socketId) || null; }
+function socketIdFor(username) {
+  const n = norm(username);
+  for (const [sid, name] of online.entries()) if (norm(name) === n) return sid;
+  return null;
 }
-
-function savePushSubs(data) {
-  write(PUSH_FILE, data);
+function isBlocked(a,b) {
+  const u = getUser(a);
+  return !!(u && Array.isArray(u.blockedUsers) && u.blockedUsers.some(x => norm(x) === norm(b)));
 }
-
-function allStories() {
-  return read(STORIES_FILE, []);
-}
-
-function saveStories(data) {
-  write(STORIES_FILE, data);
-}
-
+function isEitherBlocked(a,b) { return isBlocked(a,b) || isBlocked(b,a); }
 function cleanExpiredStories() {
   const now = Date.now();
-
-  const active = allStories().filter(
-    story => Number(story.expiresAt) > now
-  );
-
+  const active = stories().filter(s => Number(s.expiresAt) > now);
   saveStories(active);
-
   return active;
 }
 
-// =====================================================
-// UTILIDADES
-// =====================================================
-
-function norm(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase();
-}
-
-function getUser(username) {
-  const name = norm(username);
-
-  return users().find(
-    user =>
-      norm(user.username) === name
-  );
-}
-
-function socketIdFor(username) {
-  const wanted = norm(username);
-
-  for (
-    const [socketId, name] of online.entries()
-  ) {
-    if (norm(name) === wanted) {
-      return socketId;
-    }
-  }
-
-  return null;
-}
-
-// =====================================================
-// CONTRASEÑAS
-// =====================================================
-
-function passwordHash(password) {
-  const salt =
-    crypto.randomBytes(16).toString("hex");
-
-  const hash =
-    crypto
-      .scryptSync(password, salt, 64)
-      .toString("hex");
-
-  return {
-    salt,
-    hash
-  };
-}
-
-function validPassword(password, salt, hash) {
-  try {
-    const got =
-      crypto
-        .scryptSync(password, salt, 64)
-        .toString("hex");
-
-    return crypto.timingSafeEqual(
-      Buffer.from(got, "hex"),
-      Buffer.from(hash, "hex")
-    );
-  } catch {
-    return false;
-  }
-}
-
-// =====================================================
-// SESIONES
-// =====================================================
-
-function newSession(username) {
-  const data = sessions();
-
-  const token =
-    crypto.randomBytes(32).toString("hex");
-
-  data[token] = {
-    username,
-    createdAt: Date.now()
-  };
-
-  saveSessions(data);
-
-  return token;
-}
-
-function sessionUser(token) {
-  if (!token) {
-    return null;
-  }
-
-  const session = sessions()[token];
-
-  if (!session) {
-    return null;
-  }
-
-  return getUser(session.username);
-}
-
-function deleteSession(token) {
-  const data = sessions();
-
-  delete data[token];
-
-  saveSessions(data);
-}
-
-function authToken(req) {
-  const authorization =
-    req.headers.authorization || "";
-
-  if (
-    authorization.startsWith("Bearer ")
-  ) {
-    return authorization.slice(7);
-  }
-
-  return "";
-}
-
-// =====================================================
-// EXPRESS
-// =====================================================
-
-app.use(
-  express.json({
-    limit: "12mb"
-  })
-);
-
-app.use(
-  express.static(
-    path.join(__dirname, "public")
-  )
-);
-
-// =====================================================
-// USUARIOS CONECTADOS
-// =====================================================
+app.use(express.json({ limit: "12mb" }));
+app.use(express.static(path.join(__dirname, "public")));
 
 const online = new Map();
 
-// =====================================================
-// BLOQUEOS
-// =====================================================
-
-function isBlocked(a, b) {
-  const user = getUser(a);
-
-  return !!(
-    user &&
-    Array.isArray(user.blockedUsers) &&
-    user.blockedUsers.includes(norm(b))
-  );
+const vapidPublic = process.env.VAPID_PUBLIC_KEY || "";
+const vapidPrivate = process.env.VAPID_PRIVATE_KEY || "";
+const vapidSubject = process.env.VAPID_SUBJECT || "mailto:admin@example.com";
+if (vapidPublic && vapidPrivate) {
+  webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
 }
 
-function isEitherBlocked(a, b) {
-  return (
-    isBlocked(a, b) ||
-    isBlocked(b, a)
-  );
-}
-
-// =====================================================
-// CONTACTOS
-// =====================================================
-
-function getContactList(username) {
-  const user =
-    getUser(username);
-
-  if (!user) {
-    return [];
+let firebaseReady = false;
+try {
+  if (!getApps().length) {
+    let raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "";
+    if (!raw) {
+      for (const p of ["/etc/secrets/firebase-service-account.json", path.join(__dirname, "firebase-service-account.json")]) {
+        if (fs.existsSync(p)) { raw = fs.readFileSync(p, "utf8"); break; }
+      }
+    }
+    if (!raw) throw new Error("No se encontró la credencial de Firebase. Usa FIREBASE_SERVICE_ACCOUNT_JSON o /etc/secrets/firebase-service-account.json.");
+    initializeApp({ credential: cert(JSON.parse(raw)) });
+    console.log("Firebase Admin listo para FCM.");
+  } else {
+    console.log("Firebase Admin ya estaba inicializado.");
   }
-
-  const contactNames =
-    Array.isArray(user.contacts)
-      ? user.contacts
-      : [];
-
-  return contactNames
-    .map(name => getUser(name))
-    .filter(Boolean)
-    .filter(
-      contact =>
-        !isEitherBlocked(
-          username,
-          contact.username
-        )
-    )
-    .map(contact => ({
-      username:
-        contact.username,
-
-      displayName:
-        contact.displayName ||
-        contact.username,
-
-      profileImage:
-        contact.profileImage ||
-        "",
-
-      online:
-        [...online.values()].some(
-          name =>
-            norm(name) ===
-            norm(contact.username)
-        )
-    }));
+  firebaseReady = true;
+} catch (error) {
+  firebaseReady = false;
+  console.error("FCM init error:", error.message);
 }
 
-// =====================================================
-// LISTA DE USUARIOS
-// =====================================================
-
-function sendUserList() {
-  const list =
-    users().map(user => ({
-      username:
-        user.username,
-
-      displayName:
-        user.displayName ||
-        user.username,
-
-      profileImage:
-        user.profileImage ||
-        "",
-
-      online:
-        [...online.values()].some(
-          name =>
-            norm(name) ===
-            norm(user.username)
-        )
-    }));
-
-  io.emit(
-    "userList",
-    list
-  );
-}
-
-// =====================================================
-// PUSH
-// =====================================================
-
-const vapidPublic =
-  process.env.VAPID_PUBLIC_KEY || "";
-
-const vapidPrivate =
-  process.env.VAPID_PRIVATE_KEY || "";
-
-const vapidSubject =
-  process.env.VAPID_SUBJECT ||
-  "mailto:admin@example.com";
-
-if (
-  vapidPublic &&
-  vapidPrivate
-) {
-  webpush.setVapidDetails(
-    vapidSubject,
-    vapidPublic,
-    vapidPrivate
-  );
-}
-
-function sendPushToUser(
-  username,
-  payload
-) {
-  if (
-    !vapidPublic ||
-    !vapidPrivate
-  ) {
+async function sendFcmToUser(username, payload) {
+  if (!firebaseReady) return;
+  const data = fcmTokens();
+  const key = norm(username);
+  const tokens = Array.isArray(data[key]) ? data[key] : [];
+  if (!tokens.length) {
+    console.log("No hay tokens FCM registrados para " + key + ".");
     return;
   }
-
-  const subscriptions =
-    pushSubs();
-
-  for (
-    const item of subscriptions
-  ) {
-    if (
-      norm(item.username) !==
-      norm(username)
-    ) {
-      continue;
+  const title = String(payload && (payload.title || payload.from) || "Mi Chat");
+  const body = String(payload && (payload.body || payload.message) || "");
+  const message = {
+    tokens,
+    notification: { title, body },
+    data: {
+      type: String(payload && payload.type || "message"),
+      username: String(payload && payload.username || ""),
+      from: String(payload && payload.from || ""),
+      body,
+      message: body
+    },
+    android: {
+      priority: "high",
+      notification: { channelId: "michat_messages", sound: "default" }
     }
-
-    webpush
-      .sendNotification(
-        item.subscription,
-        JSON.stringify(payload)
-      )
-      .catch(() => {});
+  };
+  try {
+    console.log("Enviando FCM a " + key + ". Tokens: " + tokens.length);
+    const result = await getMessaging().sendEachForMulticast(message);
+    console.log("FCM enviado a " + key + ": éxito=" + result.successCount + ", errores=" + result.failureCount);
+    if (result.failureCount) {
+      const invalid = new Set();
+      result.responses.forEach((r, i) => {
+        const c = r.error && r.error.code;
+        if (!r.success && (c === "messaging/registration-token-not-registered" || c === "messaging/invalid-registration-token")) invalid.add(tokens[i]);
+      });
+      if (invalid.size) {
+        data[key] = tokens.filter(t => !invalid.has(t));
+        saveFcmTokens(data);
+        console.log("Se eliminaron " + invalid.size + " tokens inválidos de " + key + ".");
+      }
+    }
+  } catch (error) {
+    console.error("FCM send error:", error.message);
   }
 }
-
-// =====================================================
-// REGISTRO
-// =====================================================
-
-app.post(
-  "/api/register",
-  (req, res) => {
-    const displayName =
-      String(
-        req.body.username || ""
-      ).trim();
-
-    const password =
-      String(
-        req.body.password || ""
-      );
-
-    if (
-      displayName.length < 3 ||
-      displayName.length > 24
-    ) {
-      return res.status(400).json({
-        error:
-          "El nombre debe tener entre 3 y 24 caracteres."
-      });
+function sendPushToUser(username, payload) {
+  if (vapidPublic && vapidPrivate) {
+    for (const item of pushSubs()) {
+      if (norm(item.username) !== norm(username)) continue;
+      webpush.sendNotification(item.subscription, JSON.stringify(payload)).catch(e => console.error("Error enviando Web Push:", e.message));
     }
-
-    if (
-      !/^[a-zA-Z0-9_]+$/.test(
-        displayName
-      )
-    ) {
-      return res.status(400).json({
-        error:
-          "Solo letras, números y _."
-      });
-    }
-
-    if (
-      password.length < 6
-    ) {
-      return res.status(400).json({
-        error:
-          "La contraseña debe tener al menos 6 caracteres."
-      });
-    }
-
-    const username =
-      norm(displayName);
-
-    const list =
-      users();
-
-    if (
-      list.some(
-        user =>
-          norm(
-            user.username
-          ) === username
-      )
-    ) {
-      return res.status(400).json({
-        error:
-          "Ese usuario ya existe."
-      });
-    }
-
-    const p =
-      passwordHash(
-        password
-      );
-
-    list.push({
-      username,
-      displayName,
-
-      salt:
-        p.salt,
-
-      passwordHash:
-        p.hash,
-
-      profileImage:
-        "",
-
-      blockedUsers:
-        [],
-
-      contacts:
-        [],
-
-      createdAt:
-        Date.now()
-    });
-
-    saveUsers(list);
-
-    const token =
-      newSession(
-        username
-      );
-
-    sendUserList();
-
-    res.json({
-      success: true,
-      username:
-        displayName,
-      token
-    });
   }
-);
-
-// =====================================================
-// LOGIN
-// =====================================================
-
-app.post(
-  "/api/login",
-  (req, res) => {
-    const username =
-      norm(
-        req.body.username
-      );
-
-    const password =
-      String(
-        req.body.password || ""
-      );
-
-    const user =
-      getUser(username);
-
-    if (
-      !user ||
-      !validPassword(
-        password,
-        user.salt,
-        user.passwordHash
-      )
-    ) {
-      return res.status(401).json({
-        error:
-          "Usuario o contraseña incorrectos."
-      });
-    }
-
-    const list =
-      users();
-
-    const index =
-      list.findIndex(
-        item =>
-          norm(
-            item.username
-          ) ===
-          norm(
-            user.username
-          )
-      );
-
-    if (index >= 0) {
-      if (
-        !Array.isArray(
-          list[index].contacts
-        )
-      ) {
-        list[index].contacts = [];
-      }
-
-      if (
-        !Array.isArray(
-          list[index].blockedUsers
-        )
-      ) {
-        list[index].blockedUsers = [];
-      }
-
-      saveUsers(list);
-    }
-
-    const token =
-      newSession(
-        user.username
-      );
-
-    res.json({
-      success: true,
-      username:
-        user.displayName,
-      token
-    });
-  }
-);
-
-// =====================================================
-// SESIÓN
-// =====================================================
-
-app.get(
-  "/api/session",
-  (req, res) => {
-    const user =
-      sessionUser(
-        authToken(req)
-      );
-
-    if (!user) {
-      return res.status(401).json({
-        loggedIn: false
-      });
-    }
-
-    res.json({
-      loggedIn: true,
-
-      username:
-        user.displayName,
-
-      profileImage:
-        user.profileImage ||
-        ""
-    });
-  }
-);
-
-// =====================================================
-// LOGOUT
-// =====================================================
-
-app.post(
-  "/api/logout",
-  (req, res) => {
-    deleteSession(
-      authToken(req)
-    );
-
-    res.json({
-      success: true
-    });
-  }
-);
-
-// =====================================================
-// PERFIL
-// =====================================================
-
-app.get(
-  "/api/profile",
-  (req, res) => {
-    const user =
-      sessionUser(
-        authToken(req)
-      );
-
-    if (!user) {
-      return res.status(401).json({
-        error:
-          "No autorizado"
-      });
-    }
-
-    res.json({
-      username:
-        user.username,
-
-      displayName:
-        user.displayName,
-
-      profileImage:
-        user.profileImage ||
-        ""
-    });
-  }
-);
-
-app.post(
-  "/api/profile",
-  (req, res) => {
-    const user =
-      sessionUser(
-        authToken(req)
-      );
-
-    if (!user) {
-      return res.status(401).json({
-        error:
-          "No autorizado"
-      });
-    }
-
-    const displayName =
-      String(
-        req.body.displayName ||
-        user.displayName
-      ).trim();
-
-    const profileImage =
-      String(
-        req.body.profileImage ||
-        ""
-      );
-
-    if (
-      displayName.length < 3 ||
-      displayName.length > 24
-    ) {
-      return res.status(400).json({
-        error:
-          "Nombre inválido."
-      });
-    }
-
-    if (
-      profileImage.length >
-      800000
-    ) {
-      return res.status(400).json({
-        error:
-          "La imagen es demasiado grande."
-      });
-    }
-
-    const list =
-      users();
-
-    const index =
-      list.findIndex(
-        item =>
-          norm(item.username) ===
-          norm(user.username)
-      );
-
-    if (index < 0) {
-      return res.status(404).json({
-        error:
-          "Usuario no encontrado."
-      });
-    }
-
-    list[index].displayName =
-      displayName;
-
-    list[index].profileImage =
-      profileImage;
-
-    saveUsers(list);
-
-    sendUserList();
-
-    res.json({
-      success: true,
-
-      displayName,
-
-      profileImage
-    });
-  }
-);
-
-// =====================================================
-// CONTACTOS - LISTAR
-// =====================================================
-
-app.get(
-  "/api/contacts",
-  (req, res) => {
-    const user =
-      sessionUser(
-        authToken(req)
-      );
-
-    if (!user) {
-      return res.status(401).json({
-        error:
-          "No autorizado"
-      });
-    }
-
-    res.json(
-      getContactList(
-        user.username
-      )
-    );
-  }
-);
-
-// =====================================================
-// CONTACTOS - AÑADIR
-// =====================================================
-
-app.post(
-  "/api/contacts/add",
-  (req, res) => {
-    const user =
-      sessionUser(
-        authToken(req)
-      );
-
-    if (!user) {
-      return res.status(401).json({
-        error:
-          "No autorizado"
-      });
-    }
-
-    const target =
-      norm(
-        req.body.username
-      );
-
-    if (!target) {
-      return res.status(400).json({
-        error:
-          "Escribe un nombre de usuario."
-      });
-    }
-
-    if (
-      target ===
-      norm(user.username)
-    ) {
-      return res.status(400).json({
-        error:
-          "No puedes añadirte a ti mismo."
-      });
-    }
-
-    const targetUser =
-      getUser(target);
-
-    if (!targetUser) {
-      return res.status(404).json({
-        error:
-          "Ese usuario no existe."
-      });
-    }
-
-    if (
-      isEitherBlocked(
-        user.username,
-        target
-      )
-    ) {
-      return res.status(400).json({
-        error:
-          "No puedes añadir a este usuario."
-      });
-    }
-
-    const list =
-      users();
-
-    const index =
-      list.findIndex(
-        item =>
-          norm(item.username) ===
-          norm(user.username)
-      );
-
-    if (index < 0) {
-      return res.status(404).json({
-        error:
-          "Usuario no encontrado."
-      });
-    }
-
-    if (
-      !Array.isArray(
-        list[index].contacts
-      )
-    ) {
-      list[index].contacts =
-        [];
-    }
-
-    if (
-      list[index].contacts.some(
-        name =>
-          norm(name) ===
-          target
-      )
-    ) {
-      return res.status(400).json({
-        error:
-          "Ese usuario ya está en tus contactos."
-      });
-    }
-
-    list[index].contacts.push(
-      target
-    );
-
-    saveUsers(list);
-
-    const contact =
-      getContactList(
-        user.username
-      ).find(
-        item =>
-          norm(
-            item.username
-          ) === target
-      );
-
-    res.json({
-      success: true,
-      contact:
-        contact || null
-    });
-  }
-);
-
-// =====================================================
-// CONTACTOS - ELIMINAR
-// =====================================================
-
-app.post(
-  "/api/contacts/remove",
-  (req, res) => {
-    const user =
-      sessionUser(
-        authToken(req)
-      );
-
-    if (!user) {
-      return res.status(401).json({
-        error:
-          "No autorizado"
-      });
-    }
-
-    const target =
-      norm(
-        req.body.username
-      );
-
-    if (!target) {
-      return res.status(400).json({
-        error:
-          "Usuario inválido."
-      });
-    }
-
-    const list =
-      users();
-
-    const index =
-      list.findIndex(
-        item =>
-          norm(item.username) ===
-          norm(user.username)
-      );
-
-    if (index < 0) {
-      return res.status(404).json({
-        error:
-          "Usuario no encontrado."
-      });
-    }
-
-    list[index].contacts =
-      (
-        list[index].contacts ||
-        []
-      ).filter(
-        name =>
-          norm(name) !==
-          target
-      );
-
-    saveUsers(list);
-
-    res.json({
-      success: true
-    });
-  }
-);
-
-// =====================================================
-// PUSH
-// =====================================================
-
-app.post(
-  "/api/push/subscribe",
-  (req, res) => {
-    const user =
-      sessionUser(
-        authToken(req)
-      );
-
-    if (!user) {
-      return res.status(401).json({
-        error:
-          "No autorizado"
-      });
-    }
-
-    const subscription =
-      req.body.subscription;
-
-    if (
-      !subscription ||
-      !subscription.endpoint
-    ) {
-      return res.status(400).json({
-        error:
-          "Suscripción inválida."
-      });
-    }
-
-    const list =
-      pushSubs();
-
-    const exists =
-      list.some(
-        item =>
-          item.username ===
-            user.username &&
-          item.subscription.endpoint ===
-            subscription.endpoint
-      );
-
-    if (!exists) {
-      list.push({
-        username:
-          user.username,
-
-        subscription
-      });
-    }
-
-    savePushSubs(list);
-
-    res.json({
-      success: true,
-
-      enabled:
-        !!(
-          vapidPublic &&
-          vapidPrivate
-        )
-    });
-  }
-);
-
-app.get(
-  "/api/push/public-key",
-  (req, res) => {
-    res.json({
-      enabled:
-        !!(
-          vapidPublic &&
-          vapidPrivate
-        ),
-
-      publicKey:
-        vapidPublic
-    });
-  }
-);
-
-// =====================================================
-// HISTORIAS
-// =====================================================
-
-app.get(
-  "/api/stories",
-  (req, res) => {
-    const user =
-      sessionUser(
-        authToken(req)
-      );
-
-    if (!user) {
-      return res.status(401).json({
-        error:
-          "No autorizado"
-      });
-    }
-
-    res.json(
-      cleanExpiredStories()
-    );
-  }
-);
-
-// =====================================================
-// CREAR HISTORIA
-// =====================================================
-
-app.post(
-  "/api/stories",
-  (req, res) => {
-    const user =
-      sessionUser(
-        authToken(req)
-      );
-
-    if (!user) {
-      return res.status(401).json({
-        error:
-          "No autorizado"
-      });
-    }
-
-    const type =
-      req.body.type ===
-      "image"
-        ? "image"
-        : "text";
-
-    const content =
-      String(
-        req.body.content ||
-        ""
-      ).trim();
-
-    const background =
-      String(
-        req.body.background ||
-        "#075e54"
-      ).trim();
-
-    if (!content) {
-      return res.status(400).json({
-        error:
-          "La historia no puede estar vacía."
-      });
-    }
-
-    if (
-      type === "text" &&
-      content.length > 500
-    ) {
-      return res.status(400).json({
-        error:
-          "La historia de texto puede tener hasta 500 caracteres."
-      });
-    }
-
-    if (
-      type === "image" &&
-      content.length > 9000000
-    ) {
-      return res.status(400).json({
-        error:
-          "La imagen es demasiado grande."
-      });
-    }
-
-    if (
-      type === "image" &&
-      !/^data:image\/(jpeg|jpg|png|webp|gif);base64,/i.test(
-        content
-      )
-    ) {
-      return res.status(400).json({
-        error:
-          "Formato de imagen no válido."
-      });
-    }
-
-    const list =
-      cleanExpiredStories();
-
-    const ownCount =
-      list.filter(
-        story =>
-          norm(
-            story.username
-          ) ===
-          norm(
-            user.username
-          )
-      ).length;
-
-    if (
-      ownCount >= 20
-    ) {
-      return res.status(400).json({
-        error:
-          "Has alcanzado el límite de 20 historias activas."
-      });
-    }
-
-    const now =
-      Date.now();
-
-    const story = {
-      id:
-        now +
-        "-" +
-        crypto
-          .randomBytes(5)
-          .toString("hex"),
-
-      username:
-        user.username,
-
-      displayName:
-        user.displayName ||
-        user.username,
-
-      profileImage:
-        user.profileImage ||
-        "",
-
-      type,
-
-      content,
-
-      background,
-
-      createdAt:
-        now,
-
-      expiresAt:
-        now +
-        24 *
-          60 *
-          60 *
-          1000,
-
-      // Usuarios que han visto esta historia
-      views:
-        []
-    };
-
-    list.push(
-      story
-    );
-
-    saveStories(
-      list
-    );
-
-    io.emit(
-      "storyCreated",
-      story
-    );
-
-    io.emit(
-      "storiesUpdated",
-      list
-    );
-
-    res.json({
-      success: true,
-      story
-    });
-  }
-);
-
-// =====================================================
-// MARCAR HISTORIA COMO VISTA
-// =====================================================
-
-app.post(
-  "/api/stories/:id/view",
-  (req, res) => {
-    const user =
-      sessionUser(
-        authToken(req)
-      );
-
-    if (!user) {
-      return res.status(401).json({
-        error:
-          "No autorizado"
-      });
-    }
-
-    const list =
-      cleanExpiredStories();
-
-    const index =
-      list.findIndex(
-        story =>
-          String(story.id) ===
-          String(req.params.id)
-      );
-
-    if (index < 0) {
-      return res.status(404).json({
-        error:
-          "Historia no encontrada."
-      });
-    }
-
-    const story =
-      list[index];
-
-    if (
-      !Array.isArray(
-        story.views
-      )
-    ) {
-      story.views = [];
-    }
-
-    // El dueño no cuenta como espectador
-    if (
-      norm(story.username) ===
-      norm(user.username)
-    ) {
-      saveStories(list);
-
-      return res.json({
-        success: true,
-        owner: true,
-        viewed: false,
-        views:
-          story.views
-      });
-    }
-
-    const alreadyViewed =
-      story.views.some(
-        view =>
-          norm(
-            view.username
-          ) ===
-          norm(
-            user.username
-          )
-      );
-
-    if (!alreadyViewed) {
-      const view = {
-        username:
-          user.username,
-
-        displayName:
-          user.displayName ||
-          user.username,
-
-        profileImage:
-          user.profileImage ||
-          "",
-
-        viewedAt:
-          Date.now()
-      };
-
-      story.views.push(
-        view
-      );
-
-      saveStories(
-        list
-      );
-
-      const ownerSocket =
-        socketIdFor(
-          story.username
-        );
-
-      if (ownerSocket) {
-        io.to(
-          ownerSocket
-        ).emit(
-          "storyViewed",
-          {
-            storyId:
-              story.id,
-
-            view,
-
-            views:
-              story.views
-          }
-        );
-      }
-    } else {
-      saveStories(
-        list
-      );
-    }
-
-    res.json({
-      success: true,
-      owner: false,
-      viewed: true,
-      views:
-        story.views
-    });
-  }
-);
-
-// =====================================================
-// VER ESPECTADORES
-// =====================================================
-
-app.get(
-  "/api/stories/:id/views",
-  (req, res) => {
-    const user =
-      sessionUser(
-        authToken(req)
-      );
-
-    if (!user) {
-      return res.status(401).json({
-        error:
-          "No autorizado"
-      });
-    }
-
-    const list =
-      cleanExpiredStories();
-
-    const story =
-      list.find(
-        item =>
-          String(item.id) ===
-          String(req.params.id)
-      );
-
-    if (!story) {
-      return res.status(404).json({
-        error:
-          "Historia no encontrada."
-      });
-    }
-
-    if (
-      norm(story.username) !==
-      norm(user.username)
-    ) {
-      return res.status(403).json({
-        error:
-          "Solo el dueño puede ver los espectadores."
-      });
-    }
-
-    const views =
-      Array.isArray(
-        story.views
-      )
-        ? story.views
-        : [];
-
-    res.json({
-      success: true,
-
-      count:
-        views.length,
-
-      views
-    });
-  }
-);
-
-// =====================================================
-// BORRAR HISTORIA
-// =====================================================
-
-app.delete(
-  "/api/stories/:id",
-  (req, res) => {
-    const user =
-      sessionUser(
-        authToken(req)
-      );
-
-    if (!user) {
-      return res.status(401).json({
-        error:
-          "No autorizado"
-      });
-    }
-
-    const list =
-      cleanExpiredStories();
-
-    const index =
-      list.findIndex(
-        story =>
-          String(story.id) ===
-          String(req.params.id)
-      );
-
-    if (index < 0) {
-      return res.status(404).json({
-        error:
-          "Historia no encontrada."
-      });
-    }
-
-    if (
-      norm(
-        list[index].username
-      ) !==
-      norm(
-        user.username
-      )
-    ) {
-      return res.status(403).json({
-        error:
-          "No puedes borrar esta historia."
-      });
-    }
-
-    const deleted =
-      list.splice(
-        index,
-        1
-      )[0];
-
-    saveStories(
-      list
-    );
-
-    io.emit(
-      "storyDeleted",
-      {
-        id:
-          deleted.id
-      }
-    );
-
-    io.emit(
-      "storiesUpdated",
-      list
-    );
-
-    res.json({
-      success: true
-    });
-  }
-);
-
-// =====================================================
-// SOCKET.IO
-// =====================================================
-
-io.on(
-  "connection",
-  socket => {
-
-    // =================================================
-    // AUTENTICACIÓN
-    // =================================================
-
-    socket.on(
-      "authenticate",
-      token => {
-        const user =
-          sessionUser(token);
-
-        if (!user) {
-          return socket.emit(
-            "authenticationError"
-          );
-        }
-
-        // Cerrar otra conexión del mismo usuario
-        for (
-          const [
-            socketId,
-            username
-          ] of online.entries()
-        ) {
-          if (
-            socketId !== socket.id &&
-            norm(username) ===
-              norm(
-                user.username
-              )
-          ) {
-            online.delete(
-              socketId
-            );
-
-            const oldSocket =
-              io.sockets.sockets.get(
-                socketId
-              );
-
-            if (oldSocket) {
-              oldSocket.disconnect(
-                true
-              );
-            }
-          }
-        }
-
-        online.set(
-          socket.id,
-          user.username
-        );
-
-        socket.emit(
-          "authenticated",
-          {
-            username:
-              user.displayName,
-
-            profileImage:
-              user.profileImage ||
-              ""
-          }
-        );
-
-        sendUserList();
-
-        emitUnread(
-          socket,
-          user.username
-        );
-
-        socket.emit(
-          "storiesData",
-          cleanExpiredStories()
-        );
-
-        socket.emit(
-          "contactsUpdated",
-          getContactList(
-            user.username
-          )
-        );
-      }
-    );
-
-    // =================================================
-    // CONTACTOS
-    // =================================================
-
-    socket.on(
-      "getContacts",
-      () => {
-        const me =
-          online.get(
-            socket.id
-          );
-
-        if (!me) {
-          return;
-        }
-
-        socket.emit(
-          "contactsUpdated",
-          getContactList(me)
-        );
-      }
-    );
-
-    socket.on(
-      "addContact",
-      username => {
-        const me =
-          online.get(
-            socket.id
-          );
-
-        const target =
-          norm(username);
-
-        if (!me || !target) {
-          return;
-        }
-
-        if (
-          target ===
-          norm(me)
-        ) {
-          return socket.emit(
-            "contactError",
-            "No puedes añadirte a ti mismo."
-          );
-        }
-
-        if (!getUser(target)) {
-          return socket.emit(
-            "contactError",
-            "Ese usuario no existe."
-          );
-        }
-
-        if (
-          isEitherBlocked(
-            me,
-            target
-          )
-        ) {
-          return socket.emit(
-            "contactError",
-            "No puedes añadir a este usuario."
-          );
-        }
-
-        const list =
-          users();
-
-        const index =
-          list.findIndex(
-            user =>
-              norm(
-                user.username
-              ) ===
-              norm(me)
-          );
-
-        if (index < 0) {
-          return;
-        }
-
-        if (
-          !Array.isArray(
-            list[index].contacts
-          )
-        ) {
-          list[index].contacts =
-            [];
-        }
-
-        if (
-          !list[index].contacts.some(
-            name =>
-              norm(name) ===
-              target
-          )
-        ) {
-          list[index].contacts.push(
-            target
-          );
-
-          saveUsers(list);
-        }
-
-        socket.emit(
-          "contactAdded",
-          getContactList(me).find(
-            contact =>
-              norm(
-                contact.username
-              ) ===
-              target
-          ) || {
-            username:
-              target
-          }
-        );
-
-        socket.emit(
-          "contactsUpdated",
-          getContactList(me)
-        );
-      }
-    );
-
-    socket.on(
-      "removeContact",
-      username => {
-        const me =
-          online.get(
-            socket.id
-          );
-
-        const target =
-          norm(username);
-
-        if (!me || !target) {
-          return;
-        }
-
-        const list =
-          users();
-
-        const index =
-          list.findIndex(
-            user =>
-              norm(
-                user.username
-              ) ===
-              norm(me)
-          );
-
-        if (index < 0) {
-          return;
-        }
-
-        list[index].contacts =
-          (
-            list[index].contacts ||
-            []
-          ).filter(
-            name =>
-              norm(name) !==
-              target
-          );
-
-        saveUsers(list);
-
-        socket.emit(
-          "contactRemoved",
-          {
-            username:
-              target
-          }
-        );
-
-        socket.emit(
-          "contactsUpdated",
-          getContactList(me)
-        );
-      }
-    );
-
-    // =================================================
-    // HISTORIAS
-    // =================================================
-
-    socket.on(
-      "getStories",
-      () => {
-        const me =
-          online.get(
-            socket.id
-          );
-
-        if (!me) {
-          return;
-        }
-
-        socket.emit(
-          "storiesData",
-          cleanExpiredStories()
-        );
-      }
-    );
-
-    // =================================================
-    // BUSCAR USUARIO
-    // =================================================
-
-    socket.on(
-      "findUser",
-      username => {
-        const me =
-          online.get(
-            socket.id
-          );
-
-        if (!me) {
-          return;
-        }
-
-        const target =
-          norm(username);
-
-        if (!target) {
-          return socket.emit(
-            "userNotFound"
-          );
-        }
-
-        if (
-          target ===
-          norm(me)
-        ) {
-          return socket.emit(
-            "userFoundError",
-            "No puedes contactar contigo mismo."
-          );
-        }
-
-        const user =
-          getUser(target);
-
-        if (!user) {
-          return socket.emit(
-            "userNotFound"
-          );
-        }
-
-        if (
-          isEitherBlocked(
-            me,
-            target
-          )
-        ) {
-          return socket.emit(
-            "userFoundError",
-            "No puedes contactar con este usuario."
-          );
-        }
-
-        socket.emit(
-          "userFound",
-          {
-            username:
-              user.username,
-
-            displayName:
-              user.displayName,
-
-            profileImage:
-              user.profileImage ||
-              "",
-
-            online:
-              [...online.values()]
-                .some(
-                  name =>
-                    norm(name) ===
-                    target
-                )
-          }
-        );
-      }
-    );
-
-    // =================================================
-    // CONVERSACIÓN
-    // =================================================
-
-    socket.on(
-      "getConversation",
-      otherUsername => {
-        const me =
-          online.get(
-            socket.id
-          );
-
-        const other =
-          norm(otherUsername);
-
-        if (
-          !me ||
-          !getUser(other)
-        ) {
-          return;
-        }
-
-        if (
-          isEitherBlocked(
-            me,
-            other
-          )
-        ) {
-          return socket.emit(
-            "conversationBlocked",
-            "Esta conversación está bloqueada."
-          );
-        }
-
-        const conversation =
-          messages()
-            .filter(
-              message =>
-                (
-                  norm(
-                    message.from
-                  ) ===
-                    norm(me) &&
-                  norm(
-                    message.to
-                  ) ===
-                    other
-                ) ||
-                (
-                  norm(
-                    message.from
-                  ) ===
-                    other &&
-                  norm(
-                    message.to
-                  ) ===
-                    norm(me)
-                )
-            )
-            .filter(
-              message =>
-                !(
-                  message.deletedFor ||
-                  []
-                ).includes(
-                  norm(me)
-                )
-            );
-
-        socket.emit(
-          "conversationHistory",
-          {
-            username:
-              other,
-
-            messages:
-              conversation
-          }
-        );
-      }
-    );
-
-    // =================================================
-    // MENSAJES
-    // =================================================
-
-    socket.on(
-      "privateMessage",
-      data => {
-        const me =
-          online.get(
-            socket.id
-          );
-
-        const to =
-          norm(data?.to);
-
-        const text =
-          String(
-            data?.message ||
-            ""
-          ).trim();
-
-        if (
-          !me ||
-          !to ||
-          !text ||
-          text.length > 5000
-        ) {
-          return;
-        }
-
-        if (!getUser(to)) {
-          return socket.emit(
-            "messageError",
-            "Ese usuario no existe."
-          );
-        }
-
-        if (
-          to ===
-          norm(me)
-        ) {
-          return socket.emit(
-            "messageError",
-            "No puedes enviarte mensajes."
-          );
-        }
-
-        if (
-          isEitherBlocked(
-            me,
-            to
-          )
-        ) {
-          return socket.emit(
-            "messageError",
-            "No puedes contactar con este usuario."
-          );
-        }
-
-        const message = {
-          id:
-            Date.now() +
-            "-" +
-            crypto
-              .randomBytes(5)
-              .toString("hex"),
-
-          from:
-            norm(me),
-
-          fromDisplay:
-            getUser(me)
-              ?.displayName ||
-            me,
-
-          to,
-
-          toDisplay:
-            getUser(to)
-              ?.displayName ||
-            to,
-
-          message:
-            text,
-
-          time:
-            new Date()
-              .toISOString(),
-
-          read:
-            false,
-
-          deletedFor:
-            []
-        };
-
-        const list =
-          messages();
-
-        list.push(
-          message
-        );
-
-        if (
-          list.length >
-          50000
-        ) {
-          list.splice(
-            0,
-            list.length -
-              50000
-          );
-        }
-
-        saveMessages(
-          list
-        );
-
-        const targetSocket =
-          socketIdFor(to);
-
-        if (targetSocket) {
-          io.to(
-            targetSocket
-          ).emit(
-            "privateMessage",
-            message
-          );
-        }
-
-        socket.emit(
-          "messageSent",
-          message
-        );
-
-        sendPushToUser(
-          to,
-          {
-            type:
-              "message",
-
-            from:
-              message.fromDisplay,
-
-            message:
-              message.message,
-
-            username:
-              message.from
-          }
-        );
-      }
-    );
-
-    // =================================================
-    // MARCAR LEÍDO
-    // =================================================
-
-    socket.on(
-      "markConversationRead",
-      otherUsername => {
-        const me =
-          online.get(
-            socket.id
-          );
-
-        const other =
-          norm(otherUsername);
-
-        if (!me) {
-          return;
-        }
-
-        const list =
-          messages();
-
-        for (
-          const message of list
-        ) {
-          if (
-            norm(
-              message.from
-            ) ===
-              other &&
-            norm(
-              message.to
-            ) ===
-              norm(me)
-          ) {
-            message.read =
-              true;
-          }
-        }
-
-        saveMessages(
-          list
-        );
-
-        emitUnread(
-          socket,
-          me
-        );
-      }
-    );
-
-    // =================================================
-    // BORRAR MENSAJE
-    // =================================================
-
-    socket.on(
-      "deleteMessage",
-      id => {
-        const me =
-          online.get(
-            socket.id
-          );
-
-        if (!me || !id) {
-          return;
-        }
-
-        const list =
-          messages();
-
-        const index =
-          list.findIndex(
-            message =>
-              message.id ===
-              id
-          );
-
-        if (index < 0) {
-          return;
-        }
-
-        if (
-          norm(
-            list[index].from
-          ) !==
-          norm(me)
-        ) {
-          return socket.emit(
-            "messageError",
-            "Solo puedes borrar tus propios mensajes."
-          );
-        }
-
-        list[index]
-          .deletedFor =
-          Array.from(
-            new Set([
-              ...(
-                list[index]
-                  .deletedFor ||
-                []
-              ),
-              norm(me)
-            ])
-          );
-
-        list[index].message =
-          "Mensaje eliminado";
-
-        list[index].deleted =
-          true;
-
-        saveMessages(
-          list
-        );
-
-        const target =
-          list[index].to;
-
-        for (
-          const [
-            socketId,
-            username
-          ] of online.entries()
-        ) {
-          if (
-            norm(username) ===
-              target ||
-            norm(username) ===
-              norm(me)
-          ) {
-            io.to(
-              socketId
-            ).emit(
-              "messageDeleted",
-              {
-                id:
-                  list[index]
-                    .id,
-
-                message:
-                  list[index]
-                    .message
-              }
-            );
-          }
-        }
-      }
-    );
-
-    // =================================================
-    // BLOQUEAR
-    // =================================================
-
-    socket.on(
-      "blockUser",
-      username => {
-        const me =
-          online.get(
-            socket.id
-          );
-
-        const target =
-          norm(username);
-
-        if (
-          !me ||
-          !target ||
-          target ===
-            norm(me) ||
-          !getUser(target)
-        ) {
-          return;
-        }
-
-        const list =
-          users();
-
-        const index =
-          list.findIndex(
-            user =>
-              norm(
-                user.username
-              ) ===
-              norm(me)
-          );
-
-        if (index < 0) {
-          return;
-        }
-
-        list[index]
-          .blockedUsers =
-          Array.from(
-            new Set([
-              ...(
-                list[index]
-                  .blockedUsers ||
-                []
-              ),
-              target
-            ])
-          );
-
-        list[index].contacts =
-          (
-            list[index].contacts ||
-            []
-          ).filter(
-            name =>
-              norm(name) !==
-              target
-          );
-
-        saveUsers(list);
-
-        socket.emit(
-          "blockUpdated",
-          {
-            username:
-              target,
-
-            blocked:
-              true
-          }
-        );
-
-        socket.emit(
-          "contactsUpdated",
-          getContactList(me)
-        );
-
-        sendUserList();
-      }
-    );
-
-    // =================================================
-    // DESBLOQUEAR
-    // =================================================
-
-    socket.on(
-      "unblockUser",
-      username => {
-        const me =
-          online.get(
-            socket.id
-          );
-
-        const target =
-          norm(username);
-
-        if (!me || !target) {
-          return;
-        }
-
-        const list =
-          users();
-
-        const index =
-          list.findIndex(
-            user =>
-              norm(
-                user.username
-              ) ===
-              norm(me)
-          );
-
-        if (index < 0) {
-          return;
-        }
-
-        list[index]
-          .blockedUsers =
-          (
-            list[index]
-              .blockedUsers ||
-            []
-          ).filter(
-            name =>
-              norm(name) !==
-              target
-          );
-
-        saveUsers(list);
-
-        socket.emit(
-          "blockUpdated",
-          {
-            username:
-              target,
-
-            blocked:
-              false
-          }
-        );
-
-        sendUserList();
-      }
-    );
-
-    // =================================================
-    // LISTA DE BLOQUEADOS
-    // =================================================
-
-    socket.on(
-      "getBlockedUsers",
-      () => {
-        const me =
-          online.get(
-            socket.id
-          );
-
-        if (!me) {
-          return;
-        }
-
-        socket.emit(
-          "blockedUsers",
-          getUser(me)
-            ?.blockedUsers ||
-            []
-        );
-      }
-    );
-
-    // =================================================
-    // LLAMADAS
-    // =================================================
-
-    socket.on(
-      "callRequest",
-      ({ to }) => {
-        const caller =
-          online.get(
-            socket.id
-          );
-
-        const target =
-          norm(to);
-
-        if (
-          !caller ||
-          !target
-        ) {
-          return;
-        }
-
-        if (
-          target ===
-          norm(caller)
-        ) {
-          return socket.emit(
-            "callError",
-            "No puedes llamarte a ti mismo."
-          );
-        }
-
-        if (
-          isEitherBlocked(
-            caller,
-            target
-          )
-        ) {
-          return socket.emit(
-            "callError",
-            "No puedes contactar con este usuario."
-          );
-        }
-
-        if (!getUser(target)) {
-          return socket.emit(
-            "callError",
-            "Ese usuario no existe."
-          );
-        }
-
-        const targetSocket =
-          socketIdFor(target);
-
-        if (!targetSocket) {
-          return socket.emit(
-            "callError",
-            "El usuario está desconectado."
-          );
-        }
-
-        io.to(
-          targetSocket
-        ).emit(
-          "incomingCall",
-          {
-            from:
-              norm(caller),
-
-            fromDisplay:
-              getUser(caller)
-                ?.displayName ||
-              caller
-          }
-        );
-
-        sendPushToUser(
-          target,
-          {
-            type:
-              "call",
-
-            from:
-              getUser(caller)
-                ?.displayName ||
-              caller,
-
-            username:
-              norm(caller),
-
-            message:
-              "Llamada entrante"
-          }
-        );
-      }
-    );
-
-    // =================================================
-    // ACEPTAR LLAMADA
-    // =================================================
-
-    socket.on(
-      "callAccept",
-      ({ to }) => {
-        const callee =
-          online.get(
-            socket.id
-          );
-
-        const target =
-          norm(to);
-
-        if (
-          !callee ||
-          !target
-        ) {
-          return;
-        }
-
-        const targetSocket =
-          socketIdFor(target);
-
-        if (!targetSocket) {
-          return socket.emit(
-            "callError",
-            "El usuario ya no está conectado."
-          );
-        }
-
-        io.to(
-          targetSocket
-        ).emit(
-          "callAccepted",
-          {
-            from:
-              norm(callee),
-
-            fromDisplay:
-              getUser(callee)
-                ?.displayName ||
-              callee
-          }
-        );
-      }
-    );
-
-    // =================================================
-    // RECHAZAR
-    // =================================================
-
-    socket.on(
-      "callReject",
-      ({ to }) => {
-        const rejecter =
-          online.get(
-            socket.id
-          );
-
-        const target =
-          norm(to);
-
-        if (
-          !rejecter ||
-          !target
-        ) {
-          return;
-        }
-
-        const targetSocket =
-          socketIdFor(target);
-
-        if (targetSocket) {
-          io.to(
-            targetSocket
-          ).emit(
-            "callRejected",
-            {
-              from:
-                norm(rejecter)
-            }
-          );
-        }
-      }
-    );
-
-    // =================================================
-    // OFFER
-    // =================================================
-
-    socket.on(
-      "callOffer",
-      ({ to, offer }) => {
-        const sender =
-          online.get(
-            socket.id
-          );
-
-        const target =
-          norm(to);
-
-        if (
-          !sender ||
-          !target ||
-          !offer
-        ) {
-          return;
-        }
-
-        const targetSocket =
-          socketIdFor(target);
-
-        if (targetSocket) {
-          io.to(
-            targetSocket
-          ).emit(
-            "callOffer",
-            {
-              from:
-                norm(sender),
-
-              offer
-            }
-          );
-        }
-      }
-    );
-
-    // =================================================
-    // ANSWER
-    // =================================================
-
-    socket.on(
-      "callAnswer",
-      ({ to, answer }) => {
-        const sender =
-          online.get(
-            socket.id
-          );
-
-        const target =
-          norm(to);
-
-        if (
-          !sender ||
-          !target ||
-          !answer
-        ) {
-          return;
-        }
-
-        const targetSocket =
-          socketIdFor(target);
-
-        if (targetSocket) {
-          io.to(
-            targetSocket
-          ).emit(
-            "callAnswer",
-            {
-              from:
-                norm(sender),
-
-              answer
-            }
-          );
-        }
-      }
-    );
-
-    // =================================================
-    // ICE
-    // =================================================
-
-    socket.on(
-      "callIceCandidate",
-      ({ to, candidate }) => {
-        const sender =
-          online.get(
-            socket.id
-          );
-
-        const target =
-          norm(to);
-
-        if (
-          !sender ||
-          !target ||
-          !candidate
-        ) {
-          return;
-        }
-
-        const targetSocket =
-          socketIdFor(target);
-
-        if (targetSocket) {
-          io.to(
-            targetSocket
-          ).emit(
-            "callIceCandidate",
-            {
-              from:
-                norm(sender),
-
-              candidate
-            }
-          );
-        }
-      }
-    );
-
-    // =================================================
-    // COLGAR
-    // =================================================
-
-    socket.on(
-      "callEnd",
-      ({ to }) => {
-        const sender =
-          online.get(
-            socket.id
-          );
-
-        const target =
-          norm(to);
-
-        if (
-          !sender ||
-          !target
-        ) {
-          return;
-        }
-
-        const targetSocket =
-          socketIdFor(target);
-
-        if (targetSocket) {
-          io.to(
-            targetSocket
-          ).emit(
-            "callEnded",
-            {
-              from:
-                norm(sender)
-            }
-          );
-        }
-      }
-    );
-
-    // =================================================
-    // DESCONECTAR
-    // =================================================
-
-    socket.on(
-      "disconnect",
-      () => {
-        online.delete(
-          socket.id
-        );
-
-        sendUserList();
-      }
-    );
-  }
-);
-
-// =====================================================
-// NO LEÍDOS
-// =====================================================
-
-function unreadCountsFor(
-  username
-) {
+  sendFcmToUser(username, payload).catch(e => console.error("Error enviando FCM:", e.message));
+}
+
+function sendUserList() {
+  io.emit("userList", users().map(u => ({
+    username: u.username,
+    displayName: u.displayName || u.username,
+    profileImage: u.profileImage || "",
+    online: [...online.values()].some(x => norm(x) === norm(u.username))
+  })));
+}
+function getContactList(username) {
+  const me = getUser(username);
+  if (!me) return [];
+  const contacts = Array.isArray(me.contacts) ? me.contacts : [];
+  return contacts.map(getUser).filter(Boolean).filter(u => !isEitherBlocked(username, u.username)).map(u => ({
+    username: u.username,
+    displayName: u.displayName || u.username,
+    profileImage: u.profileImage || "",
+    online: [...online.values()].some(x => norm(x) === norm(u.username))
+  }));
+}
+function unreadCountsFor(username) {
   const counts = {};
-
-  const blocked =
-    getUser(username)
-      ?.blockedUsers ||
-    [];
-
-  for (
-    const message of messages()
-  ) {
-    if (
-      norm(message.to) ===
-        norm(username) &&
-      !message.read &&
-      !blocked.includes(
-        norm(message.from)
-      )
-    ) {
-      const from =
-        norm(message.from);
-
-      counts[from] =
-        (counts[from] || 0) +
-        1;
+  const blocks = (getUser(username) && getUser(username).blockedUsers) || [];
+  for (const m of messages()) {
+    if (norm(m.to) === norm(username) && !m.read && !blocks.some(b => norm(b) === norm(m.from))) {
+      const from = norm(m.from);
+      counts[from] = (counts[from] || 0) + 1;
     }
   }
-
   return counts;
 }
+function emitUnread(socket, username) { socket.emit("unreadCounts", unreadCountsFor(username)); }
 
-function emitUnread(
-  socket,
-  username
-) {
-  socket.emit(
-    "unreadCounts",
-    unreadCountsFor(
-      username
-    )
-  );
-}
+// ===================== AUTH =====================
 
-// =====================================================
-// LIMPIEZA HISTORIAS
-// =====================================================
+app.post("/api/register", (req,res) => {
+  const displayName = String(req.body && req.body.username || "").trim();
+  const password = String(req.body && req.body.password || "");
+  if (displayName.length < 3 || displayName.length > 24) return res.status(400).json({error:"El nombre debe tener entre 3 y 24 caracteres."});
+  if (!/^[a-zA-Z0-9_]+$/.test(displayName)) return res.status(400).json({error:"Solo letras, números y _."});
+  if (password.length < 6) return res.status(400).json({error:"La contraseña debe tener al menos 6 caracteres."});
+  const username = norm(displayName);
+  const list = users();
+  if (list.some(u => norm(u.username) === username)) return res.status(400).json({error:"Ese usuario ya existe."});
+  const p = passwordHash(password);
+  list.push({username,displayName,salt:p.salt,passwordHash:p.hash,profileImage:"",blockedUsers:[],contacts:[],createdAt:Date.now()});
+  saveUsers(list);
+  sendUserList();
+  res.json({success:true,username:displayName,token:newSession(username)});
+});
 
-setInterval(
-  () => {
-    const before =
-      allStories().length;
-
-    const after =
-      cleanExpiredStories();
-
-    if (
-      before !==
-      after.length
-    ) {
-      io.emit(
-        "storiesUpdated",
-        after
-      );
-    }
-  },
-  60 * 1000
-);
-
-// =====================================================
-// INDEX
-// =====================================================
-
-app.get(
-  "*",
-  (req, res, next) => {
-    if (
-      req.path.startsWith(
-        "/api/"
-      )
-    ) {
-      return next();
-    }
-
-    if (
-      req.path.startsWith(
-        "/socket.io/"
-      )
-    ) {
-      return next();
-    }
-
-    res.sendFile(
-      path.join(
-        __dirname,
-        "public",
-        "index.html"
-      )
-    );
+app.post("/api/login", (req,res) => {
+  const username = norm(req.body && req.body.username);
+  const password = String(req.body && req.body.password || "");
+  const u = getUser(username);
+  if (!u || !validPassword(password,u.salt,u.passwordHash)) return res.status(401).json({error:"Usuario o contraseña incorrectos."});
+  const list = users();
+  const idx = list.findIndex(x => norm(x.username) === norm(u.username));
+  if (idx >= 0) {
+    if (!Array.isArray(list[idx].contacts)) list[idx].contacts = [];
+    if (!Array.isArray(list[idx].blockedUsers)) list[idx].blockedUsers = [];
+    saveUsers(list);
   }
-);
+  res.json({success:true,username:u.displayName,token:newSession(u.username)});
+});
 
-// =====================================================
-// SERVIDOR
-// =====================================================
+app.get("/api/session",(req,res)=>{
+  const u = sessionUser(authToken(req));
+  if (!u) return res.status(401).json({loggedIn:false});
+  res.json({loggedIn:true,username:u.displayName,profileImage:u.profileImage||""});
+});
+app.post("/api/logout",(req,res)=>{ deleteSession(authToken(req)); res.json({success:true}); });
 
-server.listen(
-  PORT,
-  "0.0.0.0",
-  () => {
-    console.log(
-      `Mi Chat funcionando en http://localhost:${PORT}`
-    );
-  }
-);
+app.get("/api/profile",(req,res)=>{
+  const u=sessionUser(authToken(req));
+  if(!u) return res.status(401).json({error:"No autorizado"});
+  res.json({username:u.username,displayName:u.displayName,profileImage:u.profileImage||""});
+});
+app.post("/api/profile",(req,res)=>{
+  const u=sessionUser(authToken(req));
+  if(!u) return res.status(401).json({error:"No autorizado"});
+  const displayName=String(req.body&&req.body.displayName||u.displayName).trim();
+  const profileImage=String(req.body&&req.body.profileImage||"");
+  if(displayName.length<3||displayName.length>24) return res.status(400).json({error:"Nombre inválido."});
+  if(profileImage.length>800000) return res.status(400).json({error:"La imagen es demasiado grande."});
+  const list=users(); const idx=list.findIndex(x=>norm(x.username)===norm(u.username));
+  if(idx<0) return res.status(404).json({error:"Usuario no encontrado."});
+  list[idx].displayName=displayName; list[idx].profileImage=profileImage; saveUsers(list); sendUserList();
+  res.json({success:true,displayName,profileImage});
+});
+
+// ===================== CONTACTS =====================
+
+app.get("/api/contacts",(req,res)=>{
+  const u=sessionUser(authToken(req)); if(!u)return res.status(401).json({error:"No autorizado"});
+  res.json(getContactList(u.username));
+});
+app.post("/api/contacts/add",(req,res)=>{
+  const u=sessionUser(authToken(req)); if(!u)return res.status(401).json({error:"No autorizado"});
+  const target=norm(req.body&&req.body.username);
+  if(!target)return res.status(400).json({error:"Escribe un nombre de usuario."});
+  if(target===norm(u.username))return res.status(400).json({error:"No puedes añadirte a ti mismo."});
+  if(!getUser(target))return res.status(404).json({error:"Ese usuario no existe."});
+  if(isEitherBlocked(u.username,target))return res.status(400).json({error:"No puedes añadir a este usuario."});
+  const list=users(); const idx=list.findIndex(x=>norm(x.username)===norm(u.username));
+  if(idx<0)return res.status(404).json({error:"Usuario no encontrado."});
+  if(!Array.isArray(list[idx].contacts))list[idx].contacts=[];
+  if(!list[idx].contacts.some(x=>norm(x)===target))list[idx].contacts.push(target);
+  saveUsers(list);
+  res.json({success:true,contact:getContactList(u.username).find(x=>norm(x.username)===target)||null});
+});
+app.post("/api/contacts/remove",(req,res)=>{
+  const u=sessionUser(authToken(req)); if(!u)return res.status(401).json({error:"No autorizado"});
+  const target=norm(req.body&&req.body.username); const list=users(); const idx=list.findIndex(x=>norm(x.username)===norm(u.username));
+  if(idx<0)return res.status(404).json({error:"Usuario no encontrado."});
+  list[idx].contacts=(list[idx].contacts||[]).filter(x=>norm(x)!==target); saveUsers(list); res.json({success:true});
+});
+
+// ===================== WEB PUSH =====================
+
+app.post("/api/push/subscribe",(req,res)=>{
+  const u=sessionUser(authToken(req)); if(!u)return res.status(401).json({error:"No autorizado"});
+  const subscription=req.body&&req.body.subscription;
+  if(!subscription||!subscription.endpoint)return res.status(400).json({error:"Suscripción inválida."});
+  const list=pushSubs();
+  if(!list.some(x=>x.username===u.username&&x.subscription&&x.subscription.endpoint===subscription.endpoint)) list.push({username:u.username,subscription});
+  savePushSubs(list);
+  res.json({success:true,enabled:!!(vapidPublic&&vapidPrivate)});
+});
+app.get("/api/push/public-key",(req,res)=>res.json({enabled:!!(vapidPublic&&vapidPrivate),publicKey:vapidPublic}));
+
+// ===================== FCM TOKEN =====================
+
+console.log("RUTA FCM CARGADA");
+app.post("/api/fcm/token",(req,res)=>{
+  console.log("PETICIÓN FCM RECIBIDA");
+  const user=sessionUser(authToken(req));
+  if(!user)return res.status(401).json({error:"No autorizado"});
+  const token=String(req.body&&req.body.token||"").trim();
+  if(!token||token.length<20||token.length>4096)return res.status(400).json({error:"Token FCM inválido."});
+  const data=fcmTokens();
+  for(const username of Object.keys(data)) data[username]=Array.isArray(data[username])?data[username].filter(x=>x!==token):[];
+  const key=norm(user.username);
+  if(!Array.isArray(data[key]))data[key]=[];
+  if(!data[key].includes(token))data[key].push(token);
+  data[key]=data[key].slice(-5);
+  saveFcmTokens(data);
+  console.log("FCM OK: "+key+" -> "+data[key].length+" dispositivo(s)");
+  res.json({success:true,username:key,devices:data[key].length});
+});
+
+// ===================== STORIES =====================
+
+app.get("/api/stories",(req,res)=>{
+  const u=sessionUser(authToken(req)); if(!u)return res.status(401).json({error:"No autorizado"});
+  res.json(cleanExpiredStories().map(s=>({...s,views:Array.isArray(s.views)?s.views:[]})));
+});
+app.post("/api/stories",(req,res)=>{
+  const u=sessionUser(authToken(req)); if(!u)return res.status(401).json({error:"No autorizado"});
+  const type=req.body&&req.body.type==="image"?"image":"text";
+  const content=String(req.body&&req.body.content||"").trim();
+  if(!content)return res.status(400).json({error:"La historia no puede estar vacía."});
+  if(type==="text"&&content.length>500)return res.status(400).json({error:"El texto puede tener como máximo 500 caracteres."});
+  if(type==="image"&&content.length>9000000)return res.status(400).json({error:"La imagen es demasiado grande."});
+  if(type==="image"&&!/^data:image\/(jpeg|jpg|png|webp|gif);base64,/i.test(content))return res.status(400).json({error:"Formato de imagen no válido."});
+  const list=cleanExpiredStories();
+  if(list.filter(s=>norm(s.username)===norm(u.username)).length>=20)return res.status(400).json({error:"Has alcanzado el límite de 20 historias activas."});
+  const now=Date.now();
+  const story={id:now+"-"+crypto.randomBytes(5).toString("hex"),username:u.username,displayName:u.displayName||u.username,profileImage:u.profileImage||"",type,content,background:type==="text"?String(req.body&&req.body.background||"#075e54"):"",createdAt:now,expiresAt:now+86400000,views:[]};
+  list.push(story); saveStories(list); io.emit("storyCreated",story); io.emit("storiesUpdated",list); res.json({success:true,story});
+});
+app.post("/api/stories/:id/view",(req,res)=>{
+  const u=sessionUser(authToken(req)); if(!u)return res.status(401).json({error:"No autorizado"});
+  const list=cleanExpiredStories(); const story=list.find(s=>String(s.id)===String(req.params.id));
+  if(!story)return res.status(404).json({error:"Historia no encontrada."});
+  if(!Array.isArray(story.views))story.views=[];
+  if(norm(story.username)===norm(u.username)){saveStories(list);return res.json({success:true,viewed:false,owner:true,views:story.views});}
+  let added=false;
+  if(!story.views.some(v=>norm(v.username)===norm(u.username))){
+    const view={username:u.username,displayName:u.displayName||u.username,profileImage:u.profileImage||"",viewedAt:Date.now()};
+    story.views.push(view); added=true; saveStories(list);
+    const sid=socketIdFor(story.username); if(sid)io.to(sid).emit("storyViewed",{storyId:story.id,view,views:story.views});
+  } else saveStories(list);
+  res.json({success:true,viewed:true,owner:false,added,views:story.views});
+});
+app.get("/api/stories/:id/views",(req,res)=>{
+  const u=sessionUser(authToken(req)); if(!u)return res.status(401).json({error:"No autorizado"});
+  const story=cleanExpiredStories().find(s=>String(s.id)===String(req.params.id));
+  if(!story)return res.status(404).json({error:"Historia no encontrada."});
+  if(norm(story.username)!==norm(u.username))return res.status(403).json({error:"Solo el dueño puede ver los espectadores."});
+  const views=Array.isArray(story.views)?story.views:[]; res.json({success:true,count:views.length,views});
+});
+app.delete("/api/stories/:id",(req,res)=>{
+  const u=sessionUser(authToken(req)); if(!u)return res.status(401).json({error:"No autorizado"});
+  const list=cleanExpiredStories(); const idx=list.findIndex(s=>String(s.id)===String(req.params.id));
+  if(idx<0)return res.status(404).json({error:"Historia no encontrada."});
+  if(norm(list[idx].username)!==norm(u.username))return res.status(403).json({error:"No puedes borrar esta historia."});
+  const removed=list.splice(idx,1)[0]; saveStories(list); io.emit("storyDeleted",{id:removed.id}); io.emit("storiesUpdated",list); res.json({success:true});
+});
+
+// ===================== SOCKET.IO =====================
+
+io.on("connection", socket => {
+  socket.on("authenticate", token => {
+    const u=sessionUser(token);
+    if(!u)return socket.emit("authenticationError");
+    for(const [sid,name] of online.entries()){
+      if(sid!==socket.id&&norm(name)===norm(u.username)){
+        online.delete(sid);
+        const old=io.sockets.sockets.get(sid);
+        if(old)old.disconnect(true);
+      }
+    }
+    online.set(socket.id,u.username);
+    socket.emit("authenticated",{username:u.displayName,profileImage:u.profileImage||""});
+    sendUserList(); emitUnread(socket,u.username); socket.emit("storiesData",cleanExpiredStories()); socket.emit("contactsUpdated",getContactList(u.username));
+  });
+
+  socket.on("getContacts",()=>{const me=onlineUsername(socket.id);if(me)socket.emit("contactsUpdated",getContactList(me));});
+  socket.on("addContact",username=>{
+    const me=onlineUsername(socket.id), target=norm(username); if(!me||!target)return;
+    if(target===norm(me))return socket.emit("contactError","No puedes añadirte a ti mismo.");
+    if(!getUser(target))return socket.emit("contactError","Ese usuario no existe.");
+    if(isEitherBlocked(me,target))return socket.emit("contactError","No puedes añadir a este usuario.");
+    const list=users(),idx=list.findIndex(u=>norm(u.username)===norm(me));if(idx<0)return;
+    if(!Array.isArray(list[idx].contacts))list[idx].contacts=[];
+    if(!list[idx].contacts.some(x=>norm(x)===target))list[idx].contacts.push(target);
+    saveUsers(list);
+    const contact=getContactList(me).find(x=>norm(x.username)===target)||{username:target};
+    socket.emit("contactAdded",contact);socket.emit("contactsUpdated",getContactList(me));
+  });
+  socket.on("removeContact",username=>{
+    const me=onlineUsername(socket.id), target=norm(username);if(!me||!target)return;
+    const list=users(),idx=list.findIndex(u=>norm(u.username)===norm(me));if(idx<0)return;
+    list[idx].contacts=(list[idx].contacts||[]).filter(x=>norm(x)!==target);saveUsers(list);
+    socket.emit("contactRemoved",{username:target});socket.emit("contactsUpdated",getContactList(me));
+  });
+  socket.on("getStories",()=>{const me=onlineUsername(socket.id);if(me)socket.emit("storiesData",cleanExpiredStories());});
+  socket.on("findUser",username=>{
+    const me=onlineUsername(socket.id),target=norm(username);if(!me)return;
+    if(!target)return socket.emit("userNotFound");
+    if(target===norm(me))return socket.emit("userFoundError","No puedes contactar contigo mismo.");
+    const u=getUser(target);if(!u)return socket.emit("userNotFound");
+    if(isEitherBlocked(me,target))return socket.emit("userFoundError","No puedes contactar con este usuario.");
+    socket.emit("userFound",{username:u.username,displayName:u.displayName,profileImage:u.profileImage||"",online:[...online.values()].some(x=>norm(x)===target)});
+  });
+  socket.on("getConversation",otherUsername=>{
+    const me=onlineUsername(socket.id),other=norm(otherUsername);if(!me||!getUser(other))return;
+    if(isEitherBlocked(me,other))return socket.emit("conversationBlocked","Esta conversación está bloqueada.");
+    const conv=messages().filter(m=>((norm(m.from)===norm(me)&&norm(m.to)===other)||(norm(m.from)===other&&norm(m.to)===norm(me)))).filter(m=>!(m.deletedFor||[]).some(x=>norm(x)===norm(me)));
+    socket.emit("conversationHistory",{username:other,messages:conv});
+  });
+  socket.on("privateMessage",data=>{
+    const me=onlineUsername(socket.id),to=norm(data&&data.to),text=String(data&&data.message||"").trim();if(!me||!to||!text||text.length>5000)return;
+    if(!getUser(to))return socket.emit("messageError","Ese usuario no existe.");
+    if(to===norm(me))return socket.emit("messageError","No puedes enviarte mensajes.");
+    if(isEitherBlocked(me,to))return socket.emit("messageError","No puedes contactar con este usuario.");
+    const msg={id:Date.now()+"-"+crypto.randomBytes(5).toString("hex"),from:norm(me),fromDisplay:getUser(me)?.displayName||me,to,toDisplay:getUser(to)?.displayName||to,message:text,time:new Date().toISOString(),read:false,deletedFor:[]};
+    const list=messages();list.push(msg);if(list.length>50000)list.splice(0,list.length-50000);saveMessages(list);
+    const sid=socketIdFor(to);if(sid)io.to(sid).emit("privateMessage",msg);socket.emit("messageSent",msg);
+    sendPushToUser(to,{type:"message",from:msg.fromDisplay,message:msg.message,username:msg.from});
+  });
+  socket.on("markConversationRead",otherUsername=>{
+    const me=onlineUsername(socket.id),other=norm(otherUsername);if(!me)return;
+    const list=messages();for(const m of list)if(norm(m.from)===other&&norm(m.to)===norm(me))m.read=true;saveMessages(list);emitUnread(socket,me);
+  });
+  socket.on("deleteMessage",id=>{
+    const me=onlineUsername(socket.id);if(!me||!id)return;const list=messages(),idx=list.findIndex(m=>m.id===id);if(idx<0)return;
+    if(norm(list[idx].from)!==norm(me))return socket.emit("messageError","Solo puedes borrar tus propios mensajes.");
+    list[idx].deletedFor=Array.from(new Set([...(list[idx].deletedFor||[]),norm(me)]));list[idx].message="Mensaje eliminado";list[idx].deleted=true;saveMessages(list);
+    const target=list[idx].to;for(const [sid,name] of online.entries())if(norm(name)===norm(target)||norm(name)===norm(me))io.to(sid).emit("messageDeleted",{id:list[idx].id,message:list[idx].message});
+  });
+  socket.on("blockUser",username=>{
+    const me=onlineUsername(socket.id),target=norm(username);if(!me||!target||target===norm(me)||!getUser(target))return;
+    const list=users(),idx=list.findIndex(u=>norm(u.username)===norm(me));if(idx<0)return;
+    list[idx].blockedUsers=Array.from(new Set([...(list[idx].blockedUsers||[]),target]));
+    list[idx].contacts=(list[idx].contacts||[]).filter(x=>norm(x)!==target);saveUsers(list);
+    socket.emit("blockUpdated",{username:target,blocked:true});socket.emit("contactsUpdated",getContactList(me));sendUserList();
+  });
+  socket.on("unblockUser",username=>{
+    const me=onlineUsername(socket.id),target=norm(username);if(!me||!target)return;
+    const list=users(),idx=list.findIndex(u=>norm(u.username)===norm(me));if(idx<0)return;
+    list[idx].blockedUsers=(list[idx].blockedUsers||[]).filter(x=>norm(x)!==target);saveUsers(list);socket.emit("blockUpdated",{username:target,blocked:false});sendUserList();
+  });
+  socket.on("getBlockedUsers",()=>{const me=onlineUsername(socket.id);if(me)socket.emit("blockedUsers",getUser(me)?.blockedUsers||[]);});
+
+  socket.on("callRequest",({to})=>{
+    const caller=onlineUsername(socket.id),target=norm(to);if(!caller||!target)return;
+    if(target===norm(caller))return socket.emit("callError","No puedes llamarte a ti mismo.");
+    if(isEitherBlocked(caller,target))return socket.emit("callError","No puedes contactar con este usuario.");
+    if(!getUser(target))return socket.emit("callError","Ese usuario no existe.");
+    const callerName=getUser(caller)?.displayName||caller, targetSid=socketIdFor(target);
+    if(targetSid)io.to(targetSid).emit("incomingCall",{from:norm(caller),fromDisplay:callerName});
+    sendPushToUser(target,{type:"call",title:"Llamada entrante",body:callerName+" te está llamando",from:callerName,username:norm(caller),message:"Llamada entrante"});
+    socket.emit("callRinging",{to:target,online:!!targetSid});
+  });
+  socket.on("callAccept",({to})=>{
+    const callee=onlineUsername(socket.id),target=norm(to);if(!callee||!target)return;const sid=socketIdFor(target);
+    if(!sid)return socket.emit("callError","El usuario ya no está conectado.");
+    io.to(sid).emit("callAccepted",{from:norm(callee),fromDisplay:getUser(callee)?.displayName||callee});
+  });
+  socket.on("callReject",({to})=>{
+    const rejecter=onlineUsername(socket.id),target=norm(to);if(!rejecter||!target)return;const sid=socketIdFor(target);if(sid)io.to(sid).emit("callRejected",{from:norm(rejecter)});
+  });
+  socket.on("callOffer",({to,offer})=>{const sender=onlineUsername(socket.id),target=norm(to);if(!sender||!target||!offer)return;const sid=socketIdFor(target);if(sid)io.to(sid).emit("callOffer",{from:norm(sender),offer});});
+  socket.on("callAnswer",({to,answer})=>{const sender=onlineUsername(socket.id),target=norm(to);if(!sender||!target||!answer)return;const sid=socketIdFor(target);if(sid)io.to(sid).emit("callAnswer",{from:norm(sender),answer});});
+  socket.on("callIceCandidate",({to,candidate})=>{const sender=onlineUsername(socket.id),target=norm(to);if(!sender||!target||!candidate)return;const sid=socketIdFor(target);if(sid)io.to(sid).emit("callIceCandidate",{from:norm(sender),candidate});});
+  socket.on("callEnd",({to})=>{const sender=onlineUsername(socket.id),target=norm(to);if(!sender||!target)return;const sid=socketIdFor(target);if(sid)io.to(sid).emit("callEnded",{from:norm(sender)});});
+  socket.on("disconnect",()=>{online.delete(socket.id);sendUserList();});
+});
+
+// ===================== CLEANUP =====================
+
+setInterval(()=>{
+  const before=stories().length;
+  const after=cleanExpiredStories();
+  if(before!==after.length)io.emit("storiesUpdated",after);
+},60000);
+
+// ===================== SPA FALLBACK =====================
+
+app.use((req,res,next)=>{
+  if(req.path.startsWith("/api/")||req.path.startsWith("/socket.io/"))return next();
+  const indexFile=path.join(__dirname,"public","index.html");
+  if(!fs.existsSync(indexFile))return res.status(404).send("No se encontró public/index.html");
+  res.sendFile(indexFile);
+});
+
+server.listen(PORT,"0.0.0.0",()=>{
+  console.log("Mi Chat funcionando en http://localhost:" + PORT);
+});
