@@ -173,6 +173,13 @@ async function sendFcmToUser(username, payload) {
     console.log("Enviando FCM a " + key + ". Tokens: " + tokens.length);
     const result = await getMessaging().sendEachForMulticast(message);
     console.log("FCM enviado a " + key + ": éxito=" + result.successCount + ", errores=" + result.failureCount);
+if (response.failureCount > 0) {
+  response.responses.forEach((r, i) => {
+    if (!r.success) {
+      console.error("ERROR FCM DETALLADO:", i, r.error);
+    }
+  });
+}
     if (result.failureCount) {
       const invalid = new Set();
       result.responses.forEach((r, i) => {
