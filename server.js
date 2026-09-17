@@ -175,12 +175,12 @@ async function sendFcmToUser(username, payload) {
     },
 
     data: {
-      type: String(payload && payload.type || "message"),
-      username: String(payload && payload.username || ""),
-      from: String(payload && payload.from || ""),
-      body: body,
-      message: body
-    },
+  type: String(payload && payload.type || "message"),
+  username: String(payload && payload.username || ""),
+  sender: String(payload && payload.from || ""),
+  body: body,
+  message: body
+},
 
     android: {
       priority: "high",
