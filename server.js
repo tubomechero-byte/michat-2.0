@@ -144,97 +144,118 @@ try {
 }
 
 async function sendFcmToUser(username, payload) {
-  if (!firebaseReady) return;
+  if (!firebaseReady) {
+    console.log("FCM no está disponible.");
+    return null;
+  }
+
   const data = fcmTokens();
   const key = norm(username);
   const tokens = Array.isArray(data[key]) ? data[key] : [];
+
   if (!tokens.length) {
     console.log("No hay tokens FCM registrados para " + key + ".");
-    return;
+    return null;
   }
-  const title = String(payload && (payload.title || payload.from) || "Mi Chat");
-  const body = String(payload && (payload.body || payload.message) || "");
+
+  const title = String(
+    payload && (payload.title || payload.from) || "Mi Chat"
+  );
+
+  const body = String(
+    payload && (payload.body || payload.message) || ""
+  );
+
   const message = {
-    tokens,
-    notification: { title, body },
+    tokens: tokens,
+
+    notification: {
+      title: title,
+      body: body
+    },
+
     data: {
       type: String(payload && payload.type || "message"),
       username: String(payload && payload.username || ""),
       from: String(payload && payload.from || ""),
-      body,
+      body: body,
       message: body
     },
+
     android: {
       priority: "high",
-      notification: { channelId: "michat_messages", sound: "default" }
+      notification: {
+        channelId: "michat_messages",
+        sound: "default"
+      }
     }
   };
+
   try {
-    console.log("Enviando FCM a " + key + ". Tokens: " + tokens.length);
+    console.log(
+      "Enviando FCM a " + key + ". Tokens: " + tokens.length
+    );
+
     const response = await getMessaging().sendEachForMulticast(message);
 
-console.log(
-  "FCM enviado a " +
-  key +
-  ": éxito=" +
-  response.successCount +
-  ", errores=" +
-  response.failureCount
-);
-
-if (response.failureCount > 0) {
-  response.responses.forEach((result, index) => {
-    if (!result.success) {
-      console.error(
-        "ERROR FCM DETALLADO [" + index + "]:",
-        result.error ? result.error.code : "SIN_CODIGO",
-        result.error ? result.error.message : "SIN_MENSAJE"
-      );
-    }
-  });
-
-  const invalid = new Set();
-
-  response.responses.forEach((result, index) => {
-    if (!result.success && result.error) {
-      const code = result.error.code;
-
-      if (
-        code === "messaging/registration-token-not-registered" ||
-        code === "messaging/invalid-registration-token"
-      ) {
-        invalid.add(tokens[index]);
-      }
-    }
-  });
-
-  if (invalid.size > 0) {
-    data[key] = tokens.filter(token => !invalid.has(token));
-    saveFcmTokens(data);
-
     console.log(
-      "Se eliminaron " +
-      invalid.size +
-      " tokens inválidos de " +
+      "FCM enviado a " +
       key +
-      "."
+      ": éxito=" +
+      response.successCount +
+      ", errores=" +
+      response.failureCount
     );
-  }
-}
-    if (result.failureCount) {
-      const invalid = new Set();
-      result.responses.forEach((r, i) => {
-        const c = r.error && r.error.code;
-        if (!r.success && (c === "messaging/registration-token-not-registered" || c === "messaging/invalid-registration-token")) invalid.add(tokens[i]);
+
+    if (response.failureCount > 0) {
+
+      response.responses.forEach((result, index) => {
+        if (!result.success) {
+          console.error(
+            "ERROR FCM DETALLADO [" + index + "]:",
+            result.error ? result.error.code : "SIN_CODIGO",
+            result.error ? result.error.message : "SIN_MENSAJE"
+          );
+        }
       });
-      if (invalid.size) {
-        data[key] = tokens.filter(t => !invalid.has(t));
+
+      const invalid = new Set();
+
+      response.responses.forEach((result, index) => {
+        if (!result.success && result.error) {
+          const code = result.error.code;
+
+          if (
+            code === "messaging/registration-token-not-registered" ||
+            code === "messaging/invalid-registration-token"
+          ) {
+            invalid.add(tokens[index]);
+          }
+        }
+      });
+
+      if (invalid.size > 0) {
+        data[key] = tokens.filter(
+          token => !invalid.has(token)
+        );
+
         saveFcmTokens(data);
-        console.log("Se eliminaron " + invalid.size + " tokens inválidos de " + key + ".");
+
+        console.log(
+          "Se eliminaron " +
+          invalid.size +
+          " tokens inválidos de " +
+          key +
+          "."
+        );
       }
     }
+
+    return response;
+
   } catch (error) {
-    console.error("FCM send error:", error.message);
+    console.error("FCM send error:", error);
+    return null;
   }
 }
 function sendPushToUser(username, payload) {
