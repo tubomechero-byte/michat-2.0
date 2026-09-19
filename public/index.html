@@ -906,6 +906,16 @@ socket.on("authenticated",data => {
     data.username ||
     myUsername;
   loadStories();
+
+  // Una acción de una notificación puede haber llegado
+  // antes de que Socket.IO terminara de autenticar.
+  if (pendingNativeCallAction) {
+    const pending = pendingNativeCallAction;
+    pendingNativeCallAction = null;
+    setTimeout(() => {
+      handleNativeCallNotification(pending);
+    }, 150);
+  }
 });
 
 socket.on("authenticationError",() => {
@@ -4021,6 +4031,52 @@ window.addEventListener(
    NOTIFICACIÓN NATIVA ANDROID
 ===================================================== */
 
+let pendingNativeCallAction = null;
+
+function handleNativeCallNotification(data){
+
+  if(!data){
+    return;
+  }
+
+  const username =
+    norm(data.username || "");
+
+  if(!username){
+    return;
+  }
+
+  const action =
+    norm(data.action || "");
+
+  if(callState !== "idle"){
+    return;
+  }
+
+  showIncomingCallFromNotification(
+    username,
+    data.sender || ""
+  );
+
+  // La llamada se muestra primero para que el usuario vea
+  // el estado incluso si el micrófono tarda un momento en abrirse.
+  if(action === "accept"){
+    setTimeout(() => {
+      if(callState === "incoming"){
+        acceptCall();
+      }
+    }, 250);
+  }
+
+  if(action === "reject"){
+    setTimeout(() => {
+      if(callState === "incoming"){
+        rejectCall();
+      }
+    }, 250);
+  }
+}
+
 window.addEventListener(
   "nativeNotification",
   event => {
@@ -4031,14 +4087,10 @@ window.addEventListener(
         event.detail || {};
 
       const username =
-        norm(
-          data.username || ""
-        );
+        norm(data.username || "");
 
       const type =
-        norm(
-          data.type || ""
-        );
+        norm(data.type || "");
 
       if(!username){
         return;
@@ -4046,10 +4098,14 @@ window.addEventListener(
 
       if(type === "call"){
 
-        showIncomingCallFromNotification(
-          username
-        );
+        // Si todavía no estamos autenticados por Socket.IO,
+        // guardamos la acción y la procesamos al autenticar.
+        if(!myUsername || !socket.connected){
+          pendingNativeCallAction = data;
+          return;
+        }
 
+        handleNativeCallNotification(data);
         return;
       }
 
