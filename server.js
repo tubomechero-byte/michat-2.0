@@ -5,6 +5,7 @@ const webpush = require("web-push");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const { Pool } = require("pg");
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getMessaging } = require("firebase-admin/messaging");
 
@@ -22,6 +23,32 @@ const STORIES_FILE = path.join(DATA_DIR, "stories.json");
 const FCM_FILE = path.join(DATA_DIR, "fcm.json");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
+
+// =====================================================
+// SUPABASE / PERSISTENCIA
+// =====================================================
+// Render Free tiene almacenamiento de archivos efímero.
+// Guardamos el estado persistente mediante la Data API de Supabase
+// para no depender de DATABASE_URL, pg ni de un pooler de PostgreSQL.
+
+const SUPABASE_URL = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
+const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || "";
+
+const STATE_FILES = {
+  "users.json": [],
+  "messages.json": [],
+  "sessions.json": {},
+  "push.json": [],
+  "stories.json": [],
+  "fcm.json": {}
+};
+
+let supabaseAvailable = false;
+let supabaseReadyResolve;
+const supabaseReady = new Promise(resolve => {
+  supabaseReadyResolve = resolve;
+});
+let supabaseWriteQueue = Promise.resolve();
 
 function ensure(file, value) {
   if (!fs.existsSync(file)) {
@@ -44,8 +71,161 @@ function read(file, fallback) {
   }
 }
 
+function stateKey(file) {
+  return path.basename(file);
+}
+
+async function supabaseRequest(pathname, options = {}) {
+  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
+    throw new Error("SUPABASE_URL/SUPABASE_SECRET_KEY no configuradas.");
+  }
+
+  const response = await fetch(
+    SUPABASE_URL + "/rest/v1/" + pathname,
+    {
+      ...options,
+      headers: {
+        apikey: SUPABASE_SECRET_KEY,
+        Authorization: "Bearer " + SUPABASE_SECRET_KEY,
+        "Content-Type": "application/json",
+        ...(options.headers || {})
+      }
+    }
+  );
+
+  const text = await response.text();
+  let data = null;
+
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
+
+  if (!response.ok) {
+    const message =
+      typeof data === "string"
+        ? data
+        : data?.message || data?.hint || JSON.stringify(data);
+
+    throw new Error(
+      `Supabase HTTP ${response.status}: ${message}`
+    );
+  }
+
+  return data;
+}
+
+function queueSupabasePersist(file, data) {
+  const key = stateKey(file);
+
+  supabaseWriteQueue = supabaseWriteQueue
+    .then(async () => {
+      const ready = await supabaseReady;
+      if (!ready) return;
+
+      await supabaseRequest(
+        "michat_state?on_conflict=state_key",
+        {
+          method: "POST",
+          headers: {
+            Prefer: "resolution=merge-duplicates,return=minimal"
+          },
+          body: JSON.stringify([
+            {
+              state_key: key,
+              state_data: data,
+              updated_at: new Date().toISOString()
+            }
+          ])
+        }
+      );
+    })
+    .catch(error => {
+      console.error(
+        `Error guardando ${key} en Supabase:`,
+        error.message
+      );
+    });
+}
+
 function write(file, data) {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
+  fs.writeFileSync(
+    file,
+    JSON.stringify(data, null, 2),
+    "utf8"
+  );
+
+  queueSupabasePersist(file, data);
+}
+
+async function initializeDatabase() {
+  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
+    console.log(
+      "SUPABASE_URL/SUPABASE_SECRET_KEY no configuradas. Se usará almacenamiento local temporal."
+    );
+    supabaseReadyResolve(false);
+    return;
+  }
+
+  try {
+    // La tabla michat_state se crea una vez desde el SQL de configuración.
+    // Aquí solo comprobamos que la Data API puede leerla.
+    const rows = await supabaseRequest(
+      "michat_state?select=state_key,state_data,updated_at"
+    );
+
+    const byKey = new Map(
+      (Array.isArray(rows) ? rows : []).map(row => [
+        row.state_key,
+        row
+      ])
+    );
+
+    for (const [key, fallback] of Object.entries(STATE_FILES)) {
+      const file = path.join(DATA_DIR, key);
+      const local = read(file, fallback);
+      const remote = byKey.get(key);
+
+      if (remote) {
+        fs.writeFileSync(
+          file,
+          JSON.stringify(remote.state_data, null, 2),
+          "utf8"
+        );
+        console.log(`Supabase -> ${key}`);
+      } else {
+        await supabaseRequest(
+          "michat_state?on_conflict=state_key",
+          {
+            method: "POST",
+            headers: {
+              Prefer: "resolution=merge-duplicates,return=minimal"
+            },
+            body: JSON.stringify([
+              {
+                state_key: key,
+                state_data: local,
+                updated_at: new Date().toISOString()
+              }
+            ])
+          }
+        );
+        console.log(`Migrado a Supabase -> ${key}`);
+      }
+    }
+
+    supabaseAvailable = true;
+    supabaseReadyResolve(true);
+    console.log("Supabase conectado y datos persistentes activos.");
+  } catch (error) {
+    supabaseAvailable = false;
+    supabaseReadyResolve(false);
+    console.error("Supabase no disponible:", error.message);
+    console.log("El servidor continuará con almacenamiento local temporal.");
+  }
 }
 
 function users() {
@@ -351,7 +531,7 @@ async function sendFcmToUser(username, payload) {
     data: {
       type: String(payload?.type || "message"),
       username: String(payload?.username || ""),
-      sender: String(payload?.from || payload?.sender || ""),
+      sender: String(payload?.sender || payload?.from || ""),
       body,
       message: body
     },
@@ -2583,12 +2763,19 @@ app.get("*", (req, res, next) => {
   );
 });
 
-server.listen(
-  PORT,
-  "0.0.0.0",
-  () => {
-    console.log(
-      `Mi Chat funcionando en http://localhost:${PORT}`
-    );
-  }
-);
+(async () => {
+  await initializeDatabase();
+
+  server.listen(
+    PORT,
+    "0.0.0.0",
+    () => {
+      console.log(
+        `Mi Chat funcionando en http://localhost:${PORT}`
+      );
+      console.log(
+        `Persistencia: ${supabaseAvailable ? "Supabase activa" : "local temporal"}`
+      );
+    }
+  );
+})();
