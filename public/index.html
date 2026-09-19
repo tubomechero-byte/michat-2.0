@@ -133,6 +133,175 @@ button,input,textarea{font:inherit}
 .storyViews{position:absolute;left:14px;bottom:14px;z-index:2;padding:8px 10px;border-radius:10px;background:rgba(0,0,0,.45);font-size:12px;max-width:80%}
 .storyDelete{position:absolute;bottom:14px;right:14px;z-index:2;border:0;border-radius:10px;padding:9px 12px;background:rgba(176,0,32,.9);color:#fff;cursor:pointer}
 
+
+
+/* =====================================================
+   PANTALLA DE LLAMADA ACTIVA
+===================================================== */
+.activeCallScreen{
+  position:fixed;
+  inset:0;
+  z-index:100000;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  background:linear-gradient(180deg,#075e54 0%,#063f3a 42%,#111827 100%);
+  color:#fff;
+}
+
+.activeCallScreen.visible{
+  display:flex;
+}
+
+.activeCallContent{
+  width:100%;
+  max-width:520px;
+  min-height:100%;
+  min-height:100dvh;
+  padding:42px 24px 32px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  text-align:center;
+}
+
+.activeCallTopLabel{
+  font-size:14px;
+  opacity:.82;
+  letter-spacing:.3px;
+}
+
+.activeCallAvatar{
+  width:118px;
+  height:118px;
+  margin-top:30px;
+  border-radius:50%;
+  overflow:hidden;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#128c7e;
+  border:4px solid rgba(255,255,255,.22);
+  box-shadow:0 12px 35px rgba(0,0,0,.30);
+  flex-shrink:0;
+}
+
+.activeCallAvatar img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+
+.activeCallAvatarLetter{
+  font-size:52px;
+  font-weight:bold;
+}
+
+.activeCallName{
+  margin-top:22px;
+  font-size:28px;
+  line-height:1.2;
+  font-weight:700;
+  word-break:break-word;
+}
+
+.activeCallStatus{
+  margin-top:9px;
+  font-size:16px;
+  opacity:.84;
+}
+
+.activeCallTimer{
+  margin-top:7px;
+  font-size:17px;
+  opacity:.82;
+  font-variant-numeric:tabular-nums;
+  min-height:21px;
+}
+
+.activeCallFill{
+  flex:1;
+  min-height:30px;
+}
+
+.activeCallControls{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  margin-bottom:28px;
+}
+
+.activeCallControl{
+  width:82px;
+  height:82px;
+  border:0;
+  border-radius:50%;
+  background:rgba(255,255,255,.15);
+  color:#fff;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+  cursor:pointer;
+  box-shadow:0 6px 20px rgba(0,0,0,.16);
+  -webkit-tap-highlight-color:transparent;
+}
+
+.activeCallControl:active{
+  transform:scale(.95);
+}
+
+.activeCallControl.active{
+  background:#fff;
+  color:#111827;
+}
+
+.activeCallControlIcon{
+  font-size:27px;
+  line-height:1;
+}
+
+.activeCallControlText{
+  font-size:11px;
+  opacity:.95;
+}
+
+.activeCallHangup{
+  width:82px;
+  height:82px;
+  border:0;
+  border-radius:50%;
+  background:#ef4444;
+  color:#fff;
+  font-size:32px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transform:rotate(135deg);
+  box-shadow:0 10px 28px rgba(0,0,0,.28);
+  -webkit-tap-highlight-color:transparent;
+}
+
+.activeCallHangup:active{
+  transform:rotate(135deg) scale(.95);
+}
+
+.activeCallHangupText{
+  margin-top:9px;
+  font-size:12px;
+  opacity:.82;
+}
+
+@media(max-width:420px){
+  .activeCallContent{padding:35px 18px 26px}
+  .activeCallAvatar{width:104px;height:104px}
+  .activeCallName{font-size:24px}
+  .activeCallControl{width:74px;height:74px}
+  .activeCallHangup{width:76px;height:76px}
+}
+
 @media(max-width:800px){
   .sidebar{width:100%}
   .chat{display:none}
@@ -400,6 +569,43 @@ button,input,textarea{font:inherit}
   </div>
 </div>
 
+
+
+<!-- PANTALLA DE LLAMADA ACTIVA -->
+<div id="activeCallScreen" class="activeCallScreen" aria-hidden="true">
+  <div class="activeCallContent">
+
+    <div class="activeCallTopLabel">Mi Chat · llamada</div>
+
+    <div id="activeCallAvatar" class="activeCallAvatar">
+      <img id="activeCallAvatarImage" src="" alt="" style="display:none">
+      <div id="activeCallAvatarLetter" class="activeCallAvatarLetter">👤</div>
+    </div>
+
+    <div id="activeCallName" class="activeCallName">Usuario</div>
+    <div id="activeCallStatus" class="activeCallStatus">Conectando...</div>
+    <div id="activeCallTimer" class="activeCallTimer">00:00</div>
+
+    <div class="activeCallFill"></div>
+
+    <div class="activeCallControls">
+      <button id="muteCallButton" class="activeCallControl" type="button" aria-label="Silenciar micrófono">
+        <span id="muteCallIcon" class="activeCallControlIcon">🎤</span>
+        <span id="muteCallText" class="activeCallControlText">Silenciar</span>
+      </button>
+
+      <button id="speakerCallButton" class="activeCallControl active" type="button" aria-label="Altavoz">
+        <span id="speakerCallIcon" class="activeCallControlIcon">🔊</span>
+        <span id="speakerCallText" class="activeCallControlText">Altavoz</span>
+      </button>
+    </div>
+
+    <button id="activeHangupButton" class="activeCallHangup" type="button" aria-label="Finalizar llamada">📞</button>
+    <div class="activeCallHangupText">Finalizar llamada</div>
+
+  </div>
+</div>
+
 <audio id="remoteAudio" autoplay playsinline></audio>
 
 <script>
@@ -444,6 +650,25 @@ const acceptCallButton = $("acceptCallButton");
 const rejectCallButton = $("rejectCallButton");
 const callError = $("callError");
 const remoteAudio = $("remoteAudio");
+
+const activeCallScreen = $("activeCallScreen");
+const activeCallAvatarImage = $("activeCallAvatarImage");
+const activeCallAvatarLetter = $("activeCallAvatarLetter");
+const activeCallName = $("activeCallName");
+const activeCallStatus = $("activeCallStatus");
+const activeCallTimer = $("activeCallTimer");
+const muteCallButton = $("muteCallButton");
+const muteCallIcon = $("muteCallIcon");
+const muteCallText = $("muteCallText");
+const speakerCallButton = $("speakerCallButton");
+const speakerCallIcon = $("speakerCallIcon");
+const speakerCallText = $("speakerCallText");
+const activeHangupButton = $("activeHangupButton");
+
+let activeCallTimerInterval = null;
+let activeCallStartTime = null;
+let callMuted = false;
+let callSpeaker = true;
 
 const layout = $("layout");
 const notifications = $("notifications");
@@ -641,7 +866,9 @@ async function checkSession(){
     if(data.loggedIn){
 
       myUsername =
-        data.username;
+        data.username ||
+        data.displayName ||
+        myUsername;
 
       await loadIdentity();
 
@@ -675,7 +902,9 @@ socket.on("connect",() => {
 });
 
 socket.on("authenticated",data => {
-  myUsername = data.username || myUsername;
+  myUsername =
+    data.username ||
+    myUsername;
   loadStories();
 });
 
@@ -1428,18 +1657,31 @@ async function startPeer(){
   peerConnection.ontrack =
     event => {
 
+      console.log("WEBRTC: audio remoto recibido", event);
+
       if(
-        event.streams &&
-        event.streams[0]
+        !event.streams ||
+        !event.streams[0]
       ){
-
-        remoteAudio.srcObject =
-          event.streams[0];
-
-        remoteAudio.play().catch(
-          () => {}
-        );
+        console.warn("WEBRTC: no llegó ningún MediaStream remoto");
+        return;
       }
+
+      remoteAudio.srcObject =
+        event.streams[0];
+
+      remoteAudio.autoplay = true;
+      remoteAudio.playsInline = true;
+      remoteAudio.muted = false;
+      remoteAudio.volume = 1.0;
+
+      remoteAudio.play()
+        .then(() => {
+          console.log("WEBRTC: audio remoto reproduciéndose correctamente");
+        })
+        .catch(error => {
+          console.error("WEBRTC: ERROR reproduciendo audio remoto:", error);
+        });
     };
 
   peerConnection.onicecandidate =
@@ -1460,11 +1702,30 @@ async function startPeer(){
       }
     };
 
+
+
+  peerConnection.oniceconnectionstatechange = () => {
+    console.log(
+      "WEBRTC iceConnectionState:",
+      peerConnection?.iceConnectionState
+    );
+  };
+
   peerConnection.onconnectionstatechange =
     () => {
 
       const state =
         peerConnection?.connectionState;
+
+      console.log("WEBRTC connectionState:", state);
+
+      if(state === "connected"){
+        setActiveCallStatus("En llamada");
+      }
+
+      if(state === "connecting"){
+        setActiveCallStatus("Conectando...");
+      }
 
       if(
         state === "failed" ||
@@ -1475,6 +1736,158 @@ async function startPeer(){
       }
     };
 }
+
+
+
+/* =====================================================
+   PANTALLA DE LLAMADA ACTIVA
+===================================================== */
+
+function getCallUser(username){
+  return allUsers.find(
+    user => norm(user.username) === norm(username)
+  );
+}
+
+function showActiveCallScreen(username, status = "Conectando..."){
+
+  const user = getCallUser(username);
+  const name =
+    user?.displayName ||
+    username ||
+    "Usuario";
+
+  activeCallName.textContent = name;
+  activeCallStatus.textContent = status;
+
+  if(user?.profileImage){
+    activeCallAvatarImage.src = user.profileImage;
+    activeCallAvatarImage.style.display = "block";
+    activeCallAvatarLetter.style.display = "none";
+  }else{
+    activeCallAvatarImage.removeAttribute("src");
+    activeCallAvatarImage.style.display = "none";
+    activeCallAvatarLetter.textContent =
+      (name.charAt(0) || "👤").toUpperCase();
+    activeCallAvatarLetter.style.display = "block";
+  }
+
+  callMuted = false;
+  callSpeaker = true;
+  updateMuteButton();
+  updateSpeakerButton();
+
+  activeCallScreen.classList.add("visible");
+  activeCallScreen.setAttribute("aria-hidden", "false");
+
+  if(!activeCallStartTime){
+    startCallTimer();
+  }
+}
+
+function hideActiveCallScreen(){
+  activeCallScreen.classList.remove("visible");
+  activeCallScreen.setAttribute("aria-hidden", "true");
+  stopCallTimer();
+}
+
+function setActiveCallStatus(status){
+  if(!activeCallScreen.classList.contains("visible")){
+    showActiveCallScreen(callPeer, status);
+    return;
+  }
+  activeCallStatus.textContent = status;
+}
+
+function startCallTimer(){
+  stopCallTimer();
+  activeCallStartTime = Date.now();
+  updateCallTimer();
+  activeCallTimerInterval = setInterval(updateCallTimer, 1000);
+}
+
+function stopCallTimer(){
+  if(activeCallTimerInterval){
+    clearInterval(activeCallTimerInterval);
+    activeCallTimerInterval = null;
+  }
+  activeCallStartTime = null;
+  activeCallTimer.textContent = "00:00";
+}
+
+function updateCallTimer(){
+  if(!activeCallStartTime) return;
+
+  const elapsed = Math.max(
+    0,
+    Math.floor((Date.now() - activeCallStartTime) / 1000)
+  );
+
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = elapsed % 60;
+
+  activeCallTimer.textContent =
+    String(minutes).padStart(2, "0") +
+    ":" +
+    String(seconds).padStart(2, "0");
+}
+
+function updateMuteButton(){
+  if(callMuted){
+    muteCallIcon.textContent = "🔇";
+    muteCallText.textContent = "Activar";
+    muteCallButton.classList.add("active");
+  }else{
+    muteCallIcon.textContent = "🎤";
+    muteCallText.textContent = "Silenciar";
+    muteCallButton.classList.remove("active");
+  }
+}
+
+function toggleCallMute(){
+  if(!localStream) return;
+
+  const tracks = localStream.getAudioTracks();
+  if(!tracks.length) return;
+
+  callMuted = !callMuted;
+
+  tracks.forEach(track => {
+    track.enabled = !callMuted;
+  });
+
+  updateMuteButton();
+}
+
+function updateSpeakerButton(){
+  speakerCallIcon.textContent = callSpeaker ? "🔊" : "🔈";
+  speakerCallText.textContent = callSpeaker ? "Altavoz" : "Audio";
+  speakerCallButton.classList.toggle("active", callSpeaker);
+}
+
+async function toggleCallSpeaker(){
+  /*
+     Android WebView mantiene la salida en el dispositivo de
+     comunicación mediante MainActivity. En navegadores que
+     soportan setSinkId intentamos aplicar el dispositivo por defecto.
+  */
+  callSpeaker = !callSpeaker;
+
+  if(remoteAudio && typeof remoteAudio.setSinkId === "function"){
+    try{
+      await remoteAudio.setSinkId("default");
+    }catch(error){
+      console.warn("No se pudo cambiar el dispositivo de audio:", error);
+    }
+  }
+
+  updateSpeakerButton();
+}
+
+muteCallButton.onclick = toggleCallMute;
+speakerCallButton.onclick = toggleCallSpeaker;
+activeHangupButton.onclick = () => cleanupCall(true);
+
 
 async function createAndSendOffer(){
 
@@ -1510,6 +1923,8 @@ async function callUser(){
 
   callState =
     "calling";
+
+  showActiveCallScreen(callPeer, "Llamando...");
 
   callButton.classList.add("hidden");
   hangupButton.classList.remove("hidden");
@@ -1596,6 +2011,8 @@ async function acceptCall(){
 
   callState =
     "in-call";
+
+  showActiveCallScreen(callPeer, "Conectando...");
 
   callButton.classList.add("hidden");
   hangupButton.classList.remove("hidden");
@@ -1732,6 +2149,8 @@ function cleanupCall(
   incomingCallModal.style.display =
     "none";
 
+  hideActiveCallScreen();
+
   hangupButton.classList.add("hidden");
 
   if(selectedUser){
@@ -1842,6 +2261,8 @@ socket.on(
       callState =
         "in-call";
 
+      showActiveCallScreen(callPeer, "Conectando...");
+
       chatSubtitle.textContent =
         "📞 Conectando...";
 
@@ -1937,6 +2358,8 @@ socket.on(
 
       pendingOffer = null;
 
+      setActiveCallStatus("En llamada");
+
       chatSubtitle.textContent =
         "📞 En llamada";
 
@@ -1974,6 +2397,8 @@ socket.on(
       );
 
       await flushIceCandidates();
+
+      setActiveCallStatus("En llamada");
 
       chatSubtitle.textContent =
         "📞 En llamada";
