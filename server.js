@@ -351,7 +351,7 @@ async function sendFcmToUser(username, payload) {
     data: {
       type: String(payload?.type || "message"),
       username: String(payload?.username || ""),
-      from: String(payload?.from || ""),
+      sender: String(payload?.from || payload?.sender || ""),
       body,
       message: body
     },
