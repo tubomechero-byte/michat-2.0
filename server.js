@@ -30,7 +30,9 @@ fs.mkdirSync(DATA_DIR, { recursive: true });
 // Guardamos el estado persistente mediante la Data API de Supabase
 // para no depender de DATABASE_URL, pg ni de un pooler de PostgreSQL.
 
-const SUPABASE_URL = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
+const SUPABASE_URL = String(process.env.SUPABASE_URL || "")
+  .replace(/\/rest\/v1\/?$/i, "")
+  .replace(/\/$/, "");
 const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || "";
 
 const STATE_FILES = {
@@ -2738,7 +2740,7 @@ setInterval(() => {
 // INDEX
 // =====================================================
 
-app.get("/{*splat}", (req, res, next) => {
+app.get("*", (req, res, next) => {
   if (
     req.path.startsWith("/api/")
   ) {
