@@ -523,27 +523,36 @@ async function sendFcmToUser(username, payload) {
     ""
   );
 
+  const type = String(payload?.type || "message");
+
   const message = {
     tokens,
-    notification: {
-      title,
-      body
-    },
     data: {
-      type: String(payload?.type || "message"),
+      type,
       username: String(payload?.username || ""),
       sender: String(payload?.sender || payload?.from || ""),
       body,
       message: body
     },
     android: {
-      priority: "high",
-      notification: {
-        channelId: "michat_messages",
-        sound: "default"
-      }
+      priority: "high"
     }
   };
+
+  // Las llamadas se envían como data-only para que
+  // MyFirebaseMessagingService controle el tono y los botones
+  // Contestar / Colgar incluso con la app cerrada.
+  if (type !== "call") {
+    message.notification = {
+      title,
+      body
+    };
+
+    message.android.notification = {
+      channelId: "michat_messages",
+      sound: "default"
+    };
+  }
 
   try {
     console.log(`Enviando FCM a ${key}. Tokens: ${tokens.length}`);
