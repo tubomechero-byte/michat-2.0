@@ -1,14 +1,14 @@
 {
   "name": "mi-chat",
-  "version": "2.0.0",
-  "description": "Chat privado con cuentas, perfiles, bloqueo, historial y notificaciones push",
+  "version": "1.0.0",
+  "private": true,
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "firebase-admin": "^13.0.0",
-    "express": "^4.21.2",
+    "express": "^5.1.0",
+    "firebase-admin": "^13.4.0",
     "socket.io": "^4.8.1",
     "web-push": "^3.6.7"
   }
