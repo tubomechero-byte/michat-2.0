@@ -5,7 +5,6 @@ const webpush = require("web-push");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
-const { Pool } = require("pg");
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getMessaging } = require("firebase-admin/messaging");
 
