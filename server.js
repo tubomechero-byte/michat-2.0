@@ -20,8 +20,11 @@ const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
 const PUSH_FILE = path.join(DATA_DIR, "push.json");
 const STORIES_FILE = path.join(DATA_DIR, "stories.json");
 const FCM_FILE = path.join(DATA_DIR, "fcm.json");
+const RECORDINGS_FILE = path.join(DATA_DIR, "recordings.json");
+const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
+fs.mkdirSync(RECORDINGS_DIR, { recursive: true });
 
 // =====================================================
 // SUPABASE / PERSISTENCIA
@@ -41,7 +44,8 @@ const STATE_FILES = {
   "sessions.json": {},
   "push.json": [],
   "stories.json": [],
-  "fcm.json": {}
+  "fcm.json": {},
+  "recordings.json": []
 };
 
 let supabaseAvailable = false;
@@ -63,6 +67,7 @@ ensure(SESSIONS_FILE, {});
 ensure(PUSH_FILE, []);
 ensure(STORIES_FILE, []);
 ensure(FCM_FILE, {});
+ensure(RECORDINGS_FILE, []);
 
 function read(file, fallback) {
   try {
@@ -269,6 +274,14 @@ function saveStories(v) {
   write(STORIES_FILE, v);
 }
 
+function recordings() {
+  return read(RECORDINGS_FILE, []);
+}
+
+function saveRecordings(v) {
+  write(RECORDINGS_FILE, v);
+}
+
 function fcmTokens() {
   return read(FCM_FILE, {});
 }
@@ -432,6 +445,85 @@ app.use(express.json({ limit: "12mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 const online = new Map();
+
+// =====================================================
+// GRABACIONES DE LLAMADAS (VISIBLES Y CON CONSENTIMIENTO)
+// =====================================================
+
+function requireUser(req, res, next) {
+  const user = sessionUser(authToken(req));
+  if (!user) {
+    return res.status(401).json({ error: "Sesión no válida." });
+  }
+  req.user = user;
+  next();
+}
+
+app.post(
+  "/api/call-recordings",
+  express.raw({ type: ["audio/webm", "audio/ogg", "audio/mp4"], limit: "8mb" }),
+  requireUser,
+  (req, res) => {
+    const to = norm(req.query.to || "");
+    const startedAt = Number(req.query.startedAt || Date.now());
+    const duration = Math.max(0, Math.min(15 * 60, Number(req.query.duration || 0)));
+
+    if (!to || !getUser(to)) {
+      return res.status(400).json({ error: "Destinatario de la llamada inválido." });
+    }
+
+    if (to === norm(req.user.username)) {
+      return res.status(400).json({ error: "Destinatario inválido." });
+    }
+
+    if (!Buffer.isBuffer(req.body) || !req.body.length) {
+      return res.status(400).json({ error: "La grabación está vacía." });
+    }
+
+    const id = crypto.randomBytes(16).toString("hex");
+    const fileName = id + ".webm";
+    const filePath = path.join(RECORDINGS_DIR, fileName);
+
+    try {
+      fs.writeFileSync(filePath, req.body);
+    } catch (error) {
+      console.error("No se pudo guardar la grabación:", error);
+      return res.status(500).json({ error: "No se pudo guardar la grabación." });
+    }
+
+    const item = {
+      id,
+      from: norm(req.user.username),
+      fromDisplay: req.user.displayName || req.user.username,
+      to,
+      toDisplay: getUser(to)?.displayName || to,
+      startedAt: Number.isFinite(startedAt) ? startedAt : Date.now(),
+      duration,
+      size: req.body.length,
+      mimeType: req.headers["content-type"] || "audio/webm",
+      fileName,
+      createdAt: Date.now()
+    };
+
+    const list = recordings();
+    list.push(item);
+    if (list.length > 100) {
+      const removed = list.splice(0, list.length - 100);
+      for (const old of removed) {
+        try { fs.unlinkSync(path.join(RECORDINGS_DIR, old.fileName)); } catch {}
+      }
+    }
+    saveRecordings(list);
+
+    addAdminActivity(
+      `${item.fromDisplay} ha guardado una grabación de llamada con ${item.toDisplay}.`
+    );
+
+    res.json({ success: true, id });
+  }
+);
+
+// El participante puede avisar al otro de que ha empezado/terminado una grabación.
 
 // =====================================================
 // MI CHAT ADMIN
@@ -706,6 +798,19 @@ app.delete("/api/admin/users/:username", requireAdmin, (req, res) => {
   );
   saveStories(remainingStories);
 
+  // Eliminar grabaciones en las que participe la cuenta.
+  const recordingList = recordings();
+  const remainingRecordings = recordingList.filter(item => {
+    const belongs =
+      norm(item.from) === username ||
+      norm(item.to) === username;
+    if (belongs) {
+      try { fs.unlinkSync(path.join(RECORDINGS_DIR, item.fileName)); } catch {}
+    }
+    return !belongs;
+  });
+  saveRecordings(remainingRecordings);
+
   // Eliminar sus suscripciones Web Push.
   const remainingPush = pushSubs().filter(
     item => norm(item.username) !== username
@@ -784,6 +889,47 @@ app.post("/api/admin/users/:username/reset-password", requireAdmin, (req, res) =
     success: true,
     username: list[index].username
   });
+});
+
+app.get("/api/admin/recordings", requireAdmin, (req, res) => {
+  res.json(
+    recordings()
+      .slice()
+      .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+      .map(item => ({ ...item }))
+  );
+});
+
+app.get("/api/admin/recordings/:id", (req, res) => {
+  const token = adminToken(req) || String(req.query.token || "");
+  const admin = verifyAdminToken(token);
+  if (!admin) {
+    return res.status(401).send("Sesión de administrador no válida.");
+  }
+
+  const item = recordings().find(x => String(x.id) === String(req.params.id));
+  if (!item) return res.status(404).send("Grabación no encontrada.");
+
+  const filePath = path.join(RECORDINGS_DIR, item.fileName);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send("El archivo de la grabación ya no está disponible en el servidor.");
+  }
+
+  res.type(item.mimeType || "audio/webm");
+  fs.createReadStream(filePath).pipe(res);
+});
+
+app.delete("/api/admin/recordings/:id", requireAdmin, (req, res) => {
+  const list = recordings();
+  const index = list.findIndex(x => String(x.id) === String(req.params.id));
+  if (index < 0) return res.status(404).json({ error: "Grabación no encontrada." });
+
+  const removed = list.splice(index, 1)[0];
+  saveRecordings(list);
+  try { fs.unlinkSync(path.join(RECORDINGS_DIR, removed.fileName)); } catch {}
+
+  addAdminActivity(`Administrador eliminó una grabación de ${removed.fromDisplay} con ${removed.toDisplay}.`);
+  res.json({ success: true });
 });
 
 app.get("/api/admin/users/:username/stories", requireAdmin, (req, res) => {
@@ -3130,6 +3276,28 @@ io.on("connection", socket => {
           }
         );
       }
+    }
+  );
+
+  socket.on(
+    "recordingStarted",
+    ({ to }) => {
+      const sender = online.get(socket.id);
+      const target = norm(to);
+      if (!sender || !target || isEitherBlocked(sender, target)) return;
+      const targetSid = socketIdFor(target);
+      if (targetSid) io.to(targetSid).emit("recordingStarted", { from: norm(sender) });
+    }
+  );
+
+  socket.on(
+    "recordingStopped",
+    ({ to }) => {
+      const sender = online.get(socket.id);
+      const target = norm(to);
+      if (!sender || !target) return;
+      const targetSid = socketIdFor(target);
+      if (targetSid) io.to(targetSid).emit("recordingStopped", { from: norm(sender) });
     }
   );
 
