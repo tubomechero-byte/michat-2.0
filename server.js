@@ -2617,21 +2617,17 @@ setInterval(() => {
 }, 60 * 1000);
 
 // =====================================================
+```js
+// =====================================================
 // INDEX
 // =====================================================
 
 app.get("/{*splat}", (req, res, next) => {
-  if (
-    req.path.startsWith("/api/")
-  ) {
+  if (req.path.startsWith("/api/")) {
     return next();
   }
 
-  if (
-    req.path.startsWith(
-      "/socket.io/"
-    )
-  ) {
+  if (req.path.startsWith("/socket.io/")) {
     return next();
   }
 
@@ -2653,26 +2649,4 @@ server.listen(
     );
   }
 );
-    )
-  ) {
-    return next();
-  }
-
-  res.sendFile(
-    path.join(
-      __dirname,
-      "public",
-      "index.html"
-    )
-  );
-});
-
-server.listen(
-  PORT,
-  "0.0.0.0",
-  () => {
-    console.log(
-      `Mi Chat funcionando en http://localhost:${PORT}`
-    );
-  }
-);
+```
