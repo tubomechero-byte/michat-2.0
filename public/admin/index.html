@@ -3,40 +3,39 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mi Chat Admin</title>
+<title>Mi Chat - Administración</title>
 <style>
-body{font-family:Arial,sans-serif;margin:0;background:#f3f4f6;color:#111}.wrap{max-width:1100px;margin:auto;padding:24px}.card{background:#fff;border-radius:14px;padding:20px;margin:14px 0;box-shadow:0 2px 10px #0001}input,button{padding:11px;border-radius:9px;border:1px solid #ccc;font-size:15px}button{cursor:pointer;background:#111;color:#fff}.login{max-width:400px;margin:70px auto}.row{display:flex;gap:10px;flex-wrap:wrap}.stat{flex:1;min-width:180px}.hidden{display:none}.error{color:#b00020}.user,.story,.msg{border-top:1px solid #eee;padding:12px 0}.online{color:green;font-weight:bold}.offline{color:#777}.thumb{max-width:120px;max-height:120px;border-radius:8px;margin-top:8px}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:8px;border-bottom:1px solid #eee}
+body{font-family:Arial,sans-serif;margin:0;background:#f4f6f8;color:#222}header{background:#111827;color:#fff;padding:18px 22px;display:flex;justify-content:space-between;align-items:center}main{max-width:1100px;margin:24px auto;padding:0 16px}.card{background:#fff;border-radius:12px;padding:18px;margin-bottom:18px;box-shadow:0 2px 10px #0001}input,button{padding:10px;border-radius:8px;border:1px solid #ccc}input{width:100%;box-sizing:border-box;margin:6px 0 12px}button{cursor:pointer;background:#111827;color:white;border:0;margin:3px}button.danger{background:#b91c1c}button.secondary{background:#4b5563}.hidden{display:none}.stats{display:flex;gap:12px;flex-wrap:wrap}.stat{padding:14px;background:#eef2ff;border-radius:10px;min-width:130px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #eee;white-space:nowrap}.online{color:#15803d;font-weight:bold}.offline{color:#777}.msg{margin-top:10px;padding:10px;border-radius:8px;background:#f3f4f6}.error{color:#b91c1c}.ok{color:#15803d}
 </style>
 </head>
 <body>
-<div id="login" class="login card">
-<h1>Mi Chat Admin</h1>
-<p>Acceso de administrador</p>
-<input id="user" placeholder="Usuario" style="width:100%;box-sizing:border-box"><br><br>
-<input id="pass" type="password" placeholder="Contraseña" style="width:100%;box-sizing:border-box"><br><br>
-<button onclick="login()" style="width:100%">Entrar</button>
-<p id="loginError" class="error"></p>
-</div>
-<div id="app" class="hidden"><div class="wrap">
-<div class="row" style="justify-content:space-between;align-items:center"><h1>Mi Chat Admin</h1><button onclick="logout()">Cerrar sesión</button></div>
-<div id="stats" class="row"></div>
-<div class="card"><h2>Usuarios</h2><div id="users">Cargando...</div></div>
-<div class="card"><h2>Estados</h2><div id="stories">Cargando...</div></div>
-<div class="card"><h2>Mensajes recientes</h2><div id="messages">Cargando...</div></div>
-</div></div>
+<header><strong>Mi Chat · Administración</strong><button id="logout" class="secondary hidden">Cerrar sesión</button></header>
+<main>
+<section id="loginCard" class="card">
+<h2>Acceso de administrador</h2>
+<label>Usuario</label><input id="loginUser" autocomplete="username">
+<label>Contraseña</label><input id="loginPass" type="password" autocomplete="current-password">
+<button id="loginBtn">Entrar</button><div id="loginMsg"></div>
+</section>
+<section id="panel" class="hidden">
+<div class="card"><h2>Resumen</h2><div class="stats" id="stats"></div></div>
+<div class="card"><h2>Usuarios</h2><button id="refresh">Actualizar</button><div class="table-wrap"><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Estado</th><th>Contactos</th><th>Acciones</th></tr></thead><tbody id="users"></tbody></table></div><div id="actionMsg"></div></div>
+</section>
+</main>
 <script>
-const KEY='michat_admin_token';
-const token=()=>localStorage.getItem(KEY)||'';
-async function api(url,opt={}){opt.headers=Object.assign({'Content-Type':'application/json','Authorization':'Bearer '+token()},opt.headers||{});const r=await fetch(url,opt);if(r.status===401){localStorage.removeItem(KEY);showLogin();throw new Error('Sesión caducada');}const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Error');return d}
-function showLogin(){document.getElementById('login').classList.remove('hidden');document.getElementById('app').classList.add('hidden')}
-function showApp(){document.getElementById('login').classList.add('hidden');document.getElementById('app').classList.remove('hidden')}
-async function login(){const e=document.getElementById('loginError');e.textContent='';try{const d=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.getElementById('user').value,password:document.getElementById('pass').value})});const j=await d.json();if(!d.ok)throw new Error(j.error||'Error');localStorage.setItem(KEY,j.token);await load();showApp()}catch(x){e.textContent=x.message}}
-async function logout(){localStorage.removeItem(KEY);showLogin()}
-async function load(){const [s,u,st,m]=await Promise.all([api('/api/admin/stats'),api('/api/admin/users'),api('/api/admin/stories'),api('/api/admin/messages?limit=100')]);document.getElementById('stats').innerHTML=`<div class="card stat"><b>Usuarios</b><h2>${s.users}</h2></div><div class="card stat"><b>En línea</b><h2>${s.online}</h2></div><div class="card stat"><b>Mensajes</b><h2>${s.messages}</h2></div><div class="card stat"><b>Estados</b><h2>${s.stories}</h2></div>`;document.getElementById('users').innerHTML=u.length?u.map(x=>`<div class="user"><b>${esc(x.displayName)}</b> (@${esc(x.username)}) — <span class="${x.online?'online':'offline'}">${x.online?'En línea':'Desconectado'}</span> — contactos: ${x.contacts}<br><button onclick="userStories('${encodeURIComponent(x.username)}')">Ver estados</button></div>`).join(''):'No hay usuarios';renderStories(st);document.getElementById('messages').innerHTML=m.length?m.map(x=>`<div class="msg"><b>${esc(x.fromDisplay||x.from||'')}</b> → <b>${esc(x.toDisplay||x.to||'')}</b><br>${esc(x.message||'')}<br><small>${esc(x.time||'')}</small></div>`).join(''):'No hay mensajes'}
-function renderStories(a){document.getElementById('stories').innerHTML=a.length?a.map(x=>`<div class="story"><b>${esc(x.displayName||x.username)}</b> — ${esc(x.type||'')} — ${new Date(Number(x.createdAt||Date.now())).toLocaleString()}<br>${x.type==='image'&&x.content?`<img class="thumb" src="${x.content}">`:''}<br><button onclick="delStory('${encodeURIComponent(String(x.id))}')">Eliminar estado</button></div>`).join(''):'No hay estados activos'}
-async function delStory(id){if(!confirm('¿Eliminar este estado?'))return;await api('/api/admin/stories/'+id,{method:'DELETE'});load()}
-async function userStories(u){try{const a=await api('/api/admin/users/'+u+'/stories');alert(a.length?'El usuario tiene '+a.length+' estado(s) activo(s).':'El usuario no tiene estados activos.')}catch(e){alert(e.message)}}
+const tokenKey='michat_admin_token';
+const $=id=>document.getElementById(id);
+function headers(){return {'Content-Type':'application/json','Authorization':'Bearer '+localStorage.getItem(tokenKey)}}
+function showPanel(){ $('loginCard').classList.add('hidden'); $('panel').classList.remove('hidden'); $('logout').classList.remove('hidden'); loadAll(); }
+async function api(url,opt={}){const r=await fetch(url,{...opt,headers:{...headers(),...(opt.headers||{})}});let d={};try{d=await r.json()}catch{} if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d}
+async function login(){const msg=$('loginMsg');msg.textContent='';try{const d=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('loginUser').value,password:$('loginPass').value})});const j=await d.json();if(!d.ok)throw new Error(j.error||'No se pudo iniciar sesión');localStorage.setItem(tokenKey,j.token);showPanel()}catch(e){msg.className='error';msg.textContent=e.message}}
+async function loadAll(){try{const s=await api('/api/admin/stats');$('stats').innerHTML=`<div class="stat"><b>Usuarios</b><br>${s.users}</div><div class="stat"><b>Mensajes</b><br>${s.messages}</div><div class="stat"><b>Estados</b><br>${s.stories}</div><div class="stat"><b>Conectados</b><br>${s.online}</div>`;const list=await api('/api/admin/users');$('users').innerHTML=list.map(u=>`<tr><td>${esc(u.username)}</td><td>${esc(u.displayName)}</td><td class="${u.online?'online':'offline'}">${u.online?'● Online':'○ Offline'}</td><td>${u.contacts}</td><td><button onclick="resetPassword('${escAttr(u.username)}')">Restablecer contraseña</button><button class="danger" onclick="deleteUser('${escAttr(u.username)}')">Eliminar cuenta</button></td></tr>`).join('')}catch(e){if(e.message.includes('Sesión'))logout();else $('actionMsg').textContent=e.message}}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-(async()=>{if(!token()){showLogin();return}try{await api('/api/admin/me');await load();showApp()}catch(e){showLogin()}})();
+function escAttr(s){return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
+async function resetPassword(username){const p=prompt('Nueva contraseña para '+username+' (mínimo 6 caracteres):');if(p===null)return;if(p.length<6){alert('La contraseña debe tener al menos 6 caracteres.');return}if(!confirm('¿Restablecer la contraseña de '+username+'?'))return;try{await api('/api/admin/users/'+encodeURIComponent(username)+'/reset-password',{method:'POST',body:JSON.stringify({password:p})});$('actionMsg').className='ok';$('actionMsg').textContent='Contraseña restablecida para '+username+'.'}catch(e){$('actionMsg').className='error';$('actionMsg').textContent=e.message}}
+async function deleteUser(username){if(!confirm('¿Eliminar DEFINITIVAMENTE la cuenta de '+username+'? También se eliminarán sus mensajes, estados, sesiones y tokens de notificaciones.'))return;if(!confirm('Esta acción no se puede deshacer. ¿Continuar?'))return;try{await api('/api/admin/users/'+encodeURIComponent(username),{method:'DELETE'});$('actionMsg').className='ok';$('actionMsg').textContent='Cuenta eliminada: '+username;loadAll()}catch(e){$('actionMsg').className='error';$('actionMsg').textContent=e.message}}
+async function check(){const t=localStorage.getItem(tokenKey);if(!t)return;if(t)try{await api('/api/admin/me');showPanel()}catch{localStorage.removeItem(tokenKey)}}
+$('loginBtn').onclick=login;$('refresh').onclick=loadAll;$('logout').onclick=()=>{localStorage.removeItem(tokenKey);location.reload()};$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});check();
 </script>
-</body></html>
+</body>
+</html>
