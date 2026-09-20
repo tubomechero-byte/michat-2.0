@@ -463,10 +463,40 @@ button,input,textarea{font:inherit}
         </div>
       </button>
 
+      <button id="settingsReport" class="settingsItem">
+        <div class="settingsItemTitle">⚠️ Reportar un problema</div>
+        <div class="settingsItemSub">
+          Envía un reporte al administrador de Mi Chat.
+        </div>
+      </button>
+
     </div>
 
     <div class="modalRow">
       <button id="closeSettings" class="muted">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- REPORTAR PROBLEMA -->
+<div id="reportModal" class="modal">
+  <div class="modalBox">
+    <h2>⚠️ Reportar un problema</h2>
+    <p style="color:#777;font-size:14px">Cuéntanos qué ha ocurrido. El administrador podrá ver tu usuario y este mensaje.</p>
+    <label for="reportCategory">Categoría</label>
+    <select id="reportCategory" style="width:100%;padding:12px;border-radius:10px;border:1px solid #ddd;margin:6px 0 12px">
+      <option>Problema técnico</option>
+      <option>Usuario</option>
+      <option>Contenido inapropiado</option>
+      <option>Seguridad</option>
+      <option>Otro</option>
+    </select>
+    <textarea id="reportText" maxlength="2000" placeholder="Escribe tu reporte..." style="width:100%;min-height:140px;resize:vertical;padding:12px;border-radius:10px;border:1px solid #ddd;box-sizing:border-box"></textarea>
+    <div id="reportMessage" style="min-height:22px;margin-top:8px"></div>
+    <div class="modalRow">
+      <button id="closeReport" class="muted">Cancelar</button>
+      <button id="sendReport" class="primary">Enviar reporte</button>
     </div>
   </div>
 </div>
@@ -2850,6 +2880,62 @@ $("settingsPush").onclick = async () => {
     "none";
 
   await activatePushNotifications();
+};
+
+$("settingsReport").onclick = () => {
+  $("settingsModal").style.display = "none";
+  $("reportText").value = "";
+  $("reportCategory").value = "Problema técnico";
+  $("reportMessage").textContent = "";
+  $("reportModal").style.display = "flex";
+};
+
+$("closeReport").onclick = () => {
+  $("reportModal").style.display = "none";
+};
+
+$("sendReport").onclick = async () => {
+  const button = $("sendReport");
+  const message = $("reportMessage");
+  const text = $("reportText").value.trim();
+
+  if (text.length < 5) {
+    message.style.color = "#c00";
+    message.textContent = "Escribe al menos 5 caracteres.";
+    return;
+  }
+
+  button.disabled = true;
+  message.style.color = "#777";
+  message.textContent = "Enviando...";
+
+  try {
+    const token = localStorage.getItem("chatToken");
+    const response = await fetch("/api/reports", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + token
+      },
+      body: JSON.stringify({
+        category: $("reportCategory").value,
+        text
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudo enviar el reporte.");
+
+    message.style.color = "#087f23";
+    message.textContent = "Reporte enviado correctamente. Gracias.";
+    $("reportText").value = "";
+    setTimeout(() => { $("reportModal").style.display = "none"; }, 1200);
+  } catch (error) {
+    message.style.color = "#c00";
+    message.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
 };
 
 $("closeBlocked").onclick = () => {
