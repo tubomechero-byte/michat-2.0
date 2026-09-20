@@ -2645,8 +2645,4 @@ server.listen(
   "0.0.0.0",
   () => {
     console.log(
-      `Mi Chat funcionando en http://localhost:${PORT}`
-    );
-  }
-);
-```
+      `Mi Chat funcionando en http://localhost:${PORT}
