@@ -20,6 +20,7 @@ const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
 const PUSH_FILE = path.join(DATA_DIR, "push.json");
 const STORIES_FILE = path.join(DATA_DIR, "stories.json");
 const FCM_FILE = path.join(DATA_DIR, "fcm.json");
+const SESSION_SECRET_FILE = path.join(DATA_DIR, "session-secret.json");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -41,7 +42,8 @@ const STATE_FILES = {
   "sessions.json": {},
   "push.json": [],
   "stories.json": [],
-  "fcm.json": {}
+  "fcm.json": {},
+  "session-secret.json": ""
 };
 
 let supabaseAvailable = false;
@@ -63,6 +65,7 @@ ensure(SESSIONS_FILE, {});
 ensure(PUSH_FILE, []);
 ensure(STORIES_FILE, []);
 ensure(FCM_FILE, {});
+ensure(SESSION_SECRET_FILE, "");
 
 function read(file, fallback) {
   try {
@@ -167,6 +170,13 @@ async function initializeDatabase() {
     console.log(
       "SUPABASE_URL/SUPABASE_SECRET_KEY no configuradas. Se usará almacenamiento local temporal."
     );
+    if (!process.env.SESSION_SECRET) {
+      const localSecret = read(SESSION_SECRET_FILE, "");
+      SESSION_SECRET = localSecret && localSecret.length >= 32
+        ? localSecret
+        : "michat-session-secret-change-this-in-render";
+      fs.writeFileSync(SESSION_SECRET_FILE, JSON.stringify(SESSION_SECRET), "utf8");
+    }
     supabaseReadyResolve(false);
     return;
   }
@@ -218,9 +228,52 @@ async function initializeDatabase() {
       }
     }
 
+    // =====================================================
+    // SECRETO PERSISTENTE DE SESIONES
+    // =====================================================
+    // Si SESSION_SECRET existe en Render, tiene prioridad.
+    // Si no existe, se conserva/genera uno y se guarda en Supabase.
+    // Así los tokens firmados siguen siendo válidos después de cada deploy.
+    const remoteSecret = byKey.get("session-secret.json");
+
+    if (!process.env.SESSION_SECRET) {
+      if (remoteSecret && typeof remoteSecret.state_data === "string" && remoteSecret.state_data.length >= 32) {
+        SESSION_SECRET = remoteSecret.state_data;
+      } else {
+        const localSecret = read(SESSION_SECRET_FILE, "");
+        SESSION_SECRET = localSecret && localSecret.length >= 32
+          ? localSecret
+          : "michat-session-secret-change-this-in-render";
+
+        await supabaseRequest(
+          "michat_state?on_conflict=state_key",
+          {
+            method: "POST",
+            headers: {
+              Prefer: "resolution=merge-duplicates,return=minimal"
+            },
+            body: JSON.stringify([{
+              state_key: "session-secret.json",
+              state_data: SESSION_SECRET,
+              updated_at: new Date().toISOString()
+            }])
+          }
+        );
+      }
+    } else if (SESSION_SECRET.length < 32) {
+      throw new Error("SESSION_SECRET debe tener al menos 32 caracteres.");
+    }
+
+    fs.writeFileSync(
+      SESSION_SECRET_FILE,
+      JSON.stringify(SESSION_SECRET),
+      "utf8"
+    );
+
     supabaseAvailable = true;
     supabaseReadyResolve(true);
     console.log("Supabase conectado y datos persistentes activos.");
+    console.log("Sesiones persistentes: activas.");
   } catch (error) {
     supabaseAvailable = false;
     supabaseReadyResolve(false);
@@ -320,9 +373,9 @@ function validPassword(password, salt, hash) {
 // sesión por depender de sessions.json.
 // Se mantiene compatibilidad con los tokens antiguos.
 
-const SESSION_SECRET =
+let SESSION_SECRET =
   process.env.SESSION_SECRET ||
-  "michat-session-secret-change-this-in-render";
+  "";
 
 function createSessionToken(username) {
   const payload = Buffer
@@ -432,451 +485,6 @@ app.use(express.json({ limit: "12mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 const online = new Map();
-
-// =====================================================
-// MI CHAT ADMIN
-// =====================================================
-
-const ADMIN_USERNAME = String(process.env.ADMIN_USERNAME || "admin").trim();
-const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || "").trim();
-const ADMIN_SESSION_SECRET = String(
-  process.env.ADMIN_SESSION_SECRET || "CAMBIA-ESTA-CLAVE-ADMIN-EN-RENDER"
-);
-const ADMIN_SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
-
-// Terminal de actividad del administrador.
-const adminActivity = [];
-
-function addAdminActivity(text) {
-  const line = {
-    id: Date.now() + "-" + crypto.randomBytes(4).toString("hex"),
-    time: new Date().toISOString(),
-    text: String(text || "")
-  };
-
-  adminActivity.push(line);
-
-  if (adminActivity.length > 200) {
-    adminActivity.splice(0, adminActivity.length - 200);
-  }
-}
-
-function createAdminToken() {
-  const payload = Buffer.from(JSON.stringify({
-    username: ADMIN_USERNAME,
-    createdAt: Date.now()
-  })).toString("base64url");
-
-  const signature = crypto
-    .createHmac("sha256", ADMIN_SESSION_SECRET)
-    .update(payload)
-    .digest("base64url");
-
-  return payload + "." + signature;
-}
-
-function verifyAdminToken(token) {
-  if (!token || typeof token !== "string") return null;
-
-  const parts = token.split(".");
-  if (parts.length !== 2) return null;
-
-  const [payload, signature] = parts;
-
-  const expected = crypto
-    .createHmac("sha256", ADMIN_SESSION_SECRET)
-    .update(payload)
-    .digest("base64url");
-
-  const a = Buffer.from(signature);
-  const b = Buffer.from(expected);
-
-  if (a.length !== b.length) return null;
-
-  try {
-    if (!crypto.timingSafeEqual(a, b)) return null;
-  } catch {
-    return null;
-  }
-
-  try {
-    const data = JSON.parse(
-      Buffer.from(payload, "base64url").toString("utf8")
-    );
-
-    if (!data || data.username !== ADMIN_USERNAME) return null;
-
-    if (
-      !data.createdAt ||
-      Date.now() - Number(data.createdAt) > ADMIN_SESSION_MAX_AGE
-    ) {
-      return null;
-    }
-
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-function adminToken(req) {
-  const authorization = req.headers.authorization || "";
-  return authorization.startsWith("Bearer ")
-    ? authorization.slice(7)
-    : "";
-}
-
-function requireAdmin(req, res, next) {
-  const admin = verifyAdminToken(adminToken(req));
-
-  if (!admin) {
-    return res.status(401).json({
-      error: "Sesión de administrador no válida."
-    });
-  }
-
-  req.admin = admin;
-  next();
-}
-
-app.post("/api/admin/login", (req, res) => {
-  const username = String(req.body?.username || "").trim();
-  const password = String(req.body?.password || "");
-
-  if (!ADMIN_PASSWORD) {
-    console.error("ADMIN_PASSWORD no está configurada en Render.");
-    return res.status(500).json({
-      error: "El administrador no está configurado en el servidor."
-    });
-  }
-
-  if (
-    username !== ADMIN_USERNAME ||
-    password !== ADMIN_PASSWORD
-  ) {
-    return res.status(401).json({
-      error: "Usuario o contraseña de administrador incorrectos."
-    });
-  }
-
-  res.json({
-    success: true,
-    token: createAdminToken(),
-    username: ADMIN_USERNAME
-  });
-});
-
-app.get("/api/admin/me", requireAdmin, (req, res) => {
-  res.json({
-    loggedIn: true,
-    username: req.admin.username
-  });
-});
-
-app.post("/api/admin/logout", requireAdmin, (req, res) => {
-  res.json({ success: true });
-});
-
-app.get("/api/admin/stats", requireAdmin, (req, res) => {
-  const userList = users();
-  const messageList = messages();
-  const storyList = cleanExpiredStories();
-  const onlineUsers = new Set(
-    [...online.values()].map(name => norm(name))
-  );
-
-  res.json({
-    users: userList.length,
-    messages: messageList.length,
-    stories: storyList.length,
-    online: onlineUsers.size
-  });
-});
-
-app.get("/api/admin/users", requireAdmin, (req, res) => {
-  const onlineUsers = new Set(
-    [...online.values()].map(name => norm(name))
-  );
-
-  const result = users().map(user => ({
-    username: user.username,
-    displayName: user.displayName || user.username,
-    profileImage: user.profileImage || "",
-    online: onlineUsers.has(norm(user.username)),
-    createdAt: user.createdAt || null,
-    contacts: Array.isArray(user.contacts)
-      ? user.contacts.length
-      : 0
-  }));
-
-  result.sort((a, b) => {
-    if (a.online && !b.online) return -1;
-    if (!a.online && b.online) return 1;
-    return String(a.username).localeCompare(
-      String(b.username)
-    );
-  });
-
-  res.json(result);
-});
-
-app.delete("/api/admin/users/:username", requireAdmin, (req, res) => {
-  const username = norm(req.params.username);
-
-  if (!username) {
-    return res.status(400).json({
-      error: "Usuario inválido."
-    });
-  }
-
-  const list = users();
-  const index = list.findIndex(
-    u => norm(u.username) === username
-  );
-
-  if (index < 0) {
-    return res.status(404).json({
-      error: "Usuario no encontrado."
-    });
-  }
-
-  const removed = list[index];
-  list.splice(index, 1);
-  saveUsers(list);
-
-  // Eliminar sus sesiones antiguas.
-  const sessionData = sessions();
-  let sessionChanged = false;
-
-  for (const [token, value] of Object.entries(sessionData)) {
-    if (norm(value?.username) === username) {
-      delete sessionData[token];
-      sessionChanged = true;
-    }
-  }
-
-  if (sessionChanged) {
-    saveSessions(sessionData);
-  }
-
-  // Quitar al usuario de contactos y bloqueos de los demás.
-  const updatedUsers = users();
-  let usersChanged = false;
-
-  for (const user of updatedUsers) {
-    const oldContacts = Array.isArray(user.contacts)
-      ? user.contacts
-      : [];
-    const oldBlocked = Array.isArray(user.blockedUsers)
-      ? user.blockedUsers
-      : [];
-
-    const newContacts = oldContacts.filter(
-      name => norm(name) !== username
-    );
-    const newBlocked = oldBlocked.filter(
-      name => norm(name) !== username
-    );
-
-    if (
-      newContacts.length !== oldContacts.length ||
-      newBlocked.length !== oldBlocked.length
-    ) {
-      user.contacts = newContacts;
-      user.blockedUsers = newBlocked;
-      usersChanged = true;
-    }
-  }
-
-  if (usersChanged) {
-    saveUsers(updatedUsers);
-  }
-
-  // Eliminar mensajes relacionados con la cuenta.
-  const remainingMessages = messages().filter(
-    message =>
-      norm(message.from) !== username &&
-      norm(message.to) !== username
-  );
-  saveMessages(remainingMessages);
-
-  // Eliminar estados de la cuenta.
-  const remainingStories = allStories().filter(
-    story => norm(story.username) !== username
-  );
-  saveStories(remainingStories);
-
-  // Eliminar sus suscripciones Web Push.
-  const remainingPush = pushSubs().filter(
-    item => norm(item.username) !== username
-  );
-  savePushSubs(remainingPush);
-
-  // Eliminar sus tokens FCM.
-  const fcmData = fcmTokens();
-  if (Object.prototype.hasOwnProperty.call(fcmData, username)) {
-    delete fcmData[username];
-    saveFcmTokens(fcmData);
-  }
-
-  // Desconectar cualquier sesión Socket.IO activa.
-  for (const [socketId, name] of online.entries()) {
-    if (norm(name) === username) {
-      online.delete(socketId);
-      const targetSocket = io.sockets.sockets.get(socketId);
-      if (targetSocket) {
-        targetSocket.disconnect(true);
-      }
-    }
-  }
-
-  sendUserList();
-
-  console.log(
-    `Administrador eliminó la cuenta ${username}.`
-  );
-
-  res.json({
-    success: true,
-    username: removed.username
-  });
-});
-
-app.post("/api/admin/users/:username/reset-password", requireAdmin, (req, res) => {
-  const username = norm(req.params.username);
-  const newPassword = String(req.body?.password || "");
-
-  if (!username) {
-    return res.status(400).json({
-      error: "Usuario inválido."
-    });
-  }
-
-  if (newPassword.length < 6) {
-    return res.status(400).json({
-      error: "La nueva contraseña debe tener al menos 6 caracteres."
-    });
-  }
-
-  const list = users();
-  const index = list.findIndex(
-    u => norm(u.username) === username
-  );
-
-  if (index < 0) {
-    return res.status(404).json({
-      error: "Usuario no encontrado."
-    });
-  }
-
-  const p = passwordHash(newPassword);
-
-  list[index].salt = p.salt;
-  list[index].passwordHash = p.hash;
-
-  saveUsers(list);
-
-  console.log(
-    `Administrador restableció la contraseña de ${username}.`
-  );
-
-  res.json({
-    success: true,
-    username: list[index].username
-  });
-});
-
-app.get("/api/admin/users/:username/stories", requireAdmin, (req, res) => {
-  const username = norm(req.params.username);
-
-  if (!getUser(username)) {
-    return res.status(404).json({
-      error: "Usuario no encontrado."
-    });
-  }
-
-  res.json(
-    cleanExpiredStories().filter(
-      story => norm(story.username) === username
-    )
-  );
-});
-
-app.get("/api/admin/stories", requireAdmin, (req, res) => {
-  const list = cleanExpiredStories();
-
-  list.sort(
-    (a, b) =>
-      Number(b.createdAt || 0) -
-      Number(a.createdAt || 0)
-  );
-
-  res.json(list);
-});
-
-app.delete("/api/admin/stories/:id", requireAdmin, (req, res) => {
-  const id = String(req.params.id || "");
-
-  if (!id) {
-    return res.status(400).json({
-      error: "ID de estado inválido."
-    });
-  }
-
-  const list = cleanExpiredStories();
-  const index = list.findIndex(
-    story => String(story.id) === id
-  );
-
-  if (index < 0) {
-    return res.status(404).json({
-      error: "Estado no encontrado."
-    });
-  }
-
-  const removed = list.splice(index, 1)[0];
-  saveStories(list);
-
-  io.emit("storyDeleted", { id: removed.id });
-  io.emit("storiesUpdated", list);
-
-  console.log(
-    "Administrador eliminó el estado " +
-    removed.id +
-    " de " +
-    removed.username
-  );
-
-  res.json({ success: true });
-});
-
-app.get("/api/admin/activity", requireAdmin, (req, res) => {
-  res.json(adminActivity.slice(-100).reverse());
-});
-
-app.get("/api/admin/messages", requireAdmin, (req, res) => {
-  let limit = Number(req.query.limit || 100);
-
-  if (!Number.isFinite(limit)) limit = 100;
-
-  limit = Math.max(1, Math.min(limit, 500));
-
-  res.json(
-    messages().slice(-limit).reverse()
-  );
-});
-
-app.get("/admin", (req, res) => {
-  res.sendFile(
-    path.join(__dirname, "public", "admin", "index.html")
-  );
-});
-
-app.get("/admin/", (req, res) => {
-  res.sendFile(
-    path.join(__dirname, "public", "admin", "index.html")
-  );
-});
 
 // =====================================================
 // PUSH / FIREBASE
