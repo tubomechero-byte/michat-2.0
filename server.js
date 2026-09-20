@@ -21,6 +21,7 @@ const PUSH_FILE = path.join(DATA_DIR, "push.json");
 const STORIES_FILE = path.join(DATA_DIR, "stories.json");
 const FCM_FILE = path.join(DATA_DIR, "fcm.json");
 const RECORDINGS_FILE = path.join(DATA_DIR, "recordings.json");
+const REPORTS_FILE = path.join(DATA_DIR, "reports.json");
 const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -45,7 +46,8 @@ const STATE_FILES = {
   "push.json": [],
   "stories.json": [],
   "fcm.json": {},
-  "recordings.json": []
+  "recordings.json": [],
+  "reports.json": []
 };
 
 let supabaseAvailable = false;
@@ -68,6 +70,7 @@ ensure(PUSH_FILE, []);
 ensure(STORIES_FILE, []);
 ensure(FCM_FILE, {});
 ensure(RECORDINGS_FILE, []);
+ensure(REPORTS_FILE, []);
 
 function read(file, fallback) {
   try {
@@ -280,6 +283,14 @@ function recordings() {
 
 function saveRecordings(v) {
   write(RECORDINGS_FILE, v);
+}
+
+function reports() {
+  return read(REPORTS_FILE, []);
+}
+
+function saveReports(v) {
+  write(REPORTS_FILE, v);
 }
 
 function fcmTokens() {
@@ -528,6 +539,42 @@ app.post(
 // El participante puede avisar al otro de que ha empezado/terminado una grabación.
 
 // =====================================================
+// REPORTES DE USUARIOS
+// =====================================================
+
+app.post("/api/reports", requireUser, (req, res) => {
+  const text = String(req.body?.text || "").trim();
+  const category = String(req.body?.category || "Otro").trim().slice(0, 50);
+
+  if (text.length < 5) {
+    return res.status(400).json({ error: "El reporte debe tener al menos 5 caracteres." });
+  }
+
+  if (text.length > 2000) {
+    return res.status(400).json({ error: "El reporte no puede superar los 2000 caracteres." });
+  }
+
+  const report = {
+    id: Date.now() + "-" + crypto.randomBytes(5).toString("hex"),
+    username: req.user.username,
+    displayName: req.user.displayName || req.user.username,
+    category,
+    text,
+    status: "open",
+    createdAt: Date.now()
+  };
+
+  const list = reports();
+  list.push(report);
+  if (list.length > 500) list.splice(0, list.length - 500);
+  saveReports(list);
+
+  addAdminActivity(`${report.displayName} (@${report.username}) envió un reporte: ${category}.`);
+
+  res.json({ success: true, id: report.id });
+});
+
+// =====================================================
 // MI CHAT ADMIN
 // =====================================================
 
@@ -683,7 +730,8 @@ app.get("/api/admin/stats", requireAdmin, (req, res) => {
     users: userList.length,
     messages: messageList.length,
     stories: storyList.length,
-    online: onlineUsers.size
+    online: onlineUsers.size,
+    reports: reports().filter(r => r.status !== "resolved").length
   });
 });
 
@@ -1000,6 +1048,43 @@ app.delete("/api/admin/stories/:id", requireAdmin, (req, res) => {
 
 app.get("/api/admin/activity", requireAdmin, (req, res) => {
   res.json(adminActivity.slice(-100).reverse());
+});
+
+app.get("/api/admin/reports", requireAdmin, (req, res) => {
+  res.json(reports().slice().reverse());
+});
+
+app.patch("/api/admin/reports/:id", requireAdmin, (req, res) => {
+  const id = String(req.params.id || "");
+  const status = String(req.body?.status || "").trim().toLowerCase();
+
+  if (!["open", "resolved"].includes(status)) {
+    return res.status(400).json({ error: "Estado de reporte inválido." });
+  }
+
+  const list = reports();
+  const item = list.find(r => String(r.id) === id);
+  if (!item) return res.status(404).json({ error: "Reporte no encontrado." });
+
+  item.status = status;
+  item.resolvedAt = status === "resolved" ? Date.now() : null;
+  saveReports(list);
+  addAdminActivity(`Administrador marcó el reporte de @${item.username} como ${status === "resolved" ? "resuelto" : "abierto"}.`);
+
+  res.json({ success: true });
+});
+
+app.delete("/api/admin/reports/:id", requireAdmin, (req, res) => {
+  const id = String(req.params.id || "");
+  const list = reports();
+  const index = list.findIndex(r => String(r.id) === id);
+  if (index < 0) return res.status(404).json({ error: "Reporte no encontrado." });
+
+  const removed = list[index];
+  list.splice(index, 1);
+  saveReports(list);
+  addAdminActivity(`Administrador eliminó el reporte de @${removed.username}.`);
+  res.json({ success: true });
 });
 
 app.get("/api/admin/messages", requireAdmin, (req, res) => {
