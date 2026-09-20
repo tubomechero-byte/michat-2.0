@@ -20,6 +20,7 @@ body{font-family:Arial,sans-serif;margin:0;background:#f4f6f8;color:#222}header{
 <section id="panel" class="hidden">
 <div class="card"><h2>Resumen</h2><div class="stats" id="stats"></div></div>
 <div class="card terminal-card"><h2>Terminal de actividad</h2><div id="terminal" class="terminal"><div class="terminal-line">Mi Chat Admin iniciado. Esperando actividad...</div></div></div>
+<div class="card"><h2>Grabaciones de llamadas</h2><button id="refreshRecordings">Actualizar grabaciones</button><div id="recordingsMsg" class="msg"></div><div id="recordings" class="stories-grid"></div></div>
 <div class="card"><h2>Estados</h2><button id="refreshStories">Actualizar estados</button><div id="storiesMsg" class="msg"></div><div id="stories" class="stories-grid"></div></div>
 <div class="card"><h2>Usuarios</h2><button id="refresh">Actualizar</button><div class="table-wrap"><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Estado</th><th>Contactos</th><th>Acciones</th></tr></thead><tbody id="users"></tbody></table></div><div id="actionMsg"></div></div>
 </section>
@@ -29,7 +30,7 @@ body{font-family:Arial,sans-serif;margin:0;background:#f4f6f8;color:#222}header{
 const tokenKey='michat_admin_token';
 const $=id=>document.getElementById(id);
 function headers(){return {'Content-Type':'application/json','Authorization':'Bearer '+localStorage.getItem(tokenKey)}}
-function showPanel(){ $('loginCard').classList.add('hidden'); $('panel').classList.remove('hidden'); $('logout').classList.remove('hidden'); loadAll(); loadStories(); startActivity(); }
+function showPanel(){ $('loginCard').classList.add('hidden'); $('panel').classList.remove('hidden'); $('logout').classList.remove('hidden'); loadAll(); loadStories(); loadRecordings(); startActivity(); }
 async function api(url,opt={}){const r=await fetch(url,{...opt,headers:{...headers(),...(opt.headers||{})}});let d={};try{d=await r.json()}catch{} if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d}
 async function login(){const msg=$('loginMsg');msg.textContent='';try{const d=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('loginUser').value,password:$('loginPass').value})});const j=await d.json();if(!d.ok)throw new Error(j.error||'No se pudo iniciar sesión');localStorage.setItem(tokenKey,j.token);showPanel()}catch(e){msg.className='error';msg.textContent=e.message}}
 let activityTimer=null;
@@ -65,6 +66,32 @@ function startActivity(){
 }
 
 async function loadAll(){try{const s=await api('/api/admin/stats');$('stats').innerHTML=`<div class="stat"><b>Usuarios</b><br>${s.users}</div><div class="stat"><b>Mensajes</b><br>${s.messages}</div><div class="stat"><b>Estados</b><br>${s.stories}</div><div class="stat"><b>Conectados</b><br>${s.online}</div>`;const list=await api('/api/admin/users');$('users').innerHTML=list.map(u=>`<tr><td>${esc(u.username)}</td><td>${esc(u.displayName)}</td><td class="${u.online?'online':'offline'}">${u.online?'● Online':'○ Offline'}</td><td>${u.contacts}</td><td><button onclick="resetPassword('${escAttr(u.username)}')">Restablecer contraseña</button><button class="danger" onclick="deleteUser('${escAttr(u.username)}')">Eliminar cuenta</button></td></tr>`).join('')}catch(e){if(e.message.includes('Sesión'))logout();else $('actionMsg').textContent=e.message}}
+async function loadRecordings(){
+  try{
+    const list=await api('/api/admin/recordings');
+    const box=$('recordings');
+    $('recordingsMsg').className='msg';
+    $('recordingsMsg').textContent=list.length?'':'No hay grabaciones guardadas.';
+    const adminToken=localStorage.getItem(tokenKey)||'';
+    box.innerHTML=list.map(item=>{
+      const date=item.createdAt?new Date(Number(item.createdAt)).toLocaleString('es-ES'):'Fecha desconocida';
+      const mins=Math.floor(Number(item.duration||0)/60), secs=Number(item.duration||0)%60;
+      const duration=String(mins).padStart(2,'0')+':'+String(secs).padStart(2,'0');
+      const size=(Number(item.size||0)/1024/1024).toFixed(2)+' MB';
+      const src='/api/admin/recordings/'+encodeURIComponent(item.id)+'?token='+encodeURIComponent(adminToken);
+      return `<div class="story-card"><b>📞 ${esc(item.fromDisplay||item.from)} → ${esc(item.toDisplay||item.to)}</b><div class="story-meta">${esc(date)} · ${esc(duration)} · ${esc(size)}</div><audio controls preload="none" src="${escAttr(src)}" style="width:100%"></audio><br><button class="danger" onclick="deleteRecording('${escAttr(String(item.id))}')">Eliminar</button></div>`;
+    }).join('');
+  }catch(e){$('recordingsMsg').className='msg error';$('recordingsMsg').textContent=e.message}
+}
+
+async function deleteRecording(id){
+  if(!confirm('¿Eliminar definitivamente esta grabación?'))return;
+  try{
+    await api('/api/admin/recordings/'+encodeURIComponent(id),{method:'DELETE'});
+    await loadRecordings();
+  }catch(e){$('recordingsMsg').className='msg error';$('recordingsMsg').textContent=e.message}
+}
+
 async function loadStories(){try{const list=await api('/api/admin/stories');const box=$('stories');$('storiesMsg').textContent=list.length?'':'No hay estados activos.';box.innerHTML=list.map(story=>{const type=String(story.type||'text').toLowerCase();const user=esc(story.username||'');const created=story.createdAt?new Date(Number(story.createdAt)).toLocaleString('es-ES'):'Fecha desconocida';let media='';if(type==='image'){media=`<img class="story-media" src="${escAttr(story.content||'')}" alt="Estado">`}else if(type==='video'){media=`<video class="story-media" controls src="${escAttr(story.content||'')}"></video>`}else{media=`<div class="story-text">${esc(story.content||'')}</div>`}return `<div class="story-card"><b>@${user}</b><div class="story-meta">${esc(created)} · ${esc(type)}</div>${media}<button onclick="viewStory('${escAttr(String(story.id))}')">Ver</button><button class="danger" onclick="deleteStory('${escAttr(String(story.id))}')">Eliminar</button></div>`}).join('')}catch(e){$('storiesMsg').className='msg error';$('storiesMsg').textContent=e.message}}
 async function viewStory(id){try{const list=await api('/api/admin/stories');const story=list.find(x=>String(x.id)===String(id));if(!story)throw new Error('Estado no encontrado.');$('storyModalTitle').textContent='Estado de @'+(story.username||'');const type=String(story.type||'text').toLowerCase();let html='';if(type==='image')html=`<img src="${escAttr(story.content||'')}" alt="Estado">`;else if(type==='video')html=`<video controls src="${escAttr(story.content||'')}"></video>`;else html=`<div class="story-text">${esc(story.content||'')}</div>`;$('storyModalContent').innerHTML=html+'<p class="small">'+esc(story.createdAt?new Date(Number(story.createdAt)).toLocaleString('es-ES'):'')+'</p>';$('storyModal').classList.remove('hidden')}catch(e){alert(e.message)}}
 function closeStoryModal(){$('storyModal').classList.add('hidden');$('storyModalContent').innerHTML=''}
@@ -74,7 +101,7 @@ function escAttr(s){return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'
 async function resetPassword(username){const p=prompt('Nueva contraseña para '+username+' (mínimo 6 caracteres):');if(p===null)return;if(p.length<6){alert('La contraseña debe tener al menos 6 caracteres.');return}if(!confirm('¿Restablecer la contraseña de '+username+'?'))return;try{await api('/api/admin/users/'+encodeURIComponent(username)+'/reset-password',{method:'POST',body:JSON.stringify({password:p})});$('actionMsg').className='ok';$('actionMsg').textContent='Contraseña restablecida para '+username+'.'}catch(e){$('actionMsg').className='error';$('actionMsg').textContent=e.message}}
 async function deleteUser(username){if(!confirm('¿Eliminar DEFINITIVAMENTE la cuenta de '+username+'? También se eliminarán sus mensajes, estados, sesiones y tokens de notificaciones.'))return;if(!confirm('Esta acción no se puede deshacer. ¿Continuar?'))return;try{await api('/api/admin/users/'+encodeURIComponent(username),{method:'DELETE'});$('actionMsg').className='ok';$('actionMsg').textContent='Cuenta eliminada: '+username;loadAll()}catch(e){$('actionMsg').className='error';$('actionMsg').textContent=e.message}}
 async function check(){const t=localStorage.getItem(tokenKey);if(!t)return;if(t)try{await api('/api/admin/me');showPanel();startActivity()}catch{localStorage.removeItem(tokenKey)}}
-$('loginBtn').onclick=login;$('refresh').onclick=loadAll;$('refreshStories').onclick=loadStories;$('logout').onclick=()=>{localStorage.removeItem(tokenKey);location.reload()};$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});check();
+$('loginBtn').onclick=login;$('refresh').onclick=loadAll;$('refreshStories').onclick=loadStories;$('refreshRecordings').onclick=loadRecordings;$('logout').onclick=()=>{localStorage.removeItem(tokenKey);location.reload()};$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});check();
 </script>
 </body>
 </html>
