@@ -71,9 +71,19 @@ button,input,textarea{font:inherit}
 .messageContext{display:flex;align-items:center;gap:6px;margin-top:5px}
 .deleteBtn{border:0;background:transparent;color:#b00;font-size:11px;cursor:pointer}
 
-.messageInput{display:flex;gap:10px;padding:10px;background:#f0f2f5;border-top:1px solid #ddd}
-.messageInput input{flex:1;border:0;outline:none;border-radius:25px;padding:14px 18px}
-.send{width:50px;height:50px;border:0;border-radius:50%;background:#128c7e;color:#fff;cursor:pointer;font-size:20px}
+.messageInput{display:flex;gap:8px;padding:10px;background:#f0f2f5;border-top:1px solid #ddd;align-items:center}
+.messageInput input{flex:1;border:0;outline:none;border-radius:25px;padding:14px 18px;min-width:0}
+.attachBtn{width:50px;height:50px;border:0;border-radius:50%;background:#fff;color:#128c7e;cursor:pointer;font-size:21px;flex-shrink:0}
+.attachBtn:disabled{opacity:.5;cursor:not-allowed}
+.mediaName{font-size:12px;color:#555;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.send{width:50px;height:50px;border:0;border-radius:50%;background:#128c7e;color:#fff;cursor:pointer;font-size:20px;flex-shrink:0}
+.send:disabled{opacity:.5;cursor:not-allowed}
+.chatMedia{max-width:min(320px,70vw);border-radius:12px;margin:5px 0;display:block}
+.chatVideo{max-height:280px;background:#000}
+.chatAudio{width:min(320px,70vw);margin:5px 0}
+.fileAttachment{display:flex;align-items:center;gap:9px;padding:10px 12px;background:rgba(0,0,0,.06);border-radius:12px;text-decoration:none;color:inherit;max-width:320px}
+.fileAttachmentIcon{font-size:24px}
+.fileAttachmentName{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .back{display:none;border:0;background:transparent;font-size:25px;cursor:pointer}
 
 #notifications{position:fixed;top:15px;right:15px;z-index:9999;width:min(360px,calc(100vw - 30px))}
@@ -394,6 +404,9 @@ button,input,textarea{font:inherit}
       </div>
 
       <div class="messageInput">
+        <button id="attachButton" class="attachBtn" type="button" disabled title="Enviar archivo">📎</button>
+        <input id="fileInput" type="file" hidden accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx">
+        <span id="mediaName" class="mediaName" style="display:none"></span>
         <input id="messageInput" placeholder="Escribe un mensaje..." autocomplete="off" disabled maxlength="5000">
         <button id="sendButton" class="send" disabled>➤</button>
       </div>
@@ -637,6 +650,10 @@ const searchInput = $("searchInput");
 const messagesContainer = $("messages");
 const messageInput = $("messageInput");
 const sendButton = $("sendButton");
+const attachButton = $("attachButton");
+const fileInput = $("fileInput");
+const mediaName = $("mediaName");
+let pendingMedia = null;
 const chatTitle = $("chatTitle");
 const chatSubtitle = $("chatSubtitle");
 const headerAvatar = $("headerAvatar");
@@ -1194,6 +1211,7 @@ function openChat(
 
   messageInput.disabled = false;
   sendButton.disabled = false;
+  attachButton.disabled = false;
 
   messagesContainer.innerHTML =
     `<div class="empty">
@@ -1231,6 +1249,8 @@ socket.on("conversationBlocked",message => {
 
   messageInput.disabled = true;
   sendButton.disabled = true;
+  attachButton.disabled = true;
+  clearPendingMedia();
 });
 
 function renderConversation(username){
@@ -1291,7 +1311,7 @@ function addMessage(message){
       ? `<span class="deletedText">
            Mensaje eliminado
          </span>`
-      : esc(message.message);
+      : esc(message.message || "");
 
   bubble.innerHTML = `
     ${
@@ -1305,12 +1325,18 @@ function addMessage(message){
            </div>`
     }
 
-    <div>${text}</div>
+    ${message.message ? `<div>${text}</div>` : ""}
 
     <div class="time">
       ${time}
     </div>
   `;
+
+  if(!message.deleted && message.media){
+    const mediaWrap = document.createElement("div");
+    mediaWrap.innerHTML = mediaHtml(message);
+    bubble.insertBefore(mediaWrap.firstElementChild, bubble.querySelector(".time"));
+  }
 
   if(mine && !message.deleted){
 
@@ -1377,6 +1403,79 @@ socket.on("messageDeleted",data => {
   }
 });
 
+attachButton.onclick = () => fileInput.click();
+
+fileInput.onchange = () => {
+  const file = fileInput.files && fileInput.files[0];
+  if(!file){
+    clearPendingMedia();
+    return;
+  }
+
+  if(file.size > 7 * 1024 * 1024){
+    showNotification("Mi Chat", "El archivo no puede superar los 7 MB.");
+    clearPendingMedia();
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = String(reader.result || "");
+    if(!dataUrl.startsWith("data:")){
+      showNotification("Mi Chat", "No se pudo preparar el archivo.");
+      clearPendingMedia();
+      return;
+    }
+
+    let type = "file";
+    if(file.type.startsWith("image/")) type = "image";
+    else if(file.type.startsWith("video/")) type = "video";
+    else if(file.type.startsWith("audio/")) type = "audio";
+
+    pendingMedia = {
+      data: dataUrl,
+      mimeType: file.type || "application/octet-stream",
+      fileName: file.name,
+      type
+    };
+
+    mediaName.textContent = "📎 " + file.name;
+    mediaName.style.display = "block";
+  };
+  reader.onerror = () => {
+    showNotification("Mi Chat", "No se pudo leer el archivo.");
+    clearPendingMedia();
+  };
+  reader.readAsDataURL(file);
+};
+
+function clearPendingMedia(){
+  pendingMedia = null;
+  fileInput.value = "";
+  mediaName.textContent = "";
+  mediaName.style.display = "none";
+}
+
+function mediaHtml(message){
+  const src = esc(message.media || "");
+  const name = esc(message.fileName || "archivo");
+  const mime = String(message.mimeType || "");
+
+  if(message.type === "image" || mime.startsWith("image/")){
+    return `<img class="chatMedia" src="${src}" alt="${name}" loading="lazy">`;
+  }
+
+  if(message.type === "video" || mime.startsWith("video/")){
+    return `<video class="chatMedia chatVideo" src="${src}" controls playsinline preload="metadata"></video>`;
+  }
+
+  if(message.type === "audio" || mime.startsWith("audio/")){
+    return `<audio class="chatAudio" src="${src}" controls preload="metadata"></audio>`;
+  }
+
+  return `<a class="fileAttachment" href="${src}" download="${name}"><span class="fileAttachmentIcon">📎</span><span class="fileAttachmentName">${name}</span></a>`;
+}
+
 sendButton.onclick = sendMessage;
 
 messageInput.onkeydown = event => {
@@ -1390,7 +1489,7 @@ function sendMessage(){
   const text =
     messageInput.value.trim();
 
-  if(!text || !selectedUser){
+  if((!text && !pendingMedia) || !selectedUser){
     return;
   }
 
@@ -1398,11 +1497,13 @@ function sendMessage(){
     "privateMessage",
     {
       to:selectedUser,
-      message:text
+      message:text,
+      media:pendingMedia
     }
   );
 
   messageInput.value = "";
+  clearPendingMedia();
 }
 
 socket.on("messageSent",message => {
