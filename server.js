@@ -1,4 +1,3 @@
-
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -24,6 +23,34 @@ const FCM_FILE = path.join(DATA_DIR, "fcm.json");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
+// =====================================================
+// SUPABASE / PERSISTENCIA
+// =====================================================
+// Render Free tiene almacenamiento de archivos efímero.
+// Guardamos el estado persistente mediante la Data API de Supabase
+// para no depender de DATABASE_URL, pg ni de un pooler de PostgreSQL.
+
+const SUPABASE_URL = String(process.env.SUPABASE_URL || "")
+  .replace(/\/rest\/v1\/?$/i, "")
+  .replace(/\/$/, "");
+const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || "";
+
+const STATE_FILES = {
+  "users.json": [],
+  "messages.json": [],
+  "sessions.json": {},
+  "push.json": [],
+  "stories.json": [],
+  "fcm.json": {}
+};
+
+let supabaseAvailable = false;
+let supabaseReadyResolve;
+const supabaseReady = new Promise(resolve => {
+  supabaseReadyResolve = resolve;
+});
+let supabaseWriteQueue = Promise.resolve();
+
 function ensure(file, value) {
   if (!fs.existsSync(file)) {
     fs.writeFileSync(file, JSON.stringify(value, null, 2), "utf8");
@@ -45,8 +72,161 @@ function read(file, fallback) {
   }
 }
 
+function stateKey(file) {
+  return path.basename(file);
+}
+
+async function supabaseRequest(pathname, options = {}) {
+  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
+    throw new Error("SUPABASE_URL/SUPABASE_SECRET_KEY no configuradas.");
+  }
+
+  const response = await fetch(
+    SUPABASE_URL + "/rest/v1/" + pathname,
+    {
+      ...options,
+      headers: {
+        apikey: SUPABASE_SECRET_KEY,
+        Authorization: "Bearer " + SUPABASE_SECRET_KEY,
+        "Content-Type": "application/json",
+        ...(options.headers || {})
+      }
+    }
+  );
+
+  const text = await response.text();
+  let data = null;
+
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
+
+  if (!response.ok) {
+    const message =
+      typeof data === "string"
+        ? data
+        : data?.message || data?.hint || JSON.stringify(data);
+
+    throw new Error(
+      `Supabase HTTP ${response.status}: ${message}`
+    );
+  }
+
+  return data;
+}
+
+function queueSupabasePersist(file, data) {
+  const key = stateKey(file);
+
+  supabaseWriteQueue = supabaseWriteQueue
+    .then(async () => {
+      const ready = await supabaseReady;
+      if (!ready) return;
+
+      await supabaseRequest(
+        "michat_state?on_conflict=state_key",
+        {
+          method: "POST",
+          headers: {
+            Prefer: "resolution=merge-duplicates,return=minimal"
+          },
+          body: JSON.stringify([
+            {
+              state_key: key,
+              state_data: data,
+              updated_at: new Date().toISOString()
+            }
+          ])
+        }
+      );
+    })
+    .catch(error => {
+      console.error(
+        `Error guardando ${key} en Supabase:`,
+        error.message
+      );
+    });
+}
+
 function write(file, data) {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
+  fs.writeFileSync(
+    file,
+    JSON.stringify(data, null, 2),
+    "utf8"
+  );
+
+  queueSupabasePersist(file, data);
+}
+
+async function initializeDatabase() {
+  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
+    console.log(
+      "SUPABASE_URL/SUPABASE_SECRET_KEY no configuradas. Se usará almacenamiento local temporal."
+    );
+    supabaseReadyResolve(false);
+    return;
+  }
+
+  try {
+    // La tabla michat_state se crea una vez desde el SQL de configuración.
+    // Aquí solo comprobamos que la Data API puede leerla.
+    const rows = await supabaseRequest(
+      "michat_state?select=state_key,state_data,updated_at"
+    );
+
+    const byKey = new Map(
+      (Array.isArray(rows) ? rows : []).map(row => [
+        row.state_key,
+        row
+      ])
+    );
+
+    for (const [key, fallback] of Object.entries(STATE_FILES)) {
+      const file = path.join(DATA_DIR, key);
+      const local = read(file, fallback);
+      const remote = byKey.get(key);
+
+      if (remote) {
+        fs.writeFileSync(
+          file,
+          JSON.stringify(remote.state_data, null, 2),
+          "utf8"
+        );
+        console.log(`Supabase -> ${key}`);
+      } else {
+        await supabaseRequest(
+          "michat_state?on_conflict=state_key",
+          {
+            method: "POST",
+            headers: {
+              Prefer: "resolution=merge-duplicates,return=minimal"
+            },
+            body: JSON.stringify([
+              {
+                state_key: key,
+                state_data: local,
+                updated_at: new Date().toISOString()
+              }
+            ])
+          }
+        );
+        console.log(`Migrado a Supabase -> ${key}`);
+      }
+    }
+
+    supabaseAvailable = true;
+    supabaseReadyResolve(true);
+    console.log("Supabase conectado y datos persistentes activos.");
+  } catch (error) {
+    supabaseAvailable = false;
+    supabaseReadyResolve(false);
+    console.error("Supabase no disponible:", error.message);
+    console.log("El servidor continuará con almacenamiento local temporal.");
+  }
 }
 
 function users() {
@@ -131,32 +311,116 @@ function validPassword(password, salt, hash) {
   }
 }
 
+// =====================================================
+// SESIONES
+// =====================================================
+//
+// Las sesiones nuevas usan un token firmado para que una
+// recarga/reinicio del servicio de Render no invalide la
+// sesión por depender de sessions.json.
+// Se mantiene compatibilidad con los tokens antiguos.
+
+const SESSION_SECRET =
+  process.env.SESSION_SECRET ||
+  "michat-session-secret-change-this-in-render";
+
+function createSessionToken(username) {
+  const payload = Buffer
+    .from(JSON.stringify({
+      username: norm(username),
+      createdAt: Date.now()
+    }))
+    .toString("base64url");
+
+  const signature = crypto
+    .createHmac("sha256", SESSION_SECRET)
+    .update(payload)
+    .digest("base64url");
+
+  return payload + "." + signature;
+}
+
+function verifySessionToken(token) {
+  if (!token || typeof token !== "string") {
+    return null;
+  }
+
+  const parts = token.split(".");
+
+  if (parts.length !== 2) {
+    return null;
+  }
+
+  const [payload, signature] = parts;
+
+  const expected = crypto
+    .createHmac("sha256", SESSION_SECRET)
+    .update(payload)
+    .digest("base64url");
+
+  const a = Buffer.from(signature);
+  const b = Buffer.from(expected);
+
+  if (a.length !== b.length) {
+    return null;
+  }
+
+  try {
+    if (!crypto.timingSafeEqual(a, b)) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  try {
+    const data = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8")
+    );
+
+    if (!data || !data.username) {
+      return null;
+    }
+
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 function newSession(username) {
-  const data = sessions();
-  const token = crypto.randomBytes(32).toString("hex");
-
-  data[token] = {
-    username,
-    createdAt: Date.now()
-  };
-
-  saveSessions(data);
-  return token;
+  return createSessionToken(username);
 }
 
 function sessionUser(token) {
   if (!token) return null;
 
-  const s = sessions()[token];
-  if (!s) return null;
+  // Tokens nuevos: no dependen de sessions.json.
+  const signed = verifySessionToken(token);
 
-  return getUser(s.username);
+  if (signed) {
+    return getUser(signed.username);
+  }
+
+  // Compatibilidad con sesiones antiguas ya creadas.
+  const legacy = sessions()[token];
+
+  if (!legacy) return null;
+
+  return getUser(legacy.username);
 }
 
 function deleteSession(token) {
+  // Los tokens nuevos no se almacenan en disco.
+  // Borramos también los antiguos por compatibilidad.
+  if (!token) return;
+
   const data = sessions();
-  delete data[token];
-  saveSessions(data);
+
+  if (Object.prototype.hasOwnProperty.call(data, token)) {
+    delete data[token];
+    saveSessions(data);
+  }
 }
 
 function authToken(req) {
@@ -168,151 +432,6 @@ app.use(express.json({ limit: "12mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 const online = new Map();
-
-// =====================================================
-// MI CHAT ADMIN
-// =====================================================
-
-const ADMIN_USERNAME = String(process.env.ADMIN_USERNAME || "admin").trim();
-const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || "").trim();
-const ADMIN_SESSION_SECRET = String(process.env.ADMIN_SESSION_SECRET || "CAMBIA-ESTA-CLAVE-ADMIN-EN-RENDER");
-const ADMIN_SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
-
-function createAdminToken() {
-  const payload = Buffer.from(JSON.stringify({
-    username: ADMIN_USERNAME,
-    createdAt: Date.now()
-  })).toString("base64url");
-  const signature = crypto.createHmac("sha256", ADMIN_SESSION_SECRET).update(payload).digest("base64url");
-  return payload + "." + signature;
-}
-
-function verifyAdminToken(token) {
-  if (!token || typeof token !== "string") return null;
-  const parts = token.split(".");
-  if (parts.length !== 2) return null;
-  const payload = parts[0];
-  const signature = parts[1];
-  const expected = crypto.createHmac("sha256", ADMIN_SESSION_SECRET).update(payload).digest("base64url");
-  const a = Buffer.from(signature);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return null;
-  try {
-    if (!crypto.timingSafeEqual(a, b)) return null;
-  } catch {
-    return null;
-  }
-  try {
-    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    if (!data || data.username !== ADMIN_USERNAME) return null;
-    if (!data.createdAt || Date.now() - Number(data.createdAt) > ADMIN_SESSION_MAX_AGE) return null;
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-function adminToken(req) {
-  const authorization = req.headers.authorization || "";
-  return authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
-}
-
-function requireAdmin(req, res, next) {
-  const admin = verifyAdminToken(adminToken(req));
-  if (!admin) {
-    return res.status(401).json({ error: "Sesión de administrador no válida." });
-  }
-  req.admin = admin;
-  next();
-}
-
-app.post("/api/admin/login", (req, res) => {
-  const username = String(req.body?.username || "").trim();
-  const password = String(req.body?.password || "");
-  if (!ADMIN_PASSWORD) {
-    console.error("ADMIN_PASSWORD no está configurada en Render.");
-    return res.status(500).json({ error: "El administrador no está configurado en el servidor." });
-  }
-  if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: "Usuario o contraseña de administrador incorrectos." });
-  }
-  res.json({ success: true, token: createAdminToken(), username: ADMIN_USERNAME });
-});
-
-app.get("/api/admin/me", requireAdmin, (req, res) => {
-  res.json({ loggedIn: true, username: req.admin.username });
-});
-
-app.post("/api/admin/logout", requireAdmin, (req, res) => {
-  res.json({ success: true });
-});
-
-app.get("/api/admin/stats", requireAdmin, (req, res) => {
-  const userList = users();
-  const messageList = messages();
-  const storyList = cleanExpiredStories();
-  const onlineUsers = new Set([...online.values()].map(name => norm(name)));
-  res.json({ users: userList.length, messages: messageList.length, stories: storyList.length, online: onlineUsers.size });
-});
-
-app.get("/api/admin/users", requireAdmin, (req, res) => {
-  const onlineUsers = new Set([...online.values()].map(name => norm(name)));
-  const result = users().map(user => ({
-    username: user.username,
-    displayName: user.displayName || user.username,
-    profileImage: user.profileImage || "",
-    online: onlineUsers.has(norm(user.username)),
-    createdAt: user.createdAt || null,
-    contacts: Array.isArray(user.contacts) ? user.contacts.length : 0
-  }));
-  result.sort((a, b) => {
-    if (a.online && !b.online) return -1;
-    if (!a.online && b.online) return 1;
-    return String(a.username).localeCompare(String(b.username));
-  });
-  res.json(result);
-});
-
-app.get("/api/admin/users/:username/stories", requireAdmin, (req, res) => {
-  const username = norm(req.params.username);
-  if (!getUser(username)) return res.status(404).json({ error: "Usuario no encontrado." });
-  res.json(cleanExpiredStories().filter(story => norm(story.username) === username));
-});
-
-app.get("/api/admin/stories", requireAdmin, (req, res) => {
-  const list = cleanExpiredStories();
-  list.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
-  res.json(list);
-});
-
-app.delete("/api/admin/stories/:id", requireAdmin, (req, res) => {
-  const id = String(req.params.id || "");
-  if (!id) return res.status(400).json({ error: "ID de estado inválido." });
-  const list = cleanExpiredStories();
-  const index = list.findIndex(story => String(story.id) === id);
-  if (index < 0) return res.status(404).json({ error: "Estado no encontrado." });
-  const removed = list.splice(index, 1)[0];
-  saveStories(list);
-  io.emit("storyDeleted", { id: removed.id });
-  io.emit("storiesUpdated", list);
-  console.log("Administrador eliminó el estado " + removed.id + " de " + removed.username);
-  res.json({ success: true });
-});
-
-app.get("/api/admin/messages", requireAdmin, (req, res) => {
-  let limit = Number(req.query.limit || 100);
-  if (!Number.isFinite(limit)) limit = 100;
-  limit = Math.max(1, Math.min(limit, 500));
-  res.json(messages().slice(-limit).reverse());
-});
-
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "admin", "index.html"));
-});
-
-app.get("/admin/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "admin", "index.html"));
-});
 
 // =====================================================
 // PUSH / FIREBASE
@@ -384,59 +503,61 @@ async function sendFcmToUser(username, payload) {
   const key = norm(username);
 
   const tokens = Array.isArray(data[key])
-    ? data[key]
+    ? data[key].filter(Boolean)
     : [];
 
   if (!tokens.length) {
-    console.log(
-      `No hay tokens FCM registrados para ${key}.`
-    );
+    console.log(`No hay tokens FCM registrados para ${key}.`);
     return;
   }
 
   const title = String(
-    payload.title ||
-    payload.from ||
+    payload?.title ||
+    payload?.from ||
     "Mi Chat"
   );
 
   const body = String(
-    payload.body ||
-    payload.message ||
+    payload?.body ||
+    payload?.message ||
     ""
   );
 
+  const type = String(payload?.type || "message");
+
   const message = {
     tokens,
-
-    notification: {
-      title,
-      body
-    },
-
     data: {
-      type: String(payload.type || "message"),
-      username: String(payload.username || ""),
-      from: String(payload.from || ""),
+      type,
+      username: String(payload?.username || ""),
+      sender: String(payload?.sender || payload?.from || ""),
       body,
       message: body
     },
-
     android: {
-      priority: "high",
-      notification: {
-        channelId: "michat_messages"
-      }
+      priority: "high"
     }
   };
 
-  try {
-    console.log(
-      `Enviando FCM a ${key}. Tokens: ${tokens.length}`
-    );
+  // Las llamadas se envían como data-only para que
+  // MyFirebaseMessagingService controle el tono y los botones
+  // Contestar / Colgar incluso con la app cerrada.
+  if (type !== "call") {
+    message.notification = {
+      title,
+      body
+    };
 
-    const result =
-      await getMessaging().sendEachForMulticast(message);
+    message.android.notification = {
+      channelId: "michat_messages",
+      sound: "default"
+    };
+  }
+
+  try {
+    console.log(`Enviando FCM a ${key}. Tokens: ${tokens.length}`);
+
+    const result = await getMessaging().sendEachForMulticast(message);
 
     console.log(
       `FCM enviado a ${key}: éxito=${result.successCount}, errores=${result.failureCount}`
@@ -446,29 +567,33 @@ async function sendFcmToUser(username, payload) {
       const invalid = new Set();
 
       result.responses.forEach((response, index) => {
-        if (!response.success) {
-          console.error(
-            `ERROR FCM DETALLADO [${index}]:`,
-            response.error?.code || "sin-código",
-            response.error?.message || "sin-mensaje"
-          );
+        if (response.success) {
+          console.log(`FCM OK [${index}] para ${key}`);
+          return;
+        }
 
-          const code = response.error?.code;
+        const error = response.error;
+        const code = error?.code || "sin-código";
+        const messageText = error?.message || "sin-mensaje";
 
-          if (
-            code === "messaging/registration-token-not-registered" ||
-            code === "messaging/invalid-registration-token"
-          ) {
-            invalid.add(tokens[index]);
-          }
+        console.error(`ERROR FCM DETALLADO [${index}] para ${key}:`);
+        console.error(`Código: ${code}`);
+        console.error(`Mensaje: ${messageText}`);
+
+        if (error?.details) {
+          console.error("Detalles:", error.details);
+        }
+
+        if (
+          code === "messaging/registration-token-not-registered" ||
+          code === "messaging/invalid-registration-token"
+        ) {
+          invalid.add(tokens[index]);
         }
       });
 
-      if (invalid.size) {
-        data[key] = tokens.filter(
-          token => !invalid.has(token)
-        );
-
+      if (invalid.size > 0) {
+        data[key] = tokens.filter(token => !invalid.has(token));
         saveFcmTokens(data);
 
         console.log(
@@ -477,11 +602,12 @@ async function sendFcmToUser(username, payload) {
       }
     }
   } catch (error) {
-    console.error(
-      "FCM send error:",
-      error?.code || "sin-código",
-      error?.message || error
-    );
+    console.error("FCM send error:");
+    console.error("Código:", error?.code || "sin-código");
+    console.error("Mensaje:", error?.message || error);
+    if (error?.stack) {
+      console.error(error.stack);
+    }
   }
 }
 
@@ -702,7 +828,8 @@ app.get("/api/session", (req, res) => {
 
   res.json({
     loggedIn: true,
-    username: u.displayName,
+    username: u.username,
+    displayName: u.displayName,
     profileImage:
       u.profileImage || ""
   });
@@ -1510,6 +1637,8 @@ io.on("connection", socket => {
       "authenticated",
       {
         username:
+          u.username,
+        displayName:
           u.displayName,
         profileImage:
           u.profileImage || ""
@@ -2617,17 +2746,21 @@ setInterval(() => {
 }, 60 * 1000);
 
 // =====================================================
-```js
-// =====================================================
 // INDEX
 // =====================================================
 
 app.get("/{*splat}", (req, res, next) => {
-  if (req.path.startsWith("/api/")) {
+  if (
+    req.path.startsWith("/api/")
+  ) {
     return next();
   }
 
-  if (req.path.startsWith("/socket.io/")) {
+  if (
+    req.path.startsWith(
+      "/socket.io/"
+    )
+  ) {
     return next();
   }
 
@@ -2640,9 +2773,19 @@ app.get("/{*splat}", (req, res, next) => {
   );
 });
 
-server.listen(
-  PORT,
-  "0.0.0.0",
-  () => {
-    console.log(
-      `Mi Chat funcionando en http://localhost:${PORT}
+(async () => {
+  await initializeDatabase();
+
+  server.listen(
+    PORT,
+    "0.0.0.0",
+    () => {
+      console.log(
+        `Mi Chat funcionando en http://localhost:${PORT}`
+      );
+      console.log(
+        `Persistencia: ${supabaseAvailable ? "Supabase activa" : "local temporal"}`
+      );
+    }
+  );
+})();
