@@ -1,0 +1,4157 @@
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Mi Chat</title>
+
+<script src="/socket.io/socket.io.js"></script>
+
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;height:100vh;overflow:hidden;background:#f0f2f5}
+button,input,textarea{font:inherit}
+.hidden{display:none!important}
+
+#authScreen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(135deg,#128c7e,#075e54)}
+.authBox{width:100%;max-width:420px;padding:30px;background:#fff;border-radius:20px;text-align:center;box-shadow:0 15px 40px rgba(0,0,0,.25)}
+.authInput{width:100%;padding:14px;margin:7px 0;border:1px solid #ddd;border-radius:10px;outline:none}
+.authButton{width:100%;padding:14px;margin-top:8px;border:0;border-radius:10px;background:#128c7e;color:#fff;font-weight:bold;cursor:pointer}
+.switchButton{border:0;background:transparent;color:#075e54;cursor:pointer;margin-top:15px}
+#authError{min-height:22px;margin-top:10px;color:#c00}
+
+#app{display:none;height:100vh}
+.layout{display:flex;height:100%;max-width:1500px;margin:auto;background:#fff}
+
+.sidebar{width:350px;border-right:1px solid #ddd;display:flex;flex-direction:column;background:#fff}
+.sidebarHeader{padding:15px;background:#075e54;color:#fff}
+.headerTop{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.headerTop h2{margin:0}
+.topButtons{display:flex;gap:6px}
+.smallBtn{border:0;border-radius:8px;padding:7px 10px;background:rgba(255,255,255,.14);color:#fff;cursor:pointer}
+
+.actions{padding:10px;border-bottom:1px solid #ddd}
+.actionBtn{width:100%;border:0;border-radius:10px;padding:11px;cursor:pointer;background:#25d366;color:#fff;font-weight:bold}
+
+.search{padding:10px;border-bottom:1px solid #ddd}
+.search input{width:100%;border:0;outline:none;padding:12px 14px;border-radius:20px;background:#f0f2f5}
+#users{flex:1;overflow-y:auto}
+
+.user{display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid #eee}
+.avatar{width:45px;height:45px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#128c7e;color:#fff;font-weight:bold;overflow:hidden}
+.avatar img{width:100%;height:100%;object-fit:cover}
+.userInfo{flex:1;min-width:0}
+.userName{font-weight:bold}
+.userSub{margin-top:3px;font-size:12px;color:#777}
+.statusRow{display:flex;justify-content:space-between;align-items:center;gap:5px}
+.online{color:#18a558}
+.offline{color:#999}
+.badge{min-width:21px;height:21px;padding:0 6px;display:flex;align-items:center;justify-content:center;border-radius:20px;background:#25d366;color:#fff;font-size:12px;font-weight:bold}
+
+.chat{flex:1;min-width:0;display:flex;flex-direction:column}
+.chatHeader{height:70px;padding:12px 18px;border-bottom:1px solid #ddd;display:flex;align-items:center;gap:12px}
+.chatInfo{flex:1;min-width:0}
+.chatTitle{font-weight:bold}
+.chatSubtitle{margin-top:3px;font-size:13px;color:#777}
+.chatTools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.toolBtn{border:0;background:#f0f2f5;border-radius:8px;padding:7px 9px;cursor:pointer}
+.callBtn{background:#25d366;color:#fff}
+.hangBtn{background:#b00020;color:#fff}
+
+#messages{flex:1;overflow-y:auto;padding:20px;background:#e5ddd5}
+.empty{height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:#666}
+.messageRow{display:flex;margin:7px 0}
+.mine{justify-content:flex-end}
+.bubble{max-width:75%;padding:9px 12px;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.15);word-break:break-word}
+.mine .bubble{background:#d9fdd3}
+.from{margin-bottom:4px;color:#666;font-size:11px;font-weight:bold}
+.time{margin-top:5px;color:#777;font-size:10px;text-align:right}
+.deletedText{font-style:italic;color:#777}
+.messageContext{display:flex;align-items:center;gap:6px;margin-top:5px}
+.deleteBtn{border:0;background:transparent;color:#b00;font-size:11px;cursor:pointer}
+
+.messageInput{display:flex;gap:10px;padding:10px;background:#f0f2f5;border-top:1px solid #ddd}
+.messageInput input{flex:1;border:0;outline:none;border-radius:25px;padding:14px 18px}
+.send{width:50px;height:50px;border:0;border-radius:50%;background:#128c7e;color:#fff;cursor:pointer;font-size:20px}
+.back{display:none;border:0;background:transparent;font-size:25px;cursor:pointer}
+
+#notifications{position:fixed;top:15px;right:15px;z-index:9999;width:min(360px,calc(100vw - 30px))}
+.notification{padding:14px;margin-bottom:10px;background:#fff;border-left:5px solid #25d366;border-radius:14px;box-shadow:0 6px 25px rgba(0,0,0,.2);cursor:pointer}
+.notificationTitle{font-weight:bold;margin-bottom:5px}
+.notificationText{color:#555;font-size:14px}
+
+.modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.45);z-index:5000}
+.modalBox{width:100%;max-width:440px;background:#fff;border-radius:18px;padding:25px}
+.modalBox h2{margin-top:0}
+.modalInput{width:100%;padding:13px;border:1px solid #ddd;border-radius:10px;outline:none;margin:6px 0}
+.modalRow{display:flex;gap:10px;margin-top:12px}
+.modalRow button{flex:1;padding:12px;border:0;border-radius:10px;cursor:pointer}
+.primary{background:#128c7e;color:#fff}
+.danger{background:#b00020;color:#fff}
+.muted{background:#eee}
+.modalError{min-height:20px;color:#c00;font-size:14px;margin-top:7px}
+
+.profilePreview{width:90px;height:90px;border-radius:50%;background:#ddd;overflow:hidden;margin:10px auto}
+.profilePreview img{width:100%;height:100%;object-fit:cover}
+.blockList{max-height:220px;overflow:auto;margin-top:10px}
+.blockItem{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #eee}
+
+.settingsMenu{display:grid;gap:10px}
+.settingsItem{width:100%;text-align:left;border:0;background:#f5f5f5;border-radius:12px;padding:14px;cursor:pointer}
+.settingsItemTitle{font-weight:bold}
+.settingsItemSub{font-size:12px;color:#777;margin-top:3px}
+
+.storiesBar{padding:10px;border-bottom:1px solid #ddd;display:flex;gap:10px;overflow-x:auto;background:#fff}
+.storyItem{border:0;background:transparent;min-width:62px;width:62px;padding:0;cursor:pointer}
+.storyRing{width:58px;height:58px;border-radius:50%;padding:3px;background:linear-gradient(135deg,#25d366,#128c7e,#075e54)}
+.storyRing.seen{background:#b8b8b8}
+.storySeenLabel{font-size:9px;color:#777;margin-top:2px}
+.storyAvatar{width:100%;height:100%;border-radius:50%;overflow:hidden;background:#eee;display:flex;align-items:center;justify-content:center;border:3px solid #fff;font-weight:bold;color:#075e54}
+.storyAvatar img{width:100%;height:100%;object-fit:cover}
+.storyLabel{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
+.storyAdd{font-size:30px;color:#128c7e}
+.storyModal .modalBox{max-width:520px;padding:18px}
+.storyComposer{display:grid;gap:10px}
+.storyComposer textarea{width:100%;min-height:140px;resize:none;border:1px solid #ddd;border-radius:12px;padding:14px;outline:none}
+.storyPreview{min-height:260px;border-radius:16px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#075e54;color:#fff;font-size:26px;text-align:center;padding:25px;word-break:break-word}
+.storyPreview img{width:100%;height:100%;object-fit:cover}
+.storyTypeRow{display:flex;gap:8px}
+.storyTypeRow button{flex:1;padding:10px;border:0;border-radius:10px;background:#eee;cursor:pointer}
+.storyTypeRow .active{background:#128c7e;color:#fff}
+
+.storyViewer{position:relative;background:#111;color:#fff;width:min(520px,95vw);height:min(800px,90vh);border-radius:16px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.storyViewer img{width:100%;height:100%;object-fit:contain}
+.storyViewerText{font-size:32px;padding:35px;text-align:center;word-break:break-word}
+.storyClose{position:absolute;right:12px;top:10px;z-index:2;border:0;background:rgba(0,0,0,.45);color:#fff;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:20px}
+.storyNav{position:absolute;inset:0;display:flex;z-index:1}
+.storyNav button{flex:1;border:0;background:transparent;cursor:pointer}
+.storyProgress{position:absolute;top:8px;left:8px;right:8px;z-index:2;height:3px;background:rgba(255,255,255,.35);border-radius:3px}
+.storyProgress span{display:block;height:100%;background:#fff;border-radius:3px;width:0}
+.storyMeta{position:absolute;left:14px;top:18px;z-index:2;display:flex;align-items:center;gap:8px;text-shadow:0 1px 3px #000}
+.storyMeta .avatar{width:34px;height:34px}
+.storyViews{position:absolute;left:14px;bottom:14px;z-index:2;padding:8px 10px;border-radius:10px;background:rgba(0,0,0,.45);font-size:12px;max-width:80%}
+.storyDelete{position:absolute;bottom:14px;right:14px;z-index:2;border:0;border-radius:10px;padding:9px 12px;background:rgba(176,0,32,.9);color:#fff;cursor:pointer}
+
+
+
+/* =====================================================
+   PANTALLA DE LLAMADA ACTIVA
+===================================================== */
+.activeCallScreen{
+  position:fixed;
+  inset:0;
+  z-index:100000;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  background:linear-gradient(180deg,#075e54 0%,#063f3a 42%,#111827 100%);
+  color:#fff;
+}
+
+.activeCallScreen.visible{
+  display:flex;
+}
+
+.activeCallContent{
+  width:100%;
+  max-width:520px;
+  min-height:100%;
+  min-height:100dvh;
+  padding:42px 24px 32px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  text-align:center;
+}
+
+.activeCallTopLabel{
+  font-size:14px;
+  opacity:.82;
+  letter-spacing:.3px;
+}
+
+.activeCallAvatar{
+  width:118px;
+  height:118px;
+  margin-top:30px;
+  border-radius:50%;
+  overflow:hidden;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#128c7e;
+  border:4px solid rgba(255,255,255,.22);
+  box-shadow:0 12px 35px rgba(0,0,0,.30);
+  flex-shrink:0;
+}
+
+.activeCallAvatar img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+
+.activeCallAvatarLetter{
+  font-size:52px;
+  font-weight:bold;
+}
+
+.activeCallName{
+  margin-top:22px;
+  font-size:28px;
+  line-height:1.2;
+  font-weight:700;
+  word-break:break-word;
+}
+
+.activeCallStatus{
+  margin-top:9px;
+  font-size:16px;
+  opacity:.84;
+}
+
+.activeCallTimer{
+  margin-top:7px;
+  font-size:17px;
+  opacity:.82;
+  font-variant-numeric:tabular-nums;
+  min-height:21px;
+}
+
+.activeCallFill{
+  flex:1;
+  min-height:30px;
+}
+
+.activeCallControls{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  margin-bottom:28px;
+}
+
+.activeCallControl{
+  width:82px;
+  height:82px;
+  border:0;
+  border-radius:50%;
+  background:rgba(255,255,255,.15);
+  color:#fff;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+  cursor:pointer;
+  box-shadow:0 6px 20px rgba(0,0,0,.16);
+  -webkit-tap-highlight-color:transparent;
+}
+
+.activeCallControl:active{
+  transform:scale(.95);
+}
+
+.activeCallControl.active{
+  background:#fff;
+  color:#111827;
+}
+
+.activeCallControlIcon{
+  font-size:27px;
+  line-height:1;
+}
+
+.activeCallControlText{
+  font-size:11px;
+  opacity:.95;
+}
+
+.activeCallHangup{
+  width:82px;
+  height:82px;
+  border:0;
+  border-radius:50%;
+  background:#ef4444;
+  color:#fff;
+  font-size:32px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transform:rotate(135deg);
+  box-shadow:0 10px 28px rgba(0,0,0,.28);
+  -webkit-tap-highlight-color:transparent;
+}
+
+.activeCallHangup:active{
+  transform:rotate(135deg) scale(.95);
+}
+
+.activeCallHangupText{
+  margin-top:9px;
+  font-size:12px;
+  opacity:.82;
+}
+
+@media(max-width:420px){
+  .activeCallContent{padding:35px 18px 26px}
+  .activeCallAvatar{width:104px;height:104px}
+  .activeCallName{font-size:24px}
+  .activeCallControl{width:74px;height:74px}
+  .activeCallHangup{width:76px;height:76px}
+}
+
+@media(max-width:800px){
+  .sidebar{width:100%}
+  .chat{display:none}
+  .mobileChat .sidebar{display:none}
+  .mobileChat .chat{display:flex}
+  .back{display:block}
+}
+</style>
+</head>
+
+<body>
+
+<div id="authScreen">
+  <div class="authBox">
+    <h1>💬 Mi Chat</h1>
+    <div id="authDescription">Inicia sesión para entrar.</div>
+
+    <input id="authUsername" class="authInput" placeholder="Nombre de usuario" maxlength="24" autocomplete="username">
+    <input id="authPassword" class="authInput" type="password" placeholder="Contraseña" autocomplete="current-password">
+
+    <button id="authButton" class="authButton">Iniciar sesión</button>
+    <button id="switchAuth" class="switchButton">Crear una cuenta</button>
+    <div id="authError"></div>
+  </div>
+</div>
+
+<div id="app">
+  <div id="layout" class="layout">
+
+    <aside class="sidebar">
+
+      <div class="sidebarHeader">
+        <div class="headerTop">
+          <h2>💬 Mi Chat</h2>
+
+          <div class="topButtons">
+            <button class="smallBtn" id="settingsButton">⚙️</button>
+            <button class="smallBtn" id="logoutButton">Salir</button>
+          </div>
+        </div>
+
+        <div class="onlineCount">
+          <span id="onlineCount">0</span> en línea
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="actionBtn" id="newChatButton">
+          ➕ Añadir contacto
+        </button>
+      </div>
+
+      <div id="storiesBar" class="storiesBar"></div>
+
+      <div class="search">
+        <input id="searchInput" placeholder="Buscar usuarios..." autocomplete="off">
+      </div>
+
+      <div id="users"></div>
+    </aside>
+
+    <main class="chat">
+
+      <header class="chatHeader">
+
+        <button id="backButton" class="back">←</button>
+
+        <div id="headerAvatar" class="avatar">?</div>
+
+        <div class="chatInfo">
+          <div id="chatTitle" class="chatTitle">
+            Selecciona una conversación
+          </div>
+
+          <div id="chatSubtitle" class="chatSubtitle">
+            Usa «Nuevo chat» para iniciar una conversación.
+          </div>
+        </div>
+
+        <div class="chatTools">
+          <button id="callButton" class="toolBtn callBtn hidden">📞 Llamar</button>
+          <button id="hangupButton" class="toolBtn hangBtn hidden">📵 Colgar</button>
+          <button id="blockCurrentButton" class="toolBtn hidden">🚫 Bloquear</button>
+        </div>
+
+      </header>
+
+      <div id="messages">
+        <div class="empty">Aquí aparecerán tus mensajes.</div>
+      </div>
+
+      <div class="messageInput">
+        <input id="messageInput" placeholder="Escribe un mensaje..." autocomplete="off" disabled maxlength="5000">
+        <button id="sendButton" class="send" disabled>➤</button>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<div id="notifications"></div>
+
+<!-- NUEVO CHAT -->
+<div id="newChatModal" class="modal">
+  <div class="modalBox">
+    <h2>➕ Añadir contacto</h2>
+    <p>Escribe el nombre de usuario para añadirlo a tus contactos.</p>
+
+    <input id="newChatUsername" class="modalInput" placeholder="ejemplo: pedro123">
+
+    <div id="newChatError" class="modalError"></div>
+
+    <div class="modalRow">
+      <button id="cancelNewChat" class="muted">Cancelar</button>
+      <button id="contactButton" class="primary">Añadir</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIGURACIÓN -->
+<div id="settingsModal" class="modal">
+  <div class="modalBox">
+    <h2>⚙️ Configuración</h2>
+
+    <div class="settingsMenu">
+
+      <button id="settingsProfile" class="settingsItem">
+        <div class="settingsItemTitle">👤 Nombre y foto</div>
+        <div class="settingsItemSub">
+          Cambiar tu nombre para mostrar y tu foto de perfil.
+        </div>
+      </button>
+
+      <button id="settingsBlocked" class="settingsItem">
+        <div class="settingsItemTitle">🚫 Usuarios bloqueados</div>
+        <div class="settingsItemSub">
+          Ver y desbloquear usuarios que hayas bloqueado.
+        </div>
+      </button>
+
+      <button id="settingsPush" class="settingsItem">
+        <div class="settingsItemTitle">🔔 Notificaciones</div>
+        <div class="settingsItemSub">
+          Activar las notificaciones cuando recibas mensajes o llamadas.
+        </div>
+      </button>
+
+    </div>
+
+    <div class="modalRow">
+      <button id="closeSettings" class="muted">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- PERFIL -->
+<div id="profileModal" class="modal">
+  <div class="modalBox">
+    <h2>👤 Mi perfil</h2>
+
+    <div class="profilePreview" id="profilePreview"></div>
+
+    <input id="profileName" class="modalInput" placeholder="Nombre para mostrar" maxlength="24">
+    <input id="profileFile" class="modalInput" type="file" accept="image/*">
+
+    <div class="modalRow">
+      <button id="cancelProfile" class="muted">Cancelar</button>
+      <button id="saveProfile" class="primary">Guardar</button>
+    </div>
+
+    <div id="profileError" class="modalError"></div>
+  </div>
+</div>
+
+<!-- BLOQUEADOS -->
+<div id="blockedModal" class="modal">
+  <div class="modalBox">
+    <h2>🚫 Usuarios bloqueados</h2>
+
+    <div id="blockedList" class="blockList"></div>
+
+    <div class="modalRow">
+      <button id="closeBlocked" class="muted">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- HISTORIA -->
+<div id="storyCreateModal" class="modal storyModal">
+  <div class="modalBox">
+
+    <h2>📸 Crear historia</h2>
+
+    <div class="storyTypeRow">
+      <button id="storyTextType" class="active">📝 Texto</button>
+      <button id="storyImageType">🖼️ Foto</button>
+    </div>
+
+    <div class="storyComposer">
+
+      <textarea id="storyText" maxlength="500" placeholder="Escribe algo para tu historia..."></textarea>
+
+      <input id="storyImageFile" class="modalInput hidden" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
+
+      <div id="storyPreview" class="storyPreview">
+        Tu historia aparecerá aquí
+      </div>
+
+      <div id="storyCreateError" class="modalError"></div>
+
+      <div class="modalRow">
+        <button id="cancelStory" class="muted">Cancelar</button>
+        <button id="publishStory" class="primary">Publicar</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- VISOR HISTORIA -->
+<div id="storyViewerModal" class="modal storyModal">
+  <div class="storyViewer">
+
+    <div class="storyProgress">
+      <span id="storyProgressFill"></span>
+    </div>
+
+    <div id="storyMeta" class="storyMeta"></div>
+
+    <button id="closeStoryViewer" class="storyClose">✕</button>
+
+    <div id="storyViewerContent"></div>
+
+    <div class="storyNav">
+      <button id="storyPrev"></button>
+      <button id="storyNext"></button>
+    </div>
+
+    <button id="deleteStoryButton" class="storyDelete hidden">
+      🗑️ Borrar mi historia
+    </button>
+
+  </div>
+</div>
+
+<!-- LLAMADA -->
+<div id="incomingCallModal" class="modal">
+  <div class="modalBox" style="text-align:center">
+
+    <div style="font-size:60px;margin-bottom:10px">📞</div>
+
+    <h2>Llamada entrante</h2>
+
+    <p id="incomingCallText">
+      Alguien te está llamando.
+    </p>
+
+    <div id="callError" class="modalError"></div>
+
+    <div class="modalRow">
+      <button id="rejectCallButton" class="danger">❌ Rechazar</button>
+      <button id="acceptCallButton" class="primary">✅ Aceptar</button>
+    </div>
+
+  </div>
+</div>
+
+
+
+<!-- PANTALLA DE LLAMADA ACTIVA -->
+<div id="activeCallScreen" class="activeCallScreen" aria-hidden="true">
+  <div class="activeCallContent">
+
+    <div class="activeCallTopLabel">Mi Chat · llamada</div>
+
+    <div id="activeCallAvatar" class="activeCallAvatar">
+      <img id="activeCallAvatarImage" src="" alt="" style="display:none">
+      <div id="activeCallAvatarLetter" class="activeCallAvatarLetter">👤</div>
+    </div>
+
+    <div id="activeCallName" class="activeCallName">Usuario</div>
+    <div id="activeCallStatus" class="activeCallStatus">Conectando...</div>
+    <div id="activeCallTimer" class="activeCallTimer">00:00</div>
+
+    <div class="activeCallFill"></div>
+
+    <div class="activeCallControls">
+      <button id="muteCallButton" class="activeCallControl" type="button" aria-label="Silenciar micrófono">
+        <span id="muteCallIcon" class="activeCallControlIcon">🎤</span>
+        <span id="muteCallText" class="activeCallControlText">Silenciar</span>
+      </button>
+
+      <button id="speakerCallButton" class="activeCallControl active" type="button" aria-label="Altavoz">
+        <span id="speakerCallIcon" class="activeCallControlIcon">🔊</span>
+        <span id="speakerCallText" class="activeCallControlText">Altavoz</span>
+      </button>
+    </div>
+
+    <button id="activeHangupButton" class="activeCallHangup" type="button" aria-label="Finalizar llamada">📞</button>
+    <div class="activeCallHangupText">Finalizar llamada</div>
+
+  </div>
+</div>
+
+<audio id="remoteAudio" autoplay playsinline></audio>
+
+<script>
+"use strict";
+
+const socket = io({autoConnect:false});
+
+let myUsername = "";
+let selectedUser = "";
+let allUsers = [];
+let authMode = "login";
+let unread = {};
+let conversations = {};
+let pendingContactUser = null;
+
+const $ = id => document.getElementById(id);
+
+const authScreen = $("authScreen");
+const app = $("app");
+const authUsername = $("authUsername");
+const authPassword = $("authPassword");
+const authButton = $("authButton");
+const switchAuth = $("switchAuth");
+const authDescription = $("authDescription");
+const authError = $("authError");
+
+const usersContainer = $("users");
+const searchInput = $("searchInput");
+const messagesContainer = $("messages");
+const messageInput = $("messageInput");
+const sendButton = $("sendButton");
+const chatTitle = $("chatTitle");
+const chatSubtitle = $("chatSubtitle");
+const headerAvatar = $("headerAvatar");
+const blockCurrentButton = $("blockCurrentButton");
+const callButton = $("callButton");
+const hangupButton = $("hangupButton");
+
+const incomingCallModal = $("incomingCallModal");
+const incomingCallText = $("incomingCallText");
+const acceptCallButton = $("acceptCallButton");
+const rejectCallButton = $("rejectCallButton");
+const callError = $("callError");
+const remoteAudio = $("remoteAudio");
+
+const activeCallScreen = $("activeCallScreen");
+const activeCallAvatarImage = $("activeCallAvatarImage");
+const activeCallAvatarLetter = $("activeCallAvatarLetter");
+const activeCallName = $("activeCallName");
+const activeCallStatus = $("activeCallStatus");
+const activeCallTimer = $("activeCallTimer");
+const muteCallButton = $("muteCallButton");
+const muteCallIcon = $("muteCallIcon");
+const muteCallText = $("muteCallText");
+const speakerCallButton = $("speakerCallButton");
+const speakerCallIcon = $("speakerCallIcon");
+const speakerCallText = $("speakerCallText");
+const activeHangupButton = $("activeHangupButton");
+
+let activeCallTimerInterval = null;
+let activeCallStartTime = null;
+let callMuted = false;
+let callSpeaker = true;
+
+const layout = $("layout");
+const notifications = $("notifications");
+
+let peerConnection = null;
+let localStream = null;
+let callPeer = "";
+let callState = "idle";
+let pendingOffer = null;
+let queuedIceCandidates = [];
+
+function esc(value){
+  const d = document.createElement("div");
+  d.textContent = String(value ?? "");
+  return d.innerHTML;
+}
+
+function norm(value){
+  return String(value || "").trim().toLowerCase();
+}
+
+function avatarHtml(user){
+  if(user && user.profileImage){
+    return `<img src="${esc(user.profileImage)}" alt="">`;
+  }
+
+  return esc(
+    (
+      user?.displayName ||
+      user?.username ||
+      "?"
+    ).charAt(0).toUpperCase()
+  );
+}
+
+/* =====================================================
+   AUTENTICACIÓN
+===================================================== */
+
+switchAuth.onclick = () => {
+
+  authError.textContent = "";
+
+  authMode =
+    authMode === "login"
+      ? "register"
+      : "login";
+
+  authDescription.textContent =
+    authMode === "login"
+      ? "Inicia sesión para entrar."
+      : "Crea una cuenta.";
+
+  authButton.textContent =
+    authMode === "login"
+      ? "Iniciar sesión"
+      : "Crear cuenta";
+
+  switchAuth.textContent =
+    authMode === "login"
+      ? "Crear una cuenta"
+      : "Ya tengo una cuenta";
+};
+
+authButton.onclick = authenticate;
+
+authPassword.onkeydown = e => {
+  if(e.key === "Enter"){
+    authenticate();
+  }
+};
+
+async function loadIdentity(){
+
+  const token = localStorage.getItem("chatToken");
+
+  if(!token) return;
+
+  try{
+
+    const response =
+      await fetch("/api/profile",{
+        headers:{
+          Authorization:"Bearer " + token
+        }
+      });
+
+    if(!response.ok) return;
+
+    const data = await response.json();
+
+    if(data.username){
+      myUsername = data.username;
+    }
+
+  }catch{}
+}
+
+async function authenticate(){
+
+  const username =
+    authUsername.value.trim();
+
+  const password =
+    authPassword.value;
+
+  authError.textContent = "";
+
+  if(!username || !password){
+    authError.textContent =
+      "Completa todos los campos.";
+    return;
+  }
+
+  authButton.disabled = true;
+
+  try{
+
+    const response =
+      await fetch(
+        authMode === "login"
+          ? "/api/login"
+          : "/api/register",
+        {
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json"
+          },
+          body:JSON.stringify({
+            username,
+            password
+          })
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if(!response.ok){
+      throw new Error(
+        data.error || "Error"
+      );
+    }
+
+    localStorage.setItem(
+      "chatToken",
+      data.token
+    );
+
+    myUsername =
+      data.username;
+
+    await loadIdentity();
+
+    enterApp();
+
+  }catch(error){
+
+    authError.textContent =
+      error.message;
+
+  }finally{
+
+    authButton.disabled = false;
+  }
+}
+
+async function checkSession(){
+
+  const token =
+    localStorage.getItem("chatToken");
+
+  if(!token) return;
+
+  try{
+
+    const response =
+      await fetch(
+        "/api/session",
+        {
+          headers:{
+            Authorization:"Bearer " + token
+          }
+        }
+      );
+
+    if(!response.ok){
+      localStorage.removeItem("chatToken");
+      return;
+    }
+
+    const data =
+      await response.json();
+
+    if(data.loggedIn){
+
+      myUsername =
+        data.username ||
+        data.displayName ||
+        myUsername;
+
+      await loadIdentity();
+
+      enterApp();
+    }
+
+  }catch{}
+}
+
+function enterApp(){
+
+  authScreen.style.display = "none";
+  app.style.display = "block";
+
+  if(!socket.connected){
+    socket.connect();
+  }
+}
+
+socket.on("connect",() => {
+
+  const token =
+    localStorage.getItem("chatToken");
+
+  if(token){
+    socket.emit(
+      "authenticate",
+      token
+    );
+  }
+});
+
+socket.on("authenticated",data => {
+  myUsername =
+    data.username ||
+    myUsername;
+  loadStories();
+
+  // Una acción de una notificación puede haber llegado
+  // antes de que Socket.IO terminara de autenticar.
+  if (pendingNativeCallAction) {
+    const pending = pendingNativeCallAction;
+    pendingNativeCallAction = null;
+    setTimeout(() => {
+      handleNativeCallNotification(pending);
+    }, 150);
+  }
+});
+
+socket.on("authenticationError",() => {
+
+  localStorage.removeItem("chatToken");
+
+  location.reload();
+});
+
+/* =====================================================
+   USUARIOS
+===================================================== */
+
+socket.on("userList",users => {
+
+  allUsers =
+    Array.isArray(users)
+      ? users
+      : [];
+
+  $("onlineCount").textContent =
+    allUsers.filter(
+      user => user.online
+    ).length;
+
+  renderUsers();
+});
+
+function renderUsers(){
+
+  const query =
+    searchInput.value
+      .trim()
+      .toLowerCase();
+
+  usersContainer.innerHTML = "";
+
+  const list =
+    allUsers.filter(user => {
+
+      if(
+        !user ||
+        norm(user.username) ===
+          norm(myUsername)
+      ){
+        return false;
+      }
+
+      return (
+        (
+          user.displayName ||
+          user.username
+        )
+        .toLowerCase()
+        .includes(query)
+      ) ||
+      user.username
+        .toLowerCase()
+        .includes(query);
+    });
+
+  if(!list.length){
+
+    usersContainer.innerHTML =
+      `<div style="padding:20px;text-align:center;color:#777">
+        No tienes contactos añadidos.
+      </div>`;
+
+    return;
+  }
+
+  list.forEach(user => {
+
+    const row =
+      document.createElement("div");
+
+    row.className = "user";
+    row.style.cursor = "pointer";
+
+    const count =
+      unread[user.username] || 0;
+
+    row.innerHTML = `
+      <div class="avatar">
+        ${avatarHtml(user)}
+      </div>
+
+      <div class="userInfo">
+
+        <div class="userName">
+          ${esc(
+            user.displayName ||
+            user.username
+          )}
+        </div>
+
+        <div class="userSub">
+          @${esc(user.username)}
+        </div>
+
+        <div class="statusRow">
+
+          <div class="${
+            user.online
+              ? "online"
+              : "offline"
+          }">
+            ${
+              user.online
+                ? "● En línea"
+                : "○ Desconectado"
+            }
+          </div>
+
+          ${
+            count
+              ? `<div class="badge">
+                   ${count > 99 ? "99+" : count}
+                 </div>`
+              : ""
+          }
+
+        </div>
+      </div>
+    `;
+
+    row.onclick = () => {
+      openChat(
+        user.username,
+        user.displayName || user.username,
+        user.online,
+        user.profileImage || ""
+      );
+    };
+
+    usersContainer.appendChild(row);
+  });
+}
+
+searchInput.oninput = renderUsers;
+
+/* =====================================================
+   CONTACTOS
+===================================================== */
+
+$("newChatButton").onclick = () => {
+
+  $("newChatError").textContent = "";
+  $("newChatUsername").value = "";
+  $("newChatModal").style.display = "flex";
+
+  setTimeout(
+    () => $("newChatUsername").focus(),
+    50
+  );
+};
+
+$("cancelNewChat").onclick = () => {
+  $("newChatModal").style.display = "none";
+};
+
+$("contactButton").onclick = () => {
+
+  const username =
+    $("newChatUsername")
+      .value
+      .trim();
+
+  $("newChatError").textContent = "";
+
+  if(!username){
+    $("newChatError").textContent =
+      "Escribe un nombre de usuario.";
+    return;
+  }
+
+  socket.emit("findUser",username);
+};
+
+$("newChatUsername").onkeydown = e => {
+  if(e.key === "Enter"){
+    $("contactButton").click();
+  }
+};
+
+socket.on("userNotFound",() => {
+  $("newChatError").textContent =
+    "No existe ese usuario.";
+});
+
+socket.on("userFoundError",message => {
+  $("newChatError").textContent =
+    message;
+});
+
+socket.on("userFound",user => {
+
+  pendingContactUser = user;
+
+  socket.emit(
+    "addContact",
+    user.username
+  );
+});
+
+socket.on("contactAdded",user => {
+
+  if(
+    pendingContactUser &&
+    norm(pendingContactUser.username) ===
+      norm(user.username)
+  ){
+
+    $("newChatModal").style.display = "none";
+
+    openChat(
+      user.username,
+      user.displayName || user.username,
+      !!user.online,
+      user.profileImage || ""
+    );
+
+    pendingContactUser = null;
+  }
+});
+
+socket.on("contactError",message => {
+
+  $("newChatError").textContent =
+    message;
+
+  pendingContactUser = null;
+});
+
+/* =====================================================
+   CHAT
+===================================================== */
+
+function openChat(
+  username,
+  displayName,
+  online,
+  profileImage = ""
+){
+
+  selectedUser = username;
+
+  unread[username] = 0;
+
+  renderUsers();
+
+  chatTitle.textContent =
+    displayName || username;
+
+  chatSubtitle.textContent =
+    online
+      ? "● En línea"
+      : "○ Desconectado";
+
+  headerAvatar.innerHTML =
+    profileImage
+      ? `<img src="${esc(profileImage)}" alt="">`
+      : esc(
+          (displayName || username)
+            .charAt(0)
+            .toUpperCase()
+        );
+
+  blockCurrentButton.classList.remove("hidden");
+  blockCurrentButton.textContent = "🚫 Bloquear";
+
+  callButton.classList.remove("hidden");
+  hangupButton.classList.add("hidden");
+
+  layout.classList.add("mobileChat");
+
+  messageInput.disabled = false;
+  sendButton.disabled = false;
+
+  messagesContainer.innerHTML =
+    `<div class="empty">
+      Cargando conversación...
+    </div>`;
+
+  socket.emit(
+    "getConversation",
+    username
+  );
+
+  /* CORREGIDO: faltaba ); en tu código */
+  socket.emit(
+    "markConversationRead",
+    username
+  );
+}
+
+socket.on("conversationHistory",data => {
+
+  conversations[data.username] =
+    data.messages || [];
+
+  if(selectedUser === data.username){
+    renderConversation(data.username);
+  }
+});
+
+socket.on("conversationBlocked",message => {
+
+  messagesContainer.innerHTML =
+    `<div class="empty">
+      ${esc(message)}
+    </div>`;
+
+  messageInput.disabled = true;
+  sendButton.disabled = true;
+});
+
+function renderConversation(username){
+
+  const list =
+    conversations[username] || [];
+
+  messagesContainer.innerHTML = "";
+
+  if(!list.length){
+
+    messagesContainer.innerHTML =
+      `<div class="empty">
+        Todavía no hay mensajes.
+      </div>`;
+
+    return;
+  }
+
+  list.forEach(addMessage);
+
+  messagesContainer.scrollTop =
+    messagesContainer.scrollHeight;
+}
+
+function addMessage(message){
+
+  const mine =
+    norm(message.from) ===
+    norm(myUsername);
+
+  const row =
+    document.createElement("div");
+
+  row.className =
+    "messageRow " +
+    (mine ? "mine" : "");
+
+  const bubble =
+    document.createElement("div");
+
+  bubble.className = "bubble";
+
+  const date =
+    new Date(message.time);
+
+  const time =
+    date.getHours()
+      .toString()
+      .padStart(2,"0") +
+    ":" +
+    date.getMinutes()
+      .toString()
+      .padStart(2,"0");
+
+  const text =
+    message.deleted
+      ? `<span class="deletedText">
+           Mensaje eliminado
+         </span>`
+      : esc(message.message);
+
+  bubble.innerHTML = `
+    ${
+      mine
+        ? ""
+        : `<div class="from">
+             ${esc(
+               message.fromDisplay ||
+               message.from
+             )}
+           </div>`
+    }
+
+    <div>${text}</div>
+
+    <div class="time">
+      ${time}
+    </div>
+  `;
+
+  if(mine && !message.deleted){
+
+    const tools =
+      document.createElement("div");
+
+    tools.className =
+      "messageContext";
+
+    const deleteButton =
+      document.createElement("button");
+
+    deleteButton.className =
+      "deleteBtn";
+
+    deleteButton.textContent =
+      "🗑️ Borrar";
+
+    deleteButton.onclick = () => {
+      socket.emit(
+        "deleteMessage",
+        message.id
+      );
+    };
+
+    tools.appendChild(
+      deleteButton
+    );
+
+    bubble.appendChild(
+      tools
+    );
+  }
+
+  row.appendChild(
+    bubble
+  );
+
+  messagesContainer.appendChild(
+    row
+  );
+}
+
+socket.on("messageDeleted",data => {
+
+  for(const key in conversations){
+
+    const index =
+      conversations[key].findIndex(
+        message =>
+          message.id === data.id
+      );
+
+    if(index >= 0){
+
+      conversations[key][index].deleted = true;
+      conversations[key][index].message =
+        data.message;
+    }
+  }
+
+  if(selectedUser){
+    renderConversation(selectedUser);
+  }
+});
+
+sendButton.onclick = sendMessage;
+
+messageInput.onkeydown = event => {
+  if(event.key === "Enter"){
+    sendMessage();
+  }
+};
+
+function sendMessage(){
+
+  const text =
+    messageInput.value.trim();
+
+  if(!text || !selectedUser){
+    return;
+  }
+
+  socket.emit(
+    "privateMessage",
+    {
+      to:selectedUser,
+      message:text
+    }
+  );
+
+  messageInput.value = "";
+}
+
+socket.on("messageSent",message => {
+
+  const key =
+    message.to;
+
+  if(!conversations[key]){
+    conversations[key] = [];
+  }
+
+  if(
+    !conversations[key].some(
+      item =>
+        item.id === message.id
+    )
+  ){
+
+    conversations[key].push(message);
+  }
+
+  if(selectedUser === key){
+
+    addMessage(message);
+
+    messagesContainer.scrollTop =
+      messagesContainer.scrollHeight;
+  }
+});
+
+socket.on("privateMessage",message => {
+
+  const other =
+    norm(message.from) ===
+    norm(myUsername)
+      ? norm(message.to)
+      : norm(message.from);
+
+  if(!conversations[other]){
+    conversations[other] = [];
+  }
+
+  if(
+    !conversations[other].some(
+      item =>
+        item.id === message.id
+    )
+  ){
+
+    conversations[other].push(message);
+  }
+
+  if(selectedUser === other){
+
+    addMessage(message);
+
+    messagesContainer.scrollTop =
+      messagesContainer.scrollHeight;
+
+    socket.emit(
+      "markConversationRead",
+      other
+    );
+
+  }else{
+
+    unread[other] =
+      (unread[other] || 0) + 1;
+
+    renderUsers();
+
+    showNotification(
+      message.fromDisplay ||
+      message.from,
+      message.message,
+      other,
+      "message"
+    );
+  }
+});
+
+socket.on("unreadCounts",data => {
+  unread = data || {};
+  renderUsers();
+});
+
+/* =====================================================
+   NOTIFICACIÓN EN PANTALLA
+===================================================== */
+
+function showNotification(
+  title,
+  text,
+  username = "",
+  type = "message"
+){
+
+  const notification =
+    document.createElement("div");
+
+  notification.className =
+    "notification";
+
+  notification.innerHTML = `
+    <div class="notificationTitle">
+      ${
+        type === "call"
+          ? "📞 "
+          : "💬 "
+      }${esc(title)}
+    </div>
+
+    <div class="notificationText">
+      ${esc(text)}
+    </div>
+  `;
+
+  notification.onclick = () => {
+
+    if(
+      type === "call" &&
+      username
+    ){
+
+      showIncomingCallFromNotification(
+        username,
+        title
+      );
+
+    }else if(username){
+
+      const user =
+        allUsers.find(
+          item =>
+            norm(item.username) ===
+            norm(username)
+        );
+
+      if(user){
+
+        openChat(
+          user.username,
+          user.displayName || user.username,
+          user.online,
+          user.profileImage || ""
+        );
+
+      }else{
+
+        socket.emit(
+          "findUser",
+          username
+        );
+      }
+    }
+
+    notification.remove();
+  };
+
+  notifications.appendChild(
+    notification
+  );
+
+  setTimeout(
+    () => notification.remove(),
+    6000
+  );
+}
+
+/* =====================================================
+   WEBRTC
+===================================================== */
+
+const rtcConfig = {
+  iceServers:[
+    {
+      urls:"stun:stun.l.google.com:19302"
+    },
+    {
+      urls:"stun:stun1.l.google.com:19302"
+    }
+  ]
+};
+
+async function ensureMicrophone(){
+
+  if(
+    !navigator.mediaDevices ||
+    !navigator.mediaDevices.getUserMedia
+  ){
+
+    throw new Error(
+      "Este navegador no permite usar el micrófono aquí."
+    );
+  }
+
+  if(!localStream){
+
+    localStream =
+      await navigator.mediaDevices.getUserMedia({
+        audio:true,
+        video:false
+      });
+  }
+
+  return localStream;
+}
+
+async function flushIceCandidates(){
+
+  if(
+    !peerConnection ||
+    !peerConnection.remoteDescription
+  ){
+    return;
+  }
+
+  const pending =
+    queuedIceCandidates.splice(0);
+
+  for(const candidate of pending){
+
+    try{
+
+      await peerConnection.addIceCandidate(
+        new RTCIceCandidate(candidate)
+      );
+
+    }catch(error){
+
+      console.warn(
+        "No se pudo añadir ICE:",
+        error
+      );
+    }
+  }
+}
+
+async function startPeer(){
+
+  if(peerConnection){
+    return;
+  }
+
+  peerConnection =
+    new RTCPeerConnection(
+      rtcConfig
+    );
+
+  const stream =
+    await ensureMicrophone();
+
+  stream.getTracks().forEach(
+    track => {
+      peerConnection.addTrack(
+        track,
+        stream
+      );
+    }
+  );
+
+  peerConnection.ontrack =
+    event => {
+
+      console.log("WEBRTC: audio remoto recibido", event);
+
+      if(
+        !event.streams ||
+        !event.streams[0]
+      ){
+        console.warn("WEBRTC: no llegó ningún MediaStream remoto");
+        return;
+      }
+
+      remoteAudio.srcObject =
+        event.streams[0];
+
+      remoteAudio.autoplay = true;
+      remoteAudio.playsInline = true;
+      remoteAudio.muted = false;
+      remoteAudio.volume = 1.0;
+
+      remoteAudio.play()
+        .then(() => {
+          console.log("WEBRTC: audio remoto reproduciéndose correctamente");
+        })
+        .catch(error => {
+          console.error("WEBRTC: ERROR reproduciendo audio remoto:", error);
+        });
+    };
+
+  peerConnection.onicecandidate =
+    event => {
+
+      if(
+        event.candidate &&
+        callPeer
+      ){
+
+        socket.emit(
+          "callIceCandidate",
+          {
+            to:callPeer,
+            candidate:event.candidate
+          }
+        );
+      }
+    };
+
+
+
+  peerConnection.oniceconnectionstatechange = () => {
+    console.log(
+      "WEBRTC iceConnectionState:",
+      peerConnection?.iceConnectionState
+    );
+  };
+
+  peerConnection.onconnectionstatechange =
+    () => {
+
+      const state =
+        peerConnection?.connectionState;
+
+      console.log("WEBRTC connectionState:", state);
+
+      if(state === "connected"){
+        setActiveCallStatus("En llamada");
+      }
+
+      if(state === "connecting"){
+        setActiveCallStatus("Conectando...");
+      }
+
+      if(
+        state === "failed" ||
+        state === "closed"
+      ){
+
+        cleanupCall(false);
+      }
+    };
+}
+
+
+
+/* =====================================================
+   PANTALLA DE LLAMADA ACTIVA
+===================================================== */
+
+function getCallUser(username){
+  return allUsers.find(
+    user => norm(user.username) === norm(username)
+  );
+}
+
+function showActiveCallScreen(username, status = "Conectando..."){
+
+  const user = getCallUser(username);
+  const name =
+    user?.displayName ||
+    username ||
+    "Usuario";
+
+  activeCallName.textContent = name;
+  activeCallStatus.textContent = status;
+
+  if(user?.profileImage){
+    activeCallAvatarImage.src = user.profileImage;
+    activeCallAvatarImage.style.display = "block";
+    activeCallAvatarLetter.style.display = "none";
+  }else{
+    activeCallAvatarImage.removeAttribute("src");
+    activeCallAvatarImage.style.display = "none";
+    activeCallAvatarLetter.textContent =
+      (name.charAt(0) || "👤").toUpperCase();
+    activeCallAvatarLetter.style.display = "block";
+  }
+
+  callMuted = false;
+  callSpeaker = true;
+  updateMuteButton();
+  updateSpeakerButton();
+
+  activeCallScreen.classList.add("visible");
+  activeCallScreen.setAttribute("aria-hidden", "false");
+
+  if(!activeCallStartTime){
+    startCallTimer();
+  }
+}
+
+function hideActiveCallScreen(){
+  activeCallScreen.classList.remove("visible");
+  activeCallScreen.setAttribute("aria-hidden", "true");
+  stopCallTimer();
+}
+
+function setActiveCallStatus(status){
+  if(!activeCallScreen.classList.contains("visible")){
+    showActiveCallScreen(callPeer, status);
+    return;
+  }
+  activeCallStatus.textContent = status;
+}
+
+function startCallTimer(){
+  stopCallTimer();
+  activeCallStartTime = Date.now();
+  updateCallTimer();
+  activeCallTimerInterval = setInterval(updateCallTimer, 1000);
+}
+
+function stopCallTimer(){
+  if(activeCallTimerInterval){
+    clearInterval(activeCallTimerInterval);
+    activeCallTimerInterval = null;
+  }
+  activeCallStartTime = null;
+  activeCallTimer.textContent = "00:00";
+}
+
+function updateCallTimer(){
+  if(!activeCallStartTime) return;
+
+  const elapsed = Math.max(
+    0,
+    Math.floor((Date.now() - activeCallStartTime) / 1000)
+  );
+
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = elapsed % 60;
+
+  activeCallTimer.textContent =
+    String(minutes).padStart(2, "0") +
+    ":" +
+    String(seconds).padStart(2, "0");
+}
+
+function updateMuteButton(){
+  if(callMuted){
+    muteCallIcon.textContent = "🔇";
+    muteCallText.textContent = "Activar";
+    muteCallButton.classList.add("active");
+  }else{
+    muteCallIcon.textContent = "🎤";
+    muteCallText.textContent = "Silenciar";
+    muteCallButton.classList.remove("active");
+  }
+}
+
+function toggleCallMute(){
+  if(!localStream) return;
+
+  const tracks = localStream.getAudioTracks();
+  if(!tracks.length) return;
+
+  callMuted = !callMuted;
+
+  tracks.forEach(track => {
+    track.enabled = !callMuted;
+  });
+
+  updateMuteButton();
+}
+
+function updateSpeakerButton(){
+  speakerCallIcon.textContent = callSpeaker ? "🔊" : "🔈";
+  speakerCallText.textContent = callSpeaker ? "Altavoz" : "Audio";
+  speakerCallButton.classList.toggle("active", callSpeaker);
+}
+
+async function toggleCallSpeaker(){
+  /*
+     Android WebView mantiene la salida en el dispositivo de
+     comunicación mediante MainActivity. En navegadores que
+     soportan setSinkId intentamos aplicar el dispositivo por defecto.
+  */
+  callSpeaker = !callSpeaker;
+
+  if(remoteAudio && typeof remoteAudio.setSinkId === "function"){
+    try{
+      await remoteAudio.setSinkId("default");
+    }catch(error){
+      console.warn("No se pudo cambiar el dispositivo de audio:", error);
+    }
+  }
+
+  updateSpeakerButton();
+}
+
+muteCallButton.onclick = toggleCallMute;
+speakerCallButton.onclick = toggleCallSpeaker;
+activeHangupButton.onclick = () => cleanupCall(true);
+
+
+async function createAndSendOffer(){
+
+  await startPeer();
+
+  const offer =
+    await peerConnection.createOffer();
+
+  await peerConnection.setLocalDescription(
+    offer
+  );
+
+  socket.emit(
+    "callOffer",
+    {
+      to:callPeer,
+      offer:peerConnection.localDescription
+    }
+  );
+}
+
+async function callUser(){
+
+  if(
+    !selectedUser ||
+    callState !== "idle"
+  ){
+    return;
+  }
+
+  callPeer =
+    selectedUser;
+
+  callState =
+    "calling";
+
+  showActiveCallScreen(callPeer, "Llamando...");
+
+  callButton.classList.add("hidden");
+  hangupButton.classList.remove("hidden");
+
+  chatSubtitle.textContent =
+    "📞 Llamando...";
+
+  try{
+
+    await ensureMicrophone();
+
+    socket.emit(
+      "callRequest",
+      {
+        to:callPeer
+      }
+    );
+
+  }catch(error){
+
+    console.error(
+      "Error usando micrófono:",
+      error
+    );
+
+    cleanupCall(false);
+
+    showNotification(
+      "Sistema",
+      error.message ||
+        "No se pudo usar el micrófono."
+    );
+  }
+}
+
+function showIncomingCallFromNotification(
+  username,
+  displayName = ""
+){
+
+  if(callState !== "idle"){
+    return;
+  }
+
+  callPeer =
+    username;
+
+  callState =
+    "incoming";
+
+  const contact =
+    allUsers.find(
+      user =>
+        norm(user.username) ===
+        norm(username)
+    );
+
+  const name =
+    displayName ||
+    contact?.displayName ||
+    username;
+
+  incomingCallText.textContent =
+    name +
+    " te está llamando.";
+
+  callError.textContent = "";
+
+  incomingCallModal.style.display =
+    "flex";
+}
+
+async function acceptCall(){
+
+  if(
+    !callPeer ||
+    callState !== "incoming"
+  ){
+    return;
+  }
+
+  incomingCallModal.style.display =
+    "none";
+
+  callState =
+    "in-call";
+
+  showActiveCallScreen(callPeer, "Conectando...");
+
+  callButton.classList.add("hidden");
+  hangupButton.classList.remove("hidden");
+
+  chatSubtitle.textContent =
+    "📞 Conectando...";
+
+  try{
+
+    await ensureMicrophone();
+
+    await startPeer();
+
+    /*
+      La oferta puede llegar justo después
+      de aceptar. Si ya está guardada,
+      la procesamos.
+    */
+
+    if(pendingOffer){
+
+      await peerConnection.setRemoteDescription(
+        new RTCSessionDescription(
+          pendingOffer
+        )
+      );
+
+      await flushIceCandidates();
+
+      const answer =
+        await peerConnection.createAnswer();
+
+      await peerConnection.setLocalDescription(
+        answer
+      );
+
+      socket.emit(
+        "callAnswer",
+        {
+          to:callPeer,
+          answer:peerConnection.localDescription
+        }
+      );
+
+      pendingOffer = null;
+    }
+
+    socket.emit(
+      "callAccept",
+      {
+        to:callPeer
+      }
+    );
+
+  }catch(error){
+
+    console.error(
+      "Error aceptando llamada:",
+      error
+    );
+
+    cleanupCall(true);
+
+    showNotification(
+      "Llamada",
+      error.message ||
+        "No se pudo iniciar la llamada."
+    );
+  }
+}
+
+function rejectCall(){
+
+  incomingCallModal.style.display =
+    "none";
+
+  if(callPeer){
+
+    socket.emit(
+      "callReject",
+      {
+        to:callPeer
+      }
+    );
+  }
+
+  cleanupCall(false);
+}
+
+function cleanupCall(
+  notifyRemote = true
+){
+
+  if(
+    notifyRemote &&
+    callPeer
+  ){
+
+    socket.emit(
+      "callEnd",
+      {
+        to:callPeer
+      }
+    );
+  }
+
+  if(peerConnection){
+
+    try{
+      peerConnection.close();
+    }catch{}
+  }
+
+  peerConnection = null;
+
+  if(localStream){
+
+    localStream.getTracks().forEach(
+      track =>
+        track.stop()
+    );
+  }
+
+  localStream = null;
+
+  remoteAudio.srcObject = null;
+
+  pendingOffer = null;
+  queuedIceCandidates = [];
+
+  callState = "idle";
+  callPeer = "";
+
+  incomingCallModal.style.display =
+    "none";
+
+  hideActiveCallScreen();
+
+  hangupButton.classList.add("hidden");
+
+  if(selectedUser){
+
+    callButton.classList.remove("hidden");
+
+    const user =
+      allUsers.find(
+        item =>
+          norm(item.username) ===
+          norm(selectedUser)
+      );
+
+    if(user){
+
+      chatSubtitle.textContent =
+        user.online
+          ? "● En línea"
+          : "○ Desconectado";
+    }
+
+  }else{
+
+    callButton.classList.add("hidden");
+  }
+}
+
+callButton.onclick =
+  callUser;
+
+hangupButton.onclick =
+  () => cleanupCall(true);
+
+acceptCallButton.onclick =
+  acceptCall;
+
+rejectCallButton.onclick =
+  rejectCall;
+
+socket.on("callError",message => {
+
+  cleanupCall(false);
+
+  showNotification(
+    "Llamada",
+    message
+  );
+});
+
+socket.on("incomingCall",data => {
+
+  if(
+    callState !== "idle"
+  ){
+
+    socket.emit(
+      "callReject",
+      {
+        to:data.from
+      }
+    );
+
+    return;
+  }
+
+  callPeer =
+    data.from;
+
+  callState =
+    "incoming";
+
+  incomingCallText.textContent =
+    `${
+      data.fromDisplay ||
+      data.from
+    } te está llamando.`;
+
+  callError.textContent = "";
+
+  incomingCallModal.style.display =
+    "flex";
+
+  showNotification(
+    "Llamada entrante",
+    `${
+      data.fromDisplay ||
+      data.from
+    } te está llamando`,
+    data.from,
+    "call"
+  );
+});
+
+socket.on(
+  "callAccepted",
+  async data => {
+
+    try{
+
+      if(callState !== "calling"){
+        return;
+      }
+
+      callPeer =
+        data.from ||
+        callPeer;
+
+      callState =
+        "in-call";
+
+      showActiveCallScreen(callPeer, "Conectando...");
+
+      chatSubtitle.textContent =
+        "📞 Conectando...";
+
+      await createAndSendOffer();
+
+    }catch(error){
+
+      console.error(
+        "Error creando oferta:",
+        error
+      );
+
+      cleanupCall(true);
+
+      showNotification(
+        "Llamada",
+        error.message ||
+          "No se pudo iniciar la llamada."
+      );
+    }
+  }
+);
+
+socket.on(
+  "callRejected",
+  () => {
+
+    showNotification(
+      "Llamada",
+      "La otra persona rechazó la llamada."
+    );
+
+    cleanupCall(false);
+  }
+);
+
+socket.on(
+  "callOffer",
+  async data => {
+
+    try{
+
+      callPeer =
+        data.from ||
+        callPeer;
+
+      pendingOffer =
+        data.offer;
+
+      if(
+        callState !== "in-call" &&
+        callState !== "incoming"
+      ){
+        return;
+      }
+
+      if(!peerConnection){
+        await startPeer();
+      }
+
+      /*
+        Si todavía está aceptando la llamada,
+        guardamos la oferta para procesarla
+        después de aceptar.
+      */
+
+      if(callState === "incoming"){
+        return;
+      }
+
+      await peerConnection.setRemoteDescription(
+        new RTCSessionDescription(
+          pendingOffer
+        )
+      );
+
+      await flushIceCandidates();
+
+      const answer =
+        await peerConnection.createAnswer();
+
+      await peerConnection.setLocalDescription(
+        answer
+      );
+
+      socket.emit(
+        "callAnswer",
+        {
+          to:callPeer,
+          answer:peerConnection.localDescription
+        }
+      );
+
+      pendingOffer = null;
+
+      setActiveCallStatus("En llamada");
+
+      chatSubtitle.textContent =
+        "📞 En llamada";
+
+    }catch(error){
+
+      console.error(
+        "Error procesando oferta:",
+        error
+      );
+
+      cleanupCall(true);
+
+      showNotification(
+        "Llamada",
+        "Error al conectar la llamada."
+      );
+    }
+  }
+);
+
+socket.on(
+  "callAnswer",
+  async data => {
+
+    try{
+
+      if(!peerConnection){
+        return;
+      }
+
+      await peerConnection.setRemoteDescription(
+        new RTCSessionDescription(
+          data.answer
+        )
+      );
+
+      await flushIceCandidates();
+
+      setActiveCallStatus("En llamada");
+
+      chatSubtitle.textContent =
+        "📞 En llamada";
+
+    }catch(error){
+
+      console.error(
+        "Error procesando respuesta:",
+        error
+      );
+
+      cleanupCall(true);
+    }
+  }
+);
+
+socket.on(
+  "callIceCandidate",
+  async data => {
+
+    try{
+
+      if(!data.candidate){
+        return;
+      }
+
+      if(
+        !peerConnection ||
+        !peerConnection.remoteDescription
+      ){
+
+        queuedIceCandidates.push(
+          data.candidate
+        );
+
+        return;
+      }
+
+      await peerConnection.addIceCandidate(
+        new RTCIceCandidate(
+          data.candidate
+        )
+      );
+
+    }catch(error){
+
+      console.warn(
+        "Error procesando ICE:",
+        error
+      );
+    }
+  }
+);
+
+socket.on(
+  "callEnded",
+  () => {
+
+    showNotification(
+      "Llamada",
+      "La llamada ha terminado."
+    );
+
+    cleanupCall(false);
+  }
+);
+
+/* =====================================================
+   BLOQUEOS
+===================================================== */
+
+blockCurrentButton.onclick = () => {
+
+  if(!selectedUser){
+    return;
+  }
+
+  socket.emit(
+    "blockUser",
+    selectedUser
+  );
+};
+
+socket.on(
+  "blockUpdated",
+  data => {
+
+    if(
+      data.blocked &&
+      selectedUser ===
+        data.username
+    ){
+
+      messagesContainer.innerHTML =
+        `<div class="empty">
+          Has bloqueado a este usuario.
+        </div>`;
+
+      messageInput.disabled =
+        true;
+
+      sendButton.disabled =
+        true;
+
+      blockCurrentButton.textContent =
+        "🚫 Bloqueado";
+    }
+  }
+);
+
+/* =====================================================
+   CONFIGURACIÓN
+===================================================== */
+
+$("settingsButton").onclick = () => {
+  $("settingsModal").style.display = "flex";
+};
+
+$("closeSettings").onclick = () => {
+  $("settingsModal").style.display = "none";
+};
+
+$("settingsBlocked").onclick = () => {
+
+  $("settingsModal").style.display = "none";
+
+  socket.emit(
+    "getBlockedUsers"
+  );
+
+  $("blockedModal").style.display = "flex";
+};
+
+$("settingsPush").onclick = async () => {
+
+  $("settingsModal").style.display =
+    "none";
+
+  await activatePushNotifications();
+};
+
+$("closeBlocked").onclick = () => {
+  $("blockedModal").style.display = "none";
+};
+
+socket.on(
+  "blockedUsers",
+  list => {
+
+    const box =
+      $("blockedList");
+
+    box.innerHTML = "";
+
+    if(!list || !list.length){
+
+      box.innerHTML =
+        '<div style="color:#777">No has bloqueado a nadie.</div>';
+
+      return;
+    }
+
+    list.forEach(username => {
+
+      const row =
+        document.createElement("div");
+
+      row.className = "blockItem";
+
+      row.innerHTML =
+        `<span>${esc(username)}</span>`;
+
+      const button =
+        document.createElement("button");
+
+      button.className = "smallBtn";
+      button.style.background = "#eee";
+      button.style.color = "#333";
+      button.textContent = "Desbloquear";
+
+      button.onclick = () => {
+
+        socket.emit(
+          "unblockUser",
+          username
+        );
+      };
+
+      row.appendChild(button);
+      box.appendChild(row);
+    });
+  }
+);
+
+socket.on(
+  "blockUpdated",
+  () => {
+    socket.emit(
+      "getBlockedUsers"
+    );
+  }
+);
+
+/* =====================================================
+   PERFIL
+===================================================== */
+
+async function openProfileModal(){
+
+  $("profileError").textContent = "";
+
+  const token =
+    localStorage.getItem("chatToken");
+
+  try{
+
+    const response =
+      await fetch(
+        "/api/profile",
+        {
+          headers:{
+            Authorization:"Bearer " + token
+          }
+        }
+      );
+
+    const data =
+      await response.json();
+
+    $("profileName").value =
+      data.displayName || "";
+
+    $("profilePreview").innerHTML =
+      data.profileImage
+        ? `<img src="${esc(data.profileImage)}" alt="">`
+        : "";
+
+    $("profilePreview").dataset.value =
+      data.profileImage || "";
+
+    $("profileFile").value = "";
+
+    $("profileModal").style.display =
+      "flex";
+
+  }catch{}
+}
+
+$("settingsProfile").onclick = () => {
+
+  $("settingsModal").style.display =
+    "none";
+
+  openProfileModal();
+};
+
+$("cancelProfile").onclick = () => {
+  $("profileModal").style.display = "none";
+};
+
+$("profileFile").onchange = async event => {
+
+  const file =
+    event.target.files[0];
+
+  if(!file){
+    return;
+  }
+
+  if(file.size > 4 * 1024 * 1024){
+
+    $("profileError").textContent =
+      "La foto debe pesar menos de 4 MB.";
+
+    return;
+  }
+
+  const data =
+    await resizeImage(
+      file,
+      256,
+      256
+    );
+
+  $("profilePreview").innerHTML =
+    `<img src="${data}" alt="">`;
+
+  $("profilePreview").dataset.value =
+    data;
+};
+
+async function resizeImage(
+  file,
+  width,
+  height
+){
+
+  return new Promise(
+    (resolve,reject) => {
+
+      const image =
+        new Image();
+
+      const reader =
+        new FileReader();
+
+      reader.onload = () => {
+
+        image.onload = () => {
+
+          const canvas =
+            document.createElement(
+              "canvas"
+            );
+
+          const scale =
+            Math.min(
+              width / image.width,
+              height / image.height
+            );
+
+          canvas.width =
+            Math.max(
+              1,
+              Math.round(
+                image.width * scale
+              )
+            );
+
+          canvas.height =
+            Math.max(
+              1,
+              Math.round(
+                image.height * scale
+              )
+            );
+
+          canvas.getContext("2d")
+            .drawImage(
+              image,
+              0,
+              0,
+              canvas.width,
+              canvas.height
+            );
+
+          resolve(
+            canvas.toDataURL(
+              "image/jpeg",
+              .82
+            )
+          );
+        };
+
+        image.src =
+          reader.result;
+      };
+
+      reader.onerror =
+        reject;
+
+      reader.readAsDataURL(file);
+    }
+  );
+}
+
+$("saveProfile").onclick = async () => {
+
+  $("profileError").textContent = "";
+
+  const token =
+    localStorage.getItem("chatToken");
+
+  const body = {
+    displayName:
+      $("profileName")
+        .value
+        .trim(),
+
+    profileImage:
+      $("profilePreview")
+        .dataset
+        .value || ""
+  };
+
+  try{
+
+    const response =
+      await fetch(
+        "/api/profile",
+        {
+          method:"POST",
+
+          headers:{
+            "Content-Type":
+              "application/json",
+            Authorization:
+              "Bearer " + token
+          },
+
+          body:
+            JSON.stringify(body)
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if(!response.ok){
+
+      throw new Error(
+        data.error || "Error"
+      );
+    }
+
+    $("profileModal").style.display =
+      "none";
+
+    myUsername =
+      data.displayName;
+
+    showNotification(
+      "Sistema",
+      "Perfil actualizado."
+    );
+
+  }catch(error){
+
+    $("profileError").textContent =
+      error.message;
+  }
+};
+
+/* =====================================================
+   NOTIFICACIONES
+===================================================== */
+
+async function activatePushNotifications(){
+
+  try{
+
+    /*
+      MUY IMPORTANTE:
+      En Android NO usamos Web Push.
+
+      Android recibe las notificaciones mediante
+      Firebase Cloud Messaging y MainActivity.java.
+
+      Por eso salimos antes de tocar:
+      Notification.requestPermission()
+      serviceWorker
+      PushManager
+    */
+
+    const isAndroid =
+      /Android/i.test(
+        navigator.userAgent
+      );
+
+    if(isAndroid){
+
+      showNotification(
+        "Sistema",
+        "Las notificaciones de Android se gestionan mediante Firebase."
+      );
+
+      return;
+    }
+
+    /*
+      Solo navegadores normales.
+    */
+
+    if(
+      !("Notification" in window) ||
+      !("serviceWorker" in navigator) ||
+      !("PushManager" in window)
+    ){
+
+      showNotification(
+        "Sistema",
+        "Tu navegador no admite notificaciones push."
+      );
+
+      return;
+    }
+
+    const permission =
+      await Notification.requestPermission();
+
+    if(permission !== "granted"){
+
+      showNotification(
+        "Sistema",
+        "No se concedió permiso para las notificaciones."
+      );
+
+      return;
+    }
+
+    const keyResponse =
+      await fetch(
+        "/api/push/public-key"
+      );
+
+    if(!keyResponse.ok){
+
+      throw new Error(
+        "No se pudo obtener la configuración de notificaciones."
+      );
+    }
+
+    const keyData =
+      await keyResponse.json();
+
+    if(
+      !keyData.enabled ||
+      !keyData.publicKey
+    ){
+
+      showNotification(
+        "Sistema",
+        "Las notificaciones push no están configuradas en el servidor."
+      );
+
+      return;
+    }
+
+    const registration =
+      await navigator.serviceWorker.register(
+        "/sw.js"
+      );
+
+    let subscription =
+      await registration.pushManager.getSubscription();
+
+    if(!subscription){
+
+      subscription =
+        await registration.pushManager.subscribe({
+          userVisibleOnly:true,
+          applicationServerKey:
+            urlBase64ToUint8(
+              keyData.publicKey
+            )
+        });
+    }
+
+    const token =
+      localStorage.getItem(
+        "chatToken"
+      );
+
+    if(!token){
+
+      showNotification(
+        "Sistema",
+        "Debes iniciar sesión primero."
+      );
+
+      return;
+    }
+
+    const response =
+      await fetch(
+        "/api/push/subscribe",
+        {
+          method:"POST",
+
+          headers:{
+            "Content-Type":
+              "application/json",
+
+            Authorization:
+              "Bearer " + token
+          },
+
+          body:
+            JSON.stringify({
+              subscription
+            })
+        }
+      );
+
+    if(!response.ok){
+
+      throw new Error(
+        "No se pudo registrar la suscripción."
+      );
+    }
+
+    showNotification(
+      "Sistema",
+      "Notificaciones activadas."
+    );
+
+  }catch(error){
+
+    console.error(
+      "Error activando notificaciones:",
+      error
+    );
+
+    showNotification(
+      "Sistema",
+      "No se pudieron activar las notificaciones."
+    );
+  }
+}
+
+function urlBase64ToUint8(
+  base64
+){
+
+  const padding =
+    "=".repeat(
+      (
+        4 -
+        base64.length % 4
+      ) % 4
+    );
+
+  const value =
+    (
+      base64 +
+      padding
+    )
+    .replace(/-/g,"+")
+    .replace(/_/g,"/");
+
+  const raw =
+    atob(value);
+
+  return Uint8Array.from(
+    [...raw].map(
+      character =>
+        character.charCodeAt(0)
+    )
+  );
+}
+
+/* =====================================================
+   LOGOUT
+===================================================== */
+
+$("logoutButton").onclick = async () => {
+
+  cleanupCall(false);
+
+  const token =
+    localStorage.getItem(
+      "chatToken"
+    );
+
+  try{
+
+    await fetch(
+      "/api/logout",
+      {
+        method:"POST",
+        headers:{
+          Authorization:
+            "Bearer " + token
+        }
+      }
+    );
+
+  }catch{}
+
+  localStorage.removeItem(
+    "chatToken"
+  );
+
+  socket.disconnect();
+
+  location.reload();
+};
+
+$("backButton").onclick = () => {
+  layout.classList.remove(
+    "mobileChat"
+  );
+};
+
+window.addEventListener(
+  "beforeunload",
+  () => cleanupCall(false)
+);
+
+/* =====================================================
+   HISTORIAS
+===================================================== */
+
+const storiesBar =
+  $("storiesBar");
+
+const storyCreateModal =
+  $("storyCreateModal");
+
+const storyViewerModal =
+  $("storyViewerModal");
+
+const storyTextType =
+  $("storyTextType");
+
+const storyImageType =
+  $("storyImageType");
+
+const storyText =
+  $("storyText");
+
+const storyImageFile =
+  $("storyImageFile");
+
+const storyPreview =
+  $("storyPreview");
+
+const storyCreateError =
+  $("storyCreateError");
+
+const storyViewerContent =
+  $("storyViewerContent");
+
+const storyMeta =
+  $("storyMeta");
+
+const storyProgressFill =
+  $("storyProgressFill");
+
+const deleteStoryButton =
+  $("deleteStoryButton");
+
+let storiesList = [];
+let storyMode = "text";
+let selectedStoryGroup = null;
+let selectedStoryIndex = 0;
+let storyTimer = null;
+let storyStartedAt = 0;
+
+function storyGroupsFromFlat(list){
+
+  const groups = {};
+
+  for(const story of list || []){
+
+    if(
+      !story ||
+      Number(story.expiresAt) <=
+        Date.now()
+    ){
+      continue;
+    }
+
+    const key =
+      norm(story.username);
+
+    if(!groups[key]){
+
+      groups[key] = {
+        username:story.username,
+        displayName:
+          story.displayName ||
+          story.username,
+        profileImage:
+          story.profileImage || "",
+        stories:[]
+      };
+    }
+
+    groups[key].stories.push(
+      story
+    );
+  }
+
+  return Object.values(
+    groups
+  ).sort(
+    (a,b) => {
+
+      if(
+        norm(a.username) ===
+        norm(myUsername)
+      ){
+        return -1;
+      }
+
+      if(
+        norm(b.username) ===
+        norm(myUsername)
+      ){
+        return 1;
+      }
+
+      return (
+        (
+          b.stories[
+            b.stories.length - 1
+          ]?.createdAt || 0
+        ) -
+        (
+          a.stories[
+            a.stories.length - 1
+          ]?.createdAt || 0
+        )
+      );
+    }
+  );
+}
+
+function renderStories(){
+
+  const groups =
+    storyGroupsFromFlat(
+      storiesList
+    );
+
+  storiesBar.innerHTML = "";
+
+  const addButton =
+    document.createElement(
+      "button"
+    );
+
+  addButton.className =
+    "storyItem";
+
+  addButton.innerHTML = `
+    <div class="storyRing">
+      <div class="storyAvatar storyAdd">＋</div>
+    </div>
+
+    <div class="storyLabel">
+      Tu historia
+    </div>
+  `;
+
+  addButton.onclick =
+    openStoryCreator;
+
+  storiesBar.appendChild(
+    addButton
+  );
+
+  for(const group of groups){
+
+    if(
+      norm(group.username) ===
+      norm(myUsername)
+    ){
+      continue;
+    }
+
+    const hasUnseen =
+      group.stories.some(
+        story =>
+          !(story.views || []).some(
+            view =>
+              norm(view.username) ===
+              norm(myUsername)
+          )
+      );
+
+    const button =
+      document.createElement(
+        "button"
+      );
+
+    button.className =
+      "storyItem";
+
+    button.innerHTML = `
+      <div class="storyRing ${
+        hasUnseen ? "" : "seen"
+      }">
+
+        <div class="storyAvatar">
+          ${avatarHtml(group)}
+        </div>
+
+      </div>
+
+      <div class="storyLabel">
+        ${esc(group.displayName)}
+      </div>
+
+      <div class="storySeenLabel">
+        ${
+          hasUnseen
+            ? "No vista"
+            : "Vista"
+        }
+      </div>
+    `;
+
+    button.onclick =
+      () =>
+        openStoryViewer(
+          group,
+          0
+        );
+
+    storiesBar.appendChild(
+      button
+    );
+  }
+
+  const mine =
+    groups.find(
+      group =>
+        norm(group.username) ===
+        norm(myUsername)
+    );
+
+  if(
+    mine &&
+    mine.stories.length
+  ){
+
+    addButton.innerHTML = `
+      <div class="storyRing">
+
+        <div class="storyAvatar">
+          ${avatarHtml(mine)}
+        </div>
+
+      </div>
+
+      <div class="storyLabel">
+        Tu historia
+      </div>
+    `;
+
+    addButton.onclick =
+      () =>
+        openStoryViewer(
+          mine,
+          0
+        );
+
+    addButton.ondblclick =
+      openStoryCreator;
+  }
+}
+
+async function loadStories(){
+
+  if(socket.connected){
+    socket.emit(
+      "getStories"
+    );
+  }
+
+  try{
+
+    const token =
+      localStorage.getItem(
+        "chatToken"
+      );
+
+    if(!token) return;
+
+    const response =
+      await fetch(
+        "/api/stories",
+        {
+          headers:{
+            Authorization:
+              "Bearer " + token
+          }
+        }
+      );
+
+    if(!response.ok) return;
+
+    const data =
+      await response.json();
+
+    storiesList =
+      Array.isArray(data)
+        ? data.map(
+            story => ({
+              ...story,
+              views:
+                Array.isArray(
+                  story.views
+                )
+                  ? story.views
+                  : []
+            })
+          )
+        : [];
+
+    renderStories();
+
+  }catch{}
+}
+
+socket.on(
+  "storiesData",
+  list => {
+
+    storiesList =
+      Array.isArray(list)
+        ? list
+        : [];
+
+    renderStories();
+  }
+);
+
+socket.on(
+  "storyCreated",
+  story => {
+
+    if(
+      !Array.isArray(
+        story.views
+      )
+    ){
+
+      story.views = [];
+    }
+
+    if(
+      !storiesList.some(
+        item =>
+          item.id ===
+          story.id
+      )
+    ){
+
+      storiesList.push(
+        story
+      );
+    }
+
+    renderStories();
+  }
+);
+
+socket.on(
+  "storyViewed",
+  data => {
+
+    const index =
+      storiesList.findIndex(
+        story =>
+          story.id ===
+          data.storyId
+      );
+
+    if(index >= 0){
+
+      storiesList[index].views =
+        Array.isArray(data.views)
+          ? data.views
+          : storiesList[index].views || [];
+
+      renderStories();
+    }
+  }
+);
+
+socket.on(
+  "storyDeleted",
+  data => {
+
+    storiesList =
+      storiesList.filter(
+        story =>
+          story.id !==
+          data.id
+      );
+
+    renderStories();
+
+    if(selectedStoryGroup){
+
+      selectedStoryGroup.stories =
+        selectedStoryGroup.stories.filter(
+          story =>
+            story.id !== data.id
+        );
+
+      if(
+        !selectedStoryGroup.stories.length
+      ){
+
+        closeStoryViewer();
+      }
+    }
+  }
+);
+
+function openStoryCreator(){
+
+  storyCreateError.textContent = "";
+
+  storyText.value = "";
+  storyImageFile.value = "";
+
+  storyMode = "text";
+
+  storyTextType.classList.add(
+    "active"
+  );
+
+  storyImageType.classList.remove(
+    "active"
+  );
+
+  storyText.classList.remove(
+    "hidden"
+  );
+
+  storyImageFile.classList.add(
+    "hidden"
+  );
+
+  storyPreview.style.background =
+    "#075e54";
+
+  storyPreview.innerHTML =
+    "Tu historia aparecerá aquí";
+
+  storyPreview.dataset.value = "";
+
+  storyCreateModal.style.display =
+    "flex";
+}
+
+storyTextType.onclick = () => {
+
+  storyMode = "text";
+
+  storyTextType.classList.add(
+    "active"
+  );
+
+  storyImageType.classList.remove(
+    "active"
+  );
+
+  storyText.classList.remove(
+    "hidden"
+  );
+
+  storyImageFile.classList.add(
+    "hidden"
+  );
+};
+
+storyImageType.onclick = () => {
+
+  storyMode = "image";
+
+  storyImageType.classList.add(
+    "active"
+  );
+
+  storyTextType.classList.remove(
+    "active"
+  );
+
+  storyText.classList.add(
+    "hidden"
+  );
+
+  storyImageFile.classList.remove(
+    "hidden"
+  );
+};
+
+storyText.oninput = () => {
+
+  storyPreview.style.background =
+    "#075e54";
+
+  storyPreview.textContent =
+    storyText.value.trim() ||
+    "Tu historia aparecerá aquí";
+};
+
+storyImageFile.onchange =
+  async () => {
+
+    const file =
+      storyImageFile.files[0];
+
+    if(!file) return;
+
+    if(
+      file.size >
+      5 * 1024 * 1024
+    ){
+
+      storyCreateError.textContent =
+        "La foto debe pesar menos de 5 MB.";
+
+      return;
+    }
+
+    try{
+
+      const data =
+        await resizeImage(
+          file,
+          1200,
+          1200
+        );
+
+      storyPreview.style.background =
+        "#111";
+
+      storyPreview.innerHTML =
+        `<img src="${data}" alt="">`;
+
+      storyPreview.dataset.value =
+        data;
+
+    }catch{
+
+      storyCreateError.textContent =
+        "No se pudo procesar la foto.";
+    }
+  };
+
+$("cancelStory").onclick = () => {
+  storyCreateModal.style.display =
+    "none";
+};
+
+$("publishStory").onclick =
+  async () => {
+
+    storyCreateError.textContent = "";
+
+    let content = "";
+
+    if(storyMode === "text"){
+
+      content =
+        storyText.value.trim();
+
+    }else{
+
+      content =
+        storyPreview.dataset.value ||
+        "";
+    }
+
+    if(!content){
+
+      storyCreateError.textContent =
+        storyMode === "text"
+          ? "Escribe algo primero."
+          : "Selecciona una foto.";
+
+      return;
+    }
+
+    try{
+
+      const token =
+        localStorage.getItem(
+          "chatToken"
+        );
+
+      const response =
+        await fetch(
+          "/api/stories",
+          {
+            method:"POST",
+            headers:{
+              "Content-Type":
+                "application/json",
+              Authorization:
+                "Bearer " + token
+            },
+            body:JSON.stringify({
+              type:storyMode,
+              content
+            })
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if(!response.ok){
+
+        throw new Error(
+          data.error ||
+          "No se pudo publicar la historia."
+        );
+      }
+
+      storyCreateModal.style.display =
+        "none";
+
+      storyPreview.dataset.value =
+        "";
+
+    }catch(error){
+
+      storyCreateError.textContent =
+        error.message;
+    }
+  };
+
+function openStoryViewer(
+  group,
+  index
+){
+
+  selectedStoryGroup =
+    group;
+
+  selectedStoryIndex =
+    Math.max(
+      0,
+      Math.min(
+        index,
+        group.stories.length - 1
+      )
+    );
+
+  storyViewerModal.style.display =
+    "flex";
+
+  renderCurrentStory();
+}
+
+async function markStoryViewed(
+  storyId
+){
+
+  try{
+
+    const token =
+      localStorage.getItem(
+        "chatToken"
+      );
+
+    if(!token) return;
+
+    await fetch(
+      "/api/stories/" +
+      encodeURIComponent(storyId) +
+      "/view",
+      {
+        method:"POST",
+        headers:{
+          Authorization:
+            "Bearer " + token
+        }
+      }
+    );
+
+  }catch{}
+}
+
+function renderCurrentStory(){
+
+  if(
+    !selectedStoryGroup ||
+    !selectedStoryGroup.stories.length
+  ){
+
+    closeStoryViewer();
+    return;
+  }
+
+  const story =
+    selectedStoryGroup.stories[
+      selectedStoryIndex
+    ];
+
+  storyMeta.innerHTML = `
+    <div class="avatar">
+      ${avatarHtml(selectedStoryGroup)}
+    </div>
+
+    <div>
+      ${esc(
+        selectedStoryGroup.displayName
+      )}
+    </div>
+  `;
+
+  if(story.type === "image"){
+
+    storyViewerContent.innerHTML =
+      `<img
+        src="${esc(story.content)}"
+        alt="Historia"
+      >`;
+
+  }else{
+
+    storyViewerContent.innerHTML =
+      `
+        <div
+          class="storyViewerText"
+          style="
+            background:${esc(
+              story.background ||
+              "#075e54"
+            )};
+            width:100%;
+            height:100%;
+            display:flex;
+            align-items:center;
+            justify-content:center
+          "
+        >
+          ${esc(story.content)}
+        </div>
+      `;
+  }
+
+  deleteStoryButton.classList.toggle(
+    "hidden",
+    norm(story.username) !==
+      norm(myUsername)
+  );
+
+  if(
+    norm(story.username) !==
+      norm(myUsername)
+  ){
+
+    markStoryViewed(
+      story.id
+    );
+  }
+
+  storyStartedAt =
+    Date.now();
+
+  storyProgressFill.style.width =
+    "0%";
+
+  clearInterval(storyTimer);
+
+  storyTimer =
+    setInterval(
+      () => {
+
+        const progress =
+          Math.min(
+            100,
+            (
+              (
+                Date.now() -
+                storyStartedAt
+              ) /
+              6000
+            ) *
+            100
+          );
+
+        storyProgressFill.style.width =
+          progress + "%";
+
+        if(progress >= 100){
+
+          clearInterval(
+            storyTimer
+          );
+
+          nextStory();
+        }
+
+      },
+      50
+    );
+}
+
+function nextStory(){
+
+  if(!selectedStoryGroup){
+    return;
+  }
+
+  if(
+    selectedStoryIndex <
+    selectedStoryGroup.stories.length - 1
+  ){
+
+    selectedStoryIndex++;
+
+    renderCurrentStory();
+
+  }else{
+
+    closeStoryViewer();
+  }
+}
+
+function prevStory(){
+
+  if(!selectedStoryGroup){
+    return;
+  }
+
+  if(selectedStoryIndex > 0){
+
+    selectedStoryIndex--;
+
+    renderCurrentStory();
+  }
+}
+
+function closeStoryViewer(){
+
+  clearInterval(storyTimer);
+
+  storyViewerModal.style.display =
+    "none";
+
+  selectedStoryGroup = null;
+}
+
+$("storyNext").onclick =
+  nextStory;
+
+$("storyPrev").onclick =
+  prevStory;
+
+$("closeStoryViewer").onclick =
+  closeStoryViewer;
+
+deleteStoryButton.onclick =
+  async () => {
+
+    const story =
+      selectedStoryGroup?.stories[
+        selectedStoryIndex
+      ];
+
+    if(!story) return;
+
+    if(
+      !confirm(
+        "¿Borrar esta historia?"
+      )
+    ){
+      return;
+    }
+
+    try{
+
+      const token =
+        localStorage.getItem(
+          "chatToken"
+        );
+
+      const response =
+        await fetch(
+          "/api/stories/" +
+          encodeURIComponent(
+            story.id
+          ),
+          {
+            method:"DELETE",
+            headers:{
+              Authorization:
+                "Bearer " + token
+            }
+          }
+        );
+
+      if(!response.ok){
+
+        const data =
+          await response.json();
+
+        throw new Error(
+          data.error ||
+          "No se pudo borrar."
+        );
+      }
+
+    }catch(error){
+
+      showNotification(
+        "Historias",
+        error.message
+      );
+    }
+  };
+
+window.addEventListener(
+  "keydown",
+  event => {
+
+    if(
+      storyViewerModal.style.display !==
+      "flex"
+    ){
+      return;
+    }
+
+    if(event.key === "ArrowRight"){
+      nextStory();
+    }
+
+    if(event.key === "ArrowLeft"){
+      prevStory();
+    }
+
+    if(event.key === "Escape"){
+      closeStoryViewer();
+    }
+  }
+);
+
+/* =====================================================
+   NOTIFICACIÓN NATIVA ANDROID
+===================================================== */
+
+let pendingNativeCallAction = null;
+
+function handleNativeCallNotification(data){
+
+  if(!data){
+    return;
+  }
+
+  const username =
+    norm(data.username || "");
+
+  if(!username){
+    return;
+  }
+
+  const action =
+    norm(data.action || "");
+
+  if(callState !== "idle"){
+    return;
+  }
+
+  showIncomingCallFromNotification(
+    username,
+    data.sender || ""
+  );
+
+  // La llamada se muestra primero para que el usuario vea
+  // el estado incluso si el micrófono tarda un momento en abrirse.
+  if(action === "accept"){
+    setTimeout(() => {
+      if(callState === "incoming"){
+        acceptCall();
+      }
+    }, 250);
+  }
+
+  if(action === "reject"){
+    setTimeout(() => {
+      if(callState === "incoming"){
+        rejectCall();
+      }
+    }, 250);
+  }
+}
+
+window.addEventListener(
+  "nativeNotification",
+  event => {
+
+    try{
+
+      const data =
+        event.detail || {};
+
+      const username =
+        norm(data.username || "");
+
+      const type =
+        norm(data.type || "");
+
+      if(!username){
+        return;
+      }
+
+      if(type === "call"){
+
+        // Si todavía no estamos autenticados por Socket.IO,
+        // guardamos la acción y la procesamos al autenticar.
+        if(!myUsername || !socket.connected){
+          pendingNativeCallAction = data;
+          return;
+        }
+
+        handleNativeCallNotification(data);
+        return;
+      }
+
+      const contact =
+        allUsers.find(
+          user =>
+            norm(user.username) ===
+            username
+        );
+
+      if(contact){
+
+        openChat(
+          contact.username,
+          contact.displayName ||
+            contact.username,
+          contact.online,
+          contact.profileImage || ""
+        );
+
+      }else{
+
+        socket.emit(
+          "findUser",
+          username
+        );
+      }
+
+    }catch(error){
+
+      console.error(
+        "nativeNotification:",
+        error
+      );
+    }
+  }
+);
+
+/* =====================================================
+   ARRANQUE
+===================================================== */
+
+checkSession();
+
+</script>
+
+</body>
+</html>
+```
