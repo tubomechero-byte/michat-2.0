@@ -444,6 +444,23 @@ const ADMIN_SESSION_SECRET = String(
 );
 const ADMIN_SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
+// Terminal de actividad del administrador.
+const adminActivity = [];
+
+function addAdminActivity(text) {
+  const line = {
+    id: Date.now() + "-" + crypto.randomBytes(4).toString("hex"),
+    time: new Date().toISOString(),
+    text: String(text || "")
+  };
+
+  adminActivity.push(line);
+
+  if (adminActivity.length > 200) {
+    adminActivity.splice(0, adminActivity.length - 200);
+  }
+}
+
 function createAdminToken() {
   const payload = Buffer.from(JSON.stringify({
     username: ADMIN_USERNAME,
@@ -831,6 +848,10 @@ app.delete("/api/admin/stories/:id", requireAdmin, (req, res) => {
   );
 
   res.json({ success: true });
+});
+
+app.get("/api/admin/activity", requireAdmin, (req, res) => {
+  res.json(adminActivity.slice(-100).reverse());
 });
 
 app.get("/api/admin/messages", requireAdmin, (req, res) => {
@@ -2506,6 +2527,10 @@ io.on("connection", socket => {
       }
 
       saveMessages(list);
+
+      addAdminActivity(
+        `${msg.fromDisplay} ha enviado un mensaje a ${msg.toDisplay}: ${msg.message}`
+      );
 
       const targetSid =
         socketIdFor(to);
