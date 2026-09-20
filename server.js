@@ -2594,15 +2594,6 @@ io.on("connection", socket => {
 
       saveMessages(list);
 
-      if (typeof addAdminActivity === "function") {
-        addAdminActivity(
-          `${msg.fromDisplay} ha enviado un mensaje a ${msg.toDisplay}: ${
-            msg.message ||
-            (msg.fileName ? "📎 " + msg.fileName : "Archivo multimedia")
-          }`
-        );
-      }
-
       const targetSid =
         socketIdFor(to);
 
