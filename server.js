@@ -481,7 +481,9 @@ app.post(
     }
 
     const id = crypto.randomBytes(16).toString("hex");
-    const fileName = id + ".webm";
+    const mimeType = String(req.headers["content-type"] || "audio/webm").split(";")[0].toLowerCase();
+    const extension = mimeType === "audio/mp4" ? ".m4a" : mimeType === "audio/ogg" ? ".ogg" : ".webm";
+    const fileName = id + extension;
     const filePath = path.join(RECORDINGS_DIR, fileName);
 
     try {
