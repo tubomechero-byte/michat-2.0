@@ -603,6 +603,172 @@ app.get("/api/admin/users", requireAdmin, (req, res) => {
   res.json(result);
 });
 
+app.delete("/api/admin/users/:username", requireAdmin, (req, res) => {
+  const username = norm(req.params.username);
+
+  if (!username) {
+    return res.status(400).json({
+      error: "Usuario inválido."
+    });
+  }
+
+  const list = users();
+  const index = list.findIndex(
+    u => norm(u.username) === username
+  );
+
+  if (index < 0) {
+    return res.status(404).json({
+      error: "Usuario no encontrado."
+    });
+  }
+
+  const removed = list[index];
+  list.splice(index, 1);
+  saveUsers(list);
+
+  // Eliminar sus sesiones antiguas.
+  const sessionData = sessions();
+  let sessionChanged = false;
+
+  for (const [token, value] of Object.entries(sessionData)) {
+    if (norm(value?.username) === username) {
+      delete sessionData[token];
+      sessionChanged = true;
+    }
+  }
+
+  if (sessionChanged) {
+    saveSessions(sessionData);
+  }
+
+  // Quitar al usuario de contactos y bloqueos de los demás.
+  const updatedUsers = users();
+  let usersChanged = false;
+
+  for (const user of updatedUsers) {
+    const oldContacts = Array.isArray(user.contacts)
+      ? user.contacts
+      : [];
+    const oldBlocked = Array.isArray(user.blockedUsers)
+      ? user.blockedUsers
+      : [];
+
+    const newContacts = oldContacts.filter(
+      name => norm(name) !== username
+    );
+    const newBlocked = oldBlocked.filter(
+      name => norm(name) !== username
+    );
+
+    if (
+      newContacts.length !== oldContacts.length ||
+      newBlocked.length !== oldBlocked.length
+    ) {
+      user.contacts = newContacts;
+      user.blockedUsers = newBlocked;
+      usersChanged = true;
+    }
+  }
+
+  if (usersChanged) {
+    saveUsers(updatedUsers);
+  }
+
+  // Eliminar mensajes relacionados con la cuenta.
+  const remainingMessages = messages().filter(
+    message =>
+      norm(message.from) !== username &&
+      norm(message.to) !== username
+  );
+  saveMessages(remainingMessages);
+
+  // Eliminar estados de la cuenta.
+  const remainingStories = allStories().filter(
+    story => norm(story.username) !== username
+  );
+  saveStories(remainingStories);
+
+  // Eliminar sus suscripciones Web Push.
+  const remainingPush = pushSubs().filter(
+    item => norm(item.username) !== username
+  );
+  savePushSubs(remainingPush);
+
+  // Eliminar sus tokens FCM.
+  const fcmData = fcmTokens();
+  if (Object.prototype.hasOwnProperty.call(fcmData, username)) {
+    delete fcmData[username];
+    saveFcmTokens(fcmData);
+  }
+
+  // Desconectar cualquier sesión Socket.IO activa.
+  for (const [socketId, name] of online.entries()) {
+    if (norm(name) === username) {
+      online.delete(socketId);
+      const targetSocket = io.sockets.sockets.get(socketId);
+      if (targetSocket) {
+        targetSocket.disconnect(true);
+      }
+    }
+  }
+
+  sendUserList();
+
+  console.log(
+    `Administrador eliminó la cuenta ${username}.`
+  );
+
+  res.json({
+    success: true,
+    username: removed.username
+  });
+});
+
+app.post("/api/admin/users/:username/reset-password", requireAdmin, (req, res) => {
+  const username = norm(req.params.username);
+  const newPassword = String(req.body?.password || "");
+
+  if (!username) {
+    return res.status(400).json({
+      error: "Usuario inválido."
+    });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({
+      error: "La nueva contraseña debe tener al menos 6 caracteres."
+    });
+  }
+
+  const list = users();
+  const index = list.findIndex(
+    u => norm(u.username) === username
+  );
+
+  if (index < 0) {
+    return res.status(404).json({
+      error: "Usuario no encontrado."
+    });
+  }
+
+  const p = passwordHash(newPassword);
+
+  list[index].salt = p.salt;
+  list[index].passwordHash = p.hash;
+
+  saveUsers(list);
+
+  console.log(
+    `Administrador restableció la contraseña de ${username}.`
+  );
+
+  res.json({
+    success: true,
+    username: list[index].username
+  });
+});
+
 app.get("/api/admin/users/:username/stories", requireAdmin, (req, res) => {
   const username = norm(req.params.username);
 
