@@ -2043,14 +2043,61 @@ async function startCallRecording(){
 
   try{
     callRecordingAudioContext = new AudioContextClass();
+
+    // En Android/WebView el AudioContext puede arrancar suspendido.
+    // Hay que reactivarlo antes de crear la grabación.
+    if (callRecordingAudioContext.state === "suspended") {
+      await callRecordingAudioContext.resume();
+    }
+
     callRecordingDestination = callRecordingAudioContext.createMediaStreamDestination();
 
-    const localSource = callRecordingAudioContext.createMediaStreamSource(localStream);
-    const remoteSource = callRecordingAudioContext.createMediaStreamSource(remoteStream);
+    const localTracks = localStream.getAudioTracks ? localStream.getAudioTracks() : [];
+    if (!localTracks.length) {
+      throw new Error("No se encontró el micrófono de la llamada.");
+    }
+
+    const localSource = callRecordingAudioContext.createMediaStreamSource(
+      new MediaStream(localTracks)
+    );
+
+    // Primero intentamos capturar el audio tal como se reproduce en el elemento
+    // <audio>. Esto evita que algunos WebView entreguen una pista remota que
+    // luego no pasa correctamente al AudioContext.
+    let remoteCaptureStream = null;
+    if (typeof remoteAudio.captureStream === "function") {
+      try {
+        remoteCaptureStream = remoteAudio.captureStream();
+      } catch (e) {
+        console.warn("captureStream no disponible para el audio remoto:", e);
+      }
+    }
+
+    if (!remoteCaptureStream || !remoteCaptureStream.getAudioTracks().length) {
+      remoteCaptureStream = remoteStream;
+    }
+
+    const remoteTracks = remoteCaptureStream.getAudioTracks
+      ? remoteCaptureStream.getAudioTracks()
+      : [];
+
+    if (!remoteTracks.length) {
+      throw new Error("Todavía no se ha recibido el audio de la otra persona.");
+    }
+
+    const remoteSource = callRecordingAudioContext.createMediaStreamSource(
+      new MediaStream(remoteTracks)
+    );
+
     localSource.connect(callRecordingDestination);
     remoteSource.connect(callRecordingDestination);
 
-    const preferred = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
+    const preferred = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4",
+      "audio/ogg;codecs=opus"
+    ];
     callRecordingMimeType = preferred.find(x => MediaRecorder.isTypeSupported(x)) || "audio/webm";
     callRecorder = new MediaRecorder(callRecordingDestination.stream, {
       mimeType: callRecordingMimeType,
