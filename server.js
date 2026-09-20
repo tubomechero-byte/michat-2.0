@@ -2653,3 +2653,26 @@ server.listen(
     );
   }
 );
+    )
+  ) {
+    return next();
+  }
+
+  res.sendFile(
+    path.join(
+      __dirname,
+      "public",
+      "index.html"
+    )
+  );
+});
+
+server.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
+    console.log(
+      `Mi Chat funcionando en http://localhost:${PORT}`
+    );
+  }
+);
