@@ -362,6 +362,9 @@ button,input,textarea{font:inherit}
         <button class="actionBtn" id="newChatButton">
           ➕ Añadir contacto
         </button>
+        <button class="actionBtn" id="openStoriesButton" type="button">
+          📸 Estados
+        </button>
       </div>
 
       <div id="storiesBar" class="storiesBar"></div>
@@ -3206,6 +3209,9 @@ window.addEventListener(
 const storiesBar =
   $("storiesBar");
 
+const openStoriesButton =
+  $("openStoriesButton");
+
 const storyCreateModal =
   $("storyCreateModal");
 
@@ -3317,6 +3323,12 @@ function storyGroupsFromFlat(list){
       );
     }
   );
+}
+
+if (openStoriesButton) {
+  openStoriesButton.addEventListener("click", () => {
+    storiesBar.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
 }
 
 function renderStories(){
