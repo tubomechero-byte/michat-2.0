@@ -15,7 +15,7 @@ body{font-family:Arial,sans-serif;margin:0;background:#f4f6f8;color:#222}header{
 <h2>Acceso de administrador</h2>
 <label>Usuario</label><input id="loginUser" autocomplete="username">
 <label>Contraseña</label><input id="loginPass" type="password" autocomplete="current-password">
-<button id="loginBtn">Entrar</button><div id="loginMsg"></div>
+<button id="loginBtn" type="button">Entrar</button><div id="loginMsg"></div>
 </section>
 <section id="panel" class="hidden">
 <div class="card"><h2>Resumen</h2><div class="stats" id="stats"></div></div>
@@ -103,7 +103,19 @@ function escAttr(s){return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'
 async function resetPassword(username){const p=prompt('Nueva contraseña para '+username+' (mínimo 6 caracteres):');if(p===null)return;if(p.length<6){alert('La contraseña debe tener al menos 6 caracteres.');return}if(!confirm('¿Restablecer la contraseña de '+username+'?'))return;try{await api('/api/admin/users/'+encodeURIComponent(username)+'/reset-password',{method:'POST',body:JSON.stringify({password:p})});$('actionMsg').className='ok';$('actionMsg').textContent='Contraseña restablecida para '+username+'.'}catch(e){$('actionMsg').className='error';$('actionMsg').textContent=e.message}}
 async function deleteUser(username){if(!confirm('¿Eliminar DEFINITIVAMENTE la cuenta de '+username+'? También se eliminarán sus mensajes, estados, sesiones y tokens de notificaciones.'))return;if(!confirm('Esta acción no se puede deshacer. ¿Continuar?'))return;try{await api('/api/admin/users/'+encodeURIComponent(username),{method:'DELETE'});$('actionMsg').className='ok';$('actionMsg').textContent='Cuenta eliminada: '+username;loadAll()}catch(e){$('actionMsg').className='error';$('actionMsg').textContent=e.message}}
 async function check(){const t=localStorage.getItem(tokenKey);if(!t)return;if(t)try{await api('/api/admin/me');showPanel();startActivity()}catch{localStorage.removeItem(tokenKey)}}
-$('loginBtn').onclick=login;$('refresh').onclick=loadAll;$('refreshReports').onclick=loadReports;$('refreshStories').onclick=loadStories;$('refreshRecordings').onclick=loadRecordings;$('logout').onclick=()=>{localStorage.removeItem(tokenKey);location.reload()};$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});check();
+$('loginBtn').onclick = async function (event) {
+  event.preventDefault();
+  try {
+    await login();
+  } catch (err) {
+    console.error('Error al iniciar sesión:', err);
+    const msg = $('loginMsg');
+    if (msg) {
+      msg.textContent = err?.message || 'No se pudo iniciar sesión.';
+      msg.style.display = 'block';
+    }
+  }
+};$('refresh').onclick=loadAll;$('refreshReports').onclick=loadReports;$('refreshStories').onclick=loadStories;$('refreshRecordings').onclick=loadRecordings;$('logout').onclick=()=>{localStorage.removeItem(tokenKey);location.reload()};$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});check();
 </script>
 </body>
 </html>
