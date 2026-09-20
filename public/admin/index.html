@@ -72,34 +72,3 @@ $('loginBtn').onclick=login;$('refresh').onclick=loadAll;$('logout').onclick=()=
 </script>
 </body>
 </html>
-<div class="card"><h2>Mensajes recientes</h2><button id="refreshMessages">Actualizar</button><div id="messages"></div></div>
-</section>
-</section>
-</main>
-<script>
-const tokenKey='michat_admin_token';
-const $=id=>document.getElementById(id);
-function headers(){return {'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.getItem(tokenKey)||'')}}
-function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function escAttr(s){return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
-async function api(url,opt={}){const r=await fetch(url,{...opt,headers:{...headers(),...(opt.headers||{})}});let d={};try{d=await r.json()}catch{}if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d}
-function showPanel(){ $('loginCard').classList.add('hidden');$('panel').classList.remove('hidden');$('logout').classList.remove('hidden');loadAll() }
-function setTab(name){document.querySelectorAll('.tab').forEach(x=>x.classList.add('hidden'));$('tab-'+name).classList.remove('hidden');document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x.dataset.tab===name));if(name==='usuarios')loadUsers();if(name==='estados')loadStories();if(name==='mensajes')loadMessages()}
-async function login(){const msg=$('loginMsg');msg.className='';msg.textContent='';try{const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('loginUser').value,password:$('loginPass').value})});const d=await r.json();if(!r.ok)throw new Error(d.error||'No se pudo iniciar sesión');localStorage.setItem(tokenKey,d.token);showPanel()}catch(e){msg.className='error';msg.textContent=e.message}}
-async function loadStats(){try{const s=await api('/api/admin/stats');$('stats').innerHTML=`<div class="stat"><b>Usuarios</b><span>${s.users}</span></div><div class="stat"><b>Mensajes</b><span>${s.messages}</span></div><div class="stat"><b>Estados</b><span>${s.stories}</span></div><div class="stat"><b>Conectados</b><span>${s.online}</span></div>`}catch(e){handleError(e)}}
-let cachedUsers=[];
-async function loadUsers(){try{cachedUsers=await api('/api/admin/users');renderUsers()}catch(e){handleError(e)}}
-function renderUsers(){const q=$('userSearch').value.trim().toLowerCase();const list=cachedUsers.filter(u=>!q||String(u.username).toLowerCase().includes(q)||String(u.displayName).toLowerCase().includes(q));$('users').innerHTML=list.map(u=>`<tr><td>${esc(u.username)}</td><td>${esc(u.displayName)}</td><td class="${u.online?'online':'offline'}">${u.online?'● Online':'○ Offline'}</td><td>${u.contacts}</td><td>${u.createdAt?new Date(u.createdAt).toLocaleString('es-ES'):'-'}</td><td class="actions"><button class="small" onclick="viewUserStories('${escAttr(u.username)}')">Ver estados</button><button class="small" onclick="resetPassword('${escAttr(u.username)}')">Restablecer contraseña</button><button class="small danger" onclick="deleteUser('${escAttr(u.username)}')">Eliminar cuenta</button></td></tr>`).join('')||'<tr><td colspan="6">No hay usuarios.</td></tr>'}
-async function viewUserStories(username){try{const list=await api('/api/admin/users/'+encodeURIComponent(username)+'/stories');alert(list.length?`Estados de ${username}: ${list.length}`:`${username} no tiene estados activos.`)}catch(e){handleError(e)}}
-async function resetPassword(username){const p=prompt('Nueva contraseña para '+username+' (mínimo 6 caracteres):');if(p===null)return;if(p.length<6){alert('La contraseña debe tener al menos 6 caracteres.');return}if(!confirm('¿Restablecer la contraseña de '+username+'?'))return;try{await api('/api/admin/users/'+encodeURIComponent(username)+'/reset-password',{method:'POST',body:JSON.stringify({password:p})});$('actionMsg').className='ok';$('actionMsg').textContent='Contraseña restablecida para '+username+'.'}catch(e){$('actionMsg').className='error';$('actionMsg').textContent=e.message}}
-async function deleteUser(username){if(!confirm('¿Eliminar DEFINITIVAMENTE la cuenta de '+username+'? También se eliminarán sus mensajes, estados, sesiones y tokens de notificaciones.'))return;if(!confirm('Esta acción no se puede deshacer. ¿Continuar?'))return;try{await api('/api/admin/users/'+encodeURIComponent(username),{method:'DELETE'});$('actionMsg').className='ok';$('actionMsg').textContent='Cuenta eliminada: '+username;await loadUsers();await loadStats()}catch(e){$('actionMsg').className='error';$('actionMsg').textContent=e.message}}
-async function loadStories(){try{const list=await api('/api/admin/stories');$('stories').innerHTML=list.map(s=>{const media=s.image||s.media||s.url||'';let m='';if(media&&String(media).match(/\.(mp4|webm|ogg)(\?|$)/i))m=`<video src="${esc(media)}" controls></video>`;else if(media)m=`<img src="${esc(media)}" alt="Estado">`;return `<div class="story"><b>${esc(s.username||'')}</b><div class="muted">${s.createdAt?new Date(s.createdAt).toLocaleString('es-ES'):''}</div>${m}<div>${esc(s.text||s.caption||'')}</div><button class="danger small" onclick="deleteStory('${escAttr(String(s.id))}')">Eliminar estado</button></div>`}).join('')||'<p>No hay estados activos.</p>'}catch(e){handleError(e)}}
-async function deleteStory(id){if(!confirm('¿Eliminar este estado?'))return;try{await api('/api/admin/stories/'+encodeURIComponent(id),{method:'DELETE'});loadStories();loadStats()}catch(e){handleError(e)}}
-async function loadMessages(){try{const list=await api('/api/admin/messages?limit=500');$('messages').innerHTML=list.map(m=>`<div class="msg"><b>${esc(m.from||m.sender||'')} → ${esc(m.to||m.receiver||'')}</b><div>${esc(m.text||m.message||'')}</div><div class="muted">${m.createdAt||m.timestamp?new Date(m.createdAt||m.timestamp).toLocaleString('es-ES'):''}</div></div>`).join('')||'<p>No hay mensajes.</p>'}catch(e){handleError(e)}}
-function handleError(e){if(String(e.message).includes('Sesión')){localStorage.removeItem(tokenKey);location.reload();return}alert(e.message)}
-async function loadAll(){await loadStats();await loadUsers()}
-document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));$('loginBtn').onclick=login;$('refreshHome').onclick=loadStats;$('refreshUsers').onclick=loadUsers;$('refreshStories').onclick=loadStories;$('refreshMessages').onclick=loadMessages;$('userSearch').oninput=renderUsers;$('logout').onclick=()=>{localStorage.removeItem(tokenKey);location.reload()};$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
-(async()=>{const t=localStorage.getItem(tokenKey);if(!t)return;try{await api('/api/admin/me');showPanel()}catch{localStorage.removeItem(tokenKey)}})();
-</script>
-</body>
-</html>
