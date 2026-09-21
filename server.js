@@ -22,6 +22,7 @@ const STORIES_FILE = path.join(DATA_DIR, "stories.json");
 const FCM_FILE = path.join(DATA_DIR, "fcm.json");
 const RECORDINGS_FILE = path.join(DATA_DIR, "recordings.json");
 const REPORTS_FILE = path.join(DATA_DIR, "reports.json");
+const MODERATION_FILE = path.join(DATA_DIR, "moderation.json");
 const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -47,7 +48,8 @@ const STATE_FILES = {
   "stories.json": [],
   "fcm.json": {},
   "recordings.json": [],
-  "reports.json": []
+  "reports.json": [],
+  "moderation.json": []
 };
 
 let supabaseAvailable = false;
@@ -71,6 +73,7 @@ ensure(STORIES_FILE, []);
 ensure(FCM_FILE, {});
 ensure(RECORDINGS_FILE, []);
 ensure(REPORTS_FILE, []);
+ensure(MODERATION_FILE, []);
 
 function read(file, fallback) {
   try {
@@ -291,6 +294,14 @@ function reports() {
 
 function saveReports(v) {
   write(REPORTS_FILE, v);
+}
+
+function moderationNotices() {
+  return read(MODERATION_FILE, []);
+}
+
+function saveModerationNotices(v) {
+  write(MODERATION_FILE, v);
 }
 
 function fcmTokens() {
@@ -867,6 +878,12 @@ app.delete("/api/admin/users/:username", requireAdmin, (req, res) => {
   );
   savePushSubs(remainingPush);
 
+  // Eliminar avisos de moderación dirigidos exclusivamente a la cuenta.
+  const remainingModeration = moderationNotices().filter(
+    item => item.target === "*" || norm(item.target) !== username
+  );
+  saveModerationNotices(remainingModeration);
+
   // Eliminar sus tokens FCM.
   const fcmData = fcmTokens();
   if (Object.prototype.hasOwnProperty.call(fcmData, username)) {
@@ -938,6 +955,96 @@ app.post("/api/admin/users/:username/reset-password", requireAdmin, (req, res) =
   res.json({
     success: true,
     username: list[index].username
+  });
+});
+
+app.get("/api/admin/moderation", requireAdmin, (req, res) => {
+  const list = moderationNotices()
+    .slice()
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+
+  res.json(list.slice(0, 100));
+});
+
+app.post("/api/admin/moderation", requireAdmin, (req, res) => {
+  const target = String(req.body?.username || "").trim();
+  const title = String(req.body?.title || "Aviso de moderación").trim();
+  const message = String(req.body?.message || "").trim();
+
+  if (!target) {
+    return res.status(400).json({ error: "Debes seleccionar un usuario." });
+  }
+
+  if (!message) {
+    return res.status(400).json({ error: "Escribe el texto del aviso." });
+  }
+
+  if (message.length > 2000) {
+    return res.status(400).json({ error: "El aviso no puede superar 2000 caracteres." });
+  }
+
+  if (title.length > 120) {
+    return res.status(400).json({ error: "El título no puede superar 120 caracteres." });
+  }
+
+  let recipients = [];
+
+  if (target === "*") {
+    recipients = users().map(u => norm(u.username)).filter(Boolean);
+  } else {
+    const user = getUser(target);
+    if (!user) {
+      return res.status(404).json({ error: "Usuario no encontrado." });
+    }
+    recipients = [norm(user.username)];
+  }
+
+  const notice = {
+    id: Date.now() + "-" + crypto.randomBytes(5).toString("hex"),
+    title: title || "Aviso de moderación",
+    message,
+    target: target === "*" ? "*" : recipients[0],
+    createdAt: Date.now(),
+    createdBy: req.admin.username
+  };
+
+  const list = moderationNotices();
+  list.push(notice);
+  if (list.length > 1000) {
+    list.splice(0, list.length - 1000);
+  }
+  saveModerationNotices(list);
+
+  const payload = {
+    type: "moderation",
+    title: notice.title,
+    from: "Moderación",
+    body: notice.message,
+    message: notice.message,
+    username: ""
+  };
+
+  for (const username of recipients) {
+    const sid = socketIdFor(username);
+    if (sid) {
+      io.to(sid).emit("moderationNotice", {
+        id: notice.id,
+        title: notice.title,
+        message: notice.message,
+        createdAt: notice.createdAt
+      });
+    }
+    sendPushToUser(username, payload);
+  }
+
+  addAdminActivity(
+    `Administrador envió un aviso de moderación${target === "*" ? " a todos los usuarios" : " a @" + recipients[0]}.`
+  );
+
+  res.json({
+    success: true,
+    notice,
+    recipients: recipients.length
   });
 });
 
@@ -2361,6 +2468,21 @@ io.on("connection", socket => {
     );
 
     emitRelationshipData(socket, u.username);
+
+    socket.emit(
+      "moderationNotices",
+      moderationNotices()
+        .filter(item => item.target === "*" || norm(item.target) === norm(u.username))
+        .slice()
+        .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0))
+        .slice(-20)
+        .map(item => ({
+          id: item.id,
+          title: item.title,
+          message: item.message,
+          createdAt: item.createdAt
+        }))
+    );
   });
 
   // ===================================================
