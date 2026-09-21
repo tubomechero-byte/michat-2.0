@@ -43,6 +43,9 @@ button,input,textarea{font:inherit}
 .requestItemUser{font-size:12px;color:#777;margin-top:2px}
 .requestItemActions{display:flex;gap:6px}
 .requestItemActions button{border:0;border-radius:8px;padding:8px 10px;cursor:pointer}
+.modalHeaderRow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.modalHeaderRow h2{margin:0;flex:1}
+
 
 .search{padding:10px;border-bottom:1px solid #ddd}
 .search input{width:100%;border:0;outline:none;padding:12px 14px;border-radius:20px;background:#f0f2f5}
@@ -451,11 +454,14 @@ button,input,textarea{font:inherit}
 <!-- SOLICITUDES -->
 <div id="requestsModal" class="modal">
   <div class="modalBox">
-    <h2>📥 Solicitudes de contacto</h2>
+    <div class="modalHeaderRow">
+      <h2>📥 Solicitudes de contacto</h2>
+      <button id="exitRequests" class="muted" aria-label="Salir de solicitudes">✕ Salir</button>
+    </div>
     <p>Acepta una solicitud para poder hablar con esa persona.</p>
     <div id="requestsList"></div>
     <div class="modalRow">
-      <button id="closeRequests" class="muted">Cerrar</button>
+      <button id="closeRequests" class="muted">Salir</button>
     </div>
   </div>
 </div>
@@ -1082,9 +1088,11 @@ requestsButton.onclick = () => {
   renderRequests();
   requestsModal.style.display = "flex";
 };
-$("closeRequests").onclick = () => {
+function closeRequestsModal(){
   requestsModal.style.display = "none";
-};
+}
+$("closeRequests").onclick = closeRequestsModal;
+$("exitRequests").onclick = closeRequestsModal;
 
 socket.on("contactRequestReceived", user => {
   if(user?.username && !hasIncomingRequest(user.username)){
