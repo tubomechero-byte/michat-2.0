@@ -23,6 +23,7 @@ const FCM_FILE = path.join(DATA_DIR, "fcm.json");
 const RECORDINGS_FILE = path.join(DATA_DIR, "recordings.json");
 const REPORTS_FILE = path.join(DATA_DIR, "reports.json");
 const MODERATION_FILE = path.join(DATA_DIR, "moderation.json");
+const APPEALS_FILE = path.join(DATA_DIR, "appeals.json");
 const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -49,7 +50,8 @@ const STATE_FILES = {
   "fcm.json": {},
   "recordings.json": [],
   "reports.json": [],
-  "moderation.json": []
+  "moderation.json": [],
+  "appeals.json": []
 };
 
 let supabaseAvailable = false;
@@ -74,6 +76,7 @@ ensure(FCM_FILE, {});
 ensure(RECORDINGS_FILE, []);
 ensure(REPORTS_FILE, []);
 ensure(MODERATION_FILE, []);
+ensure(APPEALS_FILE, []);
 
 function read(file, fallback) {
   try {
@@ -302,6 +305,14 @@ function moderationNotices() {
 
 function saveModerationNotices(v) {
   write(MODERATION_FILE, v);
+}
+
+function appeals() {
+  return read(APPEALS_FILE, []);
+}
+
+function saveAppeals(v) {
+  write(APPEALS_FILE, v);
 }
 
 function fcmTokens() {
@@ -884,6 +895,13 @@ app.delete("/api/admin/users/:username", requireAdmin, (req, res) => {
   );
   saveModerationNotices(remainingModeration);
 
+  // Eliminar las apelaciones enviadas por la cuenta y las asociadas a sus avisos.
+  const remainingAppeals = appeals().filter(item =>
+    norm(item.username) !== username &&
+    norm(item.noticeTarget) !== username
+  );
+  saveAppeals(remainingAppeals);
+
   // Eliminar sus tokens FCM.
   const fcmData = fcmTokens();
   if (Object.prototype.hasOwnProperty.call(fcmData, username)) {
@@ -1151,6 +1169,83 @@ app.delete("/api/admin/stories/:id", requireAdmin, (req, res) => {
   );
 
   res.json({ success: true });
+});
+
+app.get("/api/appeals", requireUser, (req, res) => {
+  const username = norm(req.user.username);
+  res.json(appeals()
+    .filter(item => norm(item.username) === username)
+    .slice()
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+    .slice(0, 50));
+});
+
+app.post("/api/appeals", requireUser, (req, res) => {
+  const noticeId = String(req.body?.noticeId || "").trim();
+  const text = String(req.body?.text || "").trim();
+
+  if (!noticeId) return res.status(400).json({ error: "Aviso de moderación no válido." });
+  if (text.length < 5) return res.status(400).json({ error: "La apelación debe tener al menos 5 caracteres." });
+  if (text.length > 3000) return res.status(400).json({ error: "La apelación no puede superar 3000 caracteres." });
+
+  const username = norm(req.user.username);
+  const notice = moderationNotices().find(item => String(item.id) === noticeId);
+  if (!notice || (notice.target !== "*" && norm(notice.target) !== username)) {
+    return res.status(404).json({ error: "Ese aviso no está disponible para tu cuenta." });
+  }
+
+  const list = appeals();
+  const existing = list.find(item => norm(item.username) === username && String(item.noticeId) === noticeId);
+  if (existing) {
+    return res.status(409).json({ error: "Ya has enviado una apelación para este aviso.", appeal: existing });
+  }
+
+  const appeal = {
+    id: Date.now() + "-" + crypto.randomBytes(5).toString("hex"),
+    noticeId,
+    noticeTitle: notice.title || "Aviso de moderación",
+    noticeMessage: notice.message || "",
+    noticeTarget: notice.target || "",
+    username: req.user.username,
+    displayName: req.user.displayName || req.user.username,
+    text,
+    status: "pending",
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+
+  list.push(appeal);
+  if (list.length > 1000) list.splice(0, list.length - 1000);
+  saveAppeals(list);
+  addAdminActivity(`@${appeal.username} envió una apelación sobre un aviso de moderación.`);
+  res.json({ success: true, appeal });
+});
+
+app.get("/api/admin/appeals", requireAdmin, (req, res) => {
+  res.json(appeals().slice().sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)).slice(0, 200));
+});
+
+app.patch("/api/admin/appeals/:id", requireAdmin, (req, res) => {
+  const id = String(req.params.id || "");
+  const status = String(req.body?.status || "").trim().toLowerCase();
+  if (!["pending", "approved", "rejected"].includes(status)) {
+    return res.status(400).json({ error: "Estado de apelación inválido." });
+  }
+
+  const list = appeals();
+  const item = list.find(x => String(x.id) === id);
+  if (!item) return res.status(404).json({ error: "Apelación no encontrada." });
+
+  item.status = status;
+  item.updatedAt = Date.now();
+  item.reviewedBy = req.admin.username;
+  saveAppeals(list);
+  addAdminActivity(`Administrador marcó la apelación de @${item.username} como ${status}.`);
+
+  const sid = socketIdFor(item.username);
+  if (sid) io.to(sid).emit("appealStatus", { id:item.id, noticeId:item.noticeId, status:item.status, updatedAt:item.updatedAt });
+
+  res.json({ success: true, appeal: item });
 });
 
 app.get("/api/admin/activity", requireAdmin, (req, res) => {
