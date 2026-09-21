@@ -1302,12 +1302,18 @@ app.get("/api/admin/messages", requireAdmin, (req, res) => {
 });
 
 app.get("/admin", (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   res.sendFile(
     path.join(__dirname, "public", "admin", "index.html")
   );
 });
 
 app.get("/admin/", (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   res.sendFile(
     path.join(__dirname, "public", "admin", "index.html")
   );
@@ -2583,6 +2589,26 @@ io.on("connection", socket => {
   // ===================================================
   // CONTACTOS
   // ===================================================
+
+  socket.on("getModerationNotices", () => {
+    const username = online.get(socket.id);
+    if (!username) return;
+
+    socket.emit(
+      "moderationNotices",
+      moderationNotices()
+        .filter(item => item.target === "*" || norm(item.target) === norm(username))
+        .slice()
+        .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0))
+        .slice(-20)
+        .map(item => ({
+          id: item.id,
+          title: item.title,
+          message: item.message,
+          createdAt: item.createdAt
+        }))
+    );
+  });
 
   socket.on("getContacts", () => {
     const me =
@@ -3863,6 +3889,9 @@ app.get("/{*splat}", (req, res, next) => {
     return next();
   }
 
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   res.sendFile(
     path.join(
       __dirname,
