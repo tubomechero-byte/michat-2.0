@@ -1431,6 +1431,10 @@ app.post("/api/register", (req, res) => {
 
   saveUsers(list);
 
+  addAdminActivity(
+    `${displayName} (@${username}) se ha registrado.`
+  );
+
   const token = newSession(username);
 
   sendUserList();
@@ -2826,6 +2830,13 @@ io.on("connection", socket => {
       }
 
       saveMessages(list);
+
+      addAdminActivity(
+        `${msg.fromDisplay} ha enviado un mensaje a ${msg.toDisplay}: ${
+          msg.message ||
+          (msg.fileName ? "📎 " + msg.fileName : "Archivo multimedia")
+        }`
+      );
 
       const targetSid =
         socketIdFor(to);
