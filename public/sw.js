@@ -1,4 +1,6 @@
 
+const CACHE_VERSION = "michat-v4";
+
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", event => event.waitUntil(self.clients.claim()));
 
@@ -6,12 +8,13 @@ self.addEventListener("push", event => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch {}
   const isCall = data.type === "call";
-  const title = isCall ? `📞 ${data.from || "Llamada entrante"}` : (data.from ? `💬 ${data.from}` : "Mi Chat");
-  const body = isCall ? "Llamada entrante" : (data.message || "Tienes un nuevo mensaje.");
+  const isModeration = data.type === "moderation";
+  const title = isCall ? `📞 ${data.from || "Llamada entrante"}` : isModeration ? `⚠️ ${data.title || "Aviso de moderación"}` : (data.from ? `💬 ${data.from}` : "Mi Chat");
+  const body = isCall ? "Llamada entrante" : (data.message || data.body || "Tienes un nuevo mensaje.");
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
-      tag: isCall ? "incoming-call" : "chat-message",
+      tag: isCall ? "incoming-call" : isModeration ? "moderation-notice" : "chat-message",
       renotify: true,
       data: { username: data.username || "", type: data.type || "message" }
     })
