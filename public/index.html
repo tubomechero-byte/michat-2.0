@@ -346,9 +346,11 @@ button,input,textarea{font:inherit}
     <div id="authDescription">Inicia sesión para entrar.</div>
 
     <input id="authUsername" class="authInput" placeholder="Nombre de usuario" maxlength="24" autocomplete="username">
+    <input id="authEmail" class="authInput" type="email" placeholder="Correo electrónico" autocomplete="email" style="display:none">
     <input id="authPassword" class="authInput" type="password" placeholder="Contraseña" autocomplete="current-password">
 
     <button id="authButton" class="authButton">Iniciar sesión</button>
+    <button id="forgotPasswordButton" class="switchButton" type="button">¿Has olvidado tu contraseña?</button>
     <button id="switchAuth" class="switchButton">Crear una cuenta</button>
     <div id="authError"></div>
   </div>
@@ -467,6 +469,34 @@ button,input,textarea{font:inherit}
   </div>
 </div>
 
+<!-- RECUPERAR CONTRASEÑA -->
+<div id="passwordRecoveryModal" class="modal">
+  <div class="modalBox" style="max-width:430px">
+    <h2>🔐 Recuperar contraseña</h2>
+    <p style="color:#777;font-size:14px">Te enviaremos un código de 6 dígitos al correo asociado a tu cuenta.</p>
+
+    <div id="recoveryStep1">
+      <input id="recoveryIdentifier" class="modalInput" placeholder="Usuario o correo electrónico" autocomplete="username email">
+      <div id="recoveryMessage" class="modalError"></div>
+      <div class="modalRow">
+        <button id="closeRecovery" class="muted" type="button">Cancelar</button>
+        <button id="sendRecoveryCode" class="primary" type="button">Enviar código</button>
+      </div>
+    </div>
+
+    <div id="recoveryStep2" style="display:none">
+      <input id="recoveryCode" class="modalInput" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Código de 6 dígitos">
+      <input id="recoveryNewPassword" class="modalInput" type="password" autocomplete="new-password" placeholder="Nueva contraseña">
+      <input id="recoveryNewPassword2" class="modalInput" type="password" autocomplete="new-password" placeholder="Repite la nueva contraseña">
+      <div id="recoveryResetMessage" class="modalError"></div>
+      <div class="modalRow">
+        <button id="closeRecovery2" class="muted" type="button">Cancelar</button>
+        <button id="resetPasswordButton" class="primary" type="button">Cambiar contraseña</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- SOLICITUDES -->
 <div id="requestsModal" class="modal">
   <div class="modalBox">
@@ -556,6 +586,7 @@ button,input,textarea{font:inherit}
     <div class="profilePreview" id="profilePreview"></div>
 
     <input id="profileName" class="modalInput" placeholder="Nombre para mostrar" maxlength="24">
+    <input id="profileEmail" class="modalInput" type="email" placeholder="Correo para recuperar la contraseña" autocomplete="email">
     <input id="profileFile" class="modalInput" type="file" accept="image/*">
 
     <div class="modalRow">
@@ -726,6 +757,8 @@ const authScreen = $("authScreen");
 const app = $("app");
 const authUsername = $("authUsername");
 const authPassword = $("authPassword");
+const authEmail = $("authEmail");
+const forgotPasswordButton = $("forgotPasswordButton");
 const authButton = $("authButton");
 const switchAuth = $("switchAuth");
 const authDescription = $("authDescription");
@@ -889,6 +922,11 @@ switchAuth.onclick = () => {
       ? "Iniciar sesión"
       : "Crear cuenta";
 
+  authEmail.style.display = authMode === "register" ? "block" : "none";
+  forgotPasswordButton.style.display = authMode === "login" ? "inline-block" : "none";
+  authEmail.required = authMode === "register";
+  authEmail.autocomplete = authMode === "register" ? "email" : "email";
+
   switchAuth.textContent =
     authMode === "login"
       ? "Crear una cuenta"
@@ -900,6 +938,124 @@ authButton.onclick = authenticate;
 authPassword.onkeydown = e => {
   if(e.key === "Enter"){
     authenticate();
+  }
+};
+
+const passwordRecoveryModal = $("passwordRecoveryModal");
+const recoveryIdentifier = $("recoveryIdentifier");
+const recoveryCode = $("recoveryCode");
+const recoveryNewPassword = $("recoveryNewPassword");
+const recoveryNewPassword2 = $("recoveryNewPassword2");
+const recoveryStep1 = $("recoveryStep1");
+const recoveryStep2 = $("recoveryStep2");
+const recoveryMessage = $("recoveryMessage");
+const recoveryResetMessage = $("recoveryResetMessage");
+
+forgotPasswordButton.onclick = () => {
+  recoveryIdentifier.value = authUsername.value.trim();
+  recoveryCode.value = "";
+  recoveryNewPassword.value = "";
+  recoveryNewPassword2.value = "";
+  recoveryMessage.textContent = "";
+  recoveryResetMessage.textContent = "";
+  recoveryStep1.style.display = "block";
+  recoveryStep2.style.display = "none";
+  passwordRecoveryModal.style.display = "flex";
+};
+
+function closeRecoveryModal(){
+  passwordRecoveryModal.style.display = "none";
+  recoveryMessage.textContent = "";
+  recoveryResetMessage.textContent = "";
+}
+
+$("closeRecovery").onclick = closeRecoveryModal;
+$("closeRecovery2").onclick = closeRecoveryModal;
+
+passwordRecoveryModal.addEventListener("click", event => {
+  if(event.target === passwordRecoveryModal) closeRecoveryModal();
+});
+
+$("sendRecoveryCode").onclick = async () => {
+  const identifier = recoveryIdentifier.value.trim();
+  recoveryMessage.textContent = "";
+  if(!identifier){
+    recoveryMessage.textContent = "Escribe tu usuario o correo electrónico.";
+    return;
+  }
+
+  const button = $("sendRecoveryCode");
+  button.disabled = true;
+  recoveryMessage.style.color = "#777";
+  recoveryMessage.textContent = "Enviando código…";
+
+  try {
+    const response = await fetch("/api/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier })
+    });
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.error || "No se pudo enviar el código.");
+    recoveryMessage.style.color = "#087f23";
+    recoveryMessage.textContent = data.message || "Si la cuenta existe y tiene correo, recibirás un código.";
+    recoveryStep1.style.display = "none";
+    recoveryStep2.style.display = "block";
+  } catch(error) {
+    recoveryMessage.style.color = "#c00";
+    recoveryMessage.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+};
+
+$("resetPasswordButton").onclick = async () => {
+  const identifier = recoveryIdentifier.value.trim();
+  const code = recoveryCode.value.trim();
+  const p1 = recoveryNewPassword.value;
+  const p2 = recoveryNewPassword2.value;
+  recoveryResetMessage.textContent = "";
+
+  if(!/^\d{6}$/.test(code)) {
+    recoveryResetMessage.textContent = "El código debe tener 6 dígitos.";
+    return;
+  }
+  if(p1.length < 6) {
+    recoveryResetMessage.textContent = "La nueva contraseña debe tener al menos 6 caracteres.";
+    return;
+  }
+  if(p1 !== p2) {
+    recoveryResetMessage.textContent = "Las contraseñas no coinciden.";
+    return;
+  }
+
+  const button = $("resetPasswordButton");
+  button.disabled = true;
+  recoveryResetMessage.style.color = "#777";
+  recoveryResetMessage.textContent = "Cambiando contraseña…";
+
+  try {
+    const response = await fetch("/api/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier, code, newPassword: p1 })
+    });
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.error || "No se pudo cambiar la contraseña.");
+    recoveryResetMessage.style.color = "#087f23";
+    recoveryResetMessage.textContent = data.message || "Contraseña cambiada correctamente.";
+    localStorage.removeItem("chatToken");
+    setTimeout(() => {
+      closeRecoveryModal();
+      authPassword.value = "";
+      authError.style.color = "#087f23";
+      authError.textContent = "Contraseña cambiada. Ya puedes iniciar sesión.";
+    }, 900);
+  } catch(error) {
+    recoveryResetMessage.style.color = "#c00";
+    recoveryResetMessage.textContent = error.message;
+  } finally {
+    button.disabled = false;
   }
 };
 
@@ -937,9 +1093,11 @@ async function authenticate(){
   const password =
     authPassword.value;
 
+  const email = authEmail.value.trim();
+
   authError.textContent = "";
 
-  if(!username || !password){
+  if(!username || !password || (authMode === "register" && !email)){
     authError.textContent =
       "Completa todos los campos.";
     return;
@@ -961,7 +1119,8 @@ async function authenticate(){
           },
           body:JSON.stringify({
             username,
-            password
+            password,
+            ...(authMode === "register" ? { email } : {})
           })
         }
       );
@@ -3377,6 +3536,9 @@ async function openProfileModal(){
     $("profileName").value =
       data.displayName || "";
 
+    $("profileEmail").value =
+      data.email || "";
+
     $("profilePreview").innerHTML =
       data.profileImage
         ? `<img src="${esc(data.profileImage)}" alt="">`
@@ -3524,6 +3686,8 @@ $("saveProfile").onclick = async () => {
         .value
         .trim(),
 
+    email: $("profileEmail").value.trim(),
+
     profileImage:
       $("profilePreview")
         .dataset
@@ -3564,7 +3728,7 @@ $("saveProfile").onclick = async () => {
       "none";
 
     myUsername =
-      data.displayName;
+      data.username || myUsername;
 
     showNotification(
       "Sistema",
