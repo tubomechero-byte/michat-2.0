@@ -6,6 +6,7 @@ const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
 const tls = require("tls");
+const net = require("net");
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getMessaging } = require("firebase-admin/messaging");
 
@@ -372,45 +373,79 @@ function prunePasswordResets() {
 
 function smtpConfig() {
   const user = String(process.env.SMTP_USER || "").trim();
-  const pass = String(process.env.SMTP_PASS || "");
+  // Google muestra las contraseñas de aplicación separadas por espacios.
+  // Los quitamos para evitar un AUTH LOGIN inválido si se pega tal cual.
+  const pass = String(process.env.SMTP_PASS || "").replace(/\s+/g, "");
   const host = String(process.env.SMTP_HOST || "smtp.gmail.com").trim();
   const port = Number(process.env.SMTP_PORT || 465);
-  const secure = String(process.env.SMTP_SECURE || "true").trim().toLowerCase() !== "false";
+  const secure = String(process.env.SMTP_SECURE || (port === 465 ? "true" : "false"))
+    .trim().toLowerCase() !== "false";
   const from = String(process.env.SMTP_FROM || user).trim();
   return { user, pass, host, port, secure, from };
+}
+
+function extractEmailAddress(value) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/<\s*([^<>\s]+@[^<>\s]+)\s*>/);
+  return normalizeEmail(match ? match[1] : raw);
 }
 
 function smtpReadResponse(socket) {
   return new Promise((resolve, reject) => {
     let buffer = "";
-    const onData = chunk => {
-      buffer += chunk.toString("utf8");
-      const lines = buffer.split(/\r?\n/);
-      const complete = [];
-      while (lines.length > 1) complete.push(lines.shift());
-      buffer = lines[0] || "";
-      const valid = complete.filter(Boolean);
-      if (!valid.length) return;
-      const last = valid[valid.length - 1];
-      if (/^\d{3} /.test(last)) {
-        cleanup();
-        const code = Number(last.slice(0, 3));
-        if (code >= 200 && code < 400) resolve(valid.join("\n"));
-        else reject(new Error(last));
-      }
-    };
-    const onError = error => { cleanup(); reject(error); };
-    const onClose = () => { cleanup(); reject(new Error("Conexión SMTP cerrada.")); };
-    const timer = setTimeout(() => { cleanup(); reject(new Error("Tiempo de espera SMTP agotado.")); }, 15000);
-    function cleanup() {
+    let finished = false;
+
+    const cleanup = () => {
       clearTimeout(timer);
       socket.off("data", onData);
       socket.off("error", onError);
       socket.off("close", onClose);
-    }
+      socket.off("end", onClose);
+    };
+
+    const fail = error => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      reject(error);
+    };
+
+    const succeed = text => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      resolve(text);
+    };
+
+    const onData = chunk => {
+      buffer += chunk.toString("utf8");
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || "";
+
+      const complete = lines.filter(Boolean);
+      if (!complete.length) return;
+
+      const last = complete[complete.length - 1];
+      const match = last.match(/^(\d{3})([ -])(.*)$/);
+      if (!match || match[2] !== " ") return;
+
+      const code = Number(match[1]);
+      const response = complete.join("\n");
+      if (code >= 200 && code < 400) {
+        succeed(response);
+      } else {
+        fail(new Error(`SMTP ${code}: ${match[3] || last}`));
+      }
+    };
+
+    const onError = error => fail(error);
+    const onClose = () => fail(new Error("Conexión SMTP cerrada antes de completar la respuesta."));
+    const timer = setTimeout(() => fail(new Error("Tiempo de espera SMTP agotado.")), 20000);
+
     socket.on("data", onData);
     socket.on("error", onError);
     socket.on("close", onClose);
+    socket.on("end", onClose);
   });
 }
 
@@ -419,36 +454,101 @@ async function smtpCommand(socket, command) {
   return smtpReadResponse(socket);
 }
 
-function smtpQuit(socket) {
-  try { socket.write("QUIT\r\n"); } catch {}
-  try { socket.end(); } catch {}
+async function smtpStartTls(socket, cfg) {
+  await smtpCommand(socket, `EHLO ${cfg.host}`);
+  await smtpCommand(socket, "STARTTLS");
+
+  const secureSocket = tls.connect({
+    socket,
+    servername: cfg.host,
+    rejectUnauthorized: true
+  });
+
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Tiempo de espera de TLS SMTP agotado.")), 20000);
+    secureSocket.once("secureConnect", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    secureSocket.once("error", error => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+
+  return secureSocket;
 }
 
 async function sendPasswordResetEmail(to, username, code) {
   const cfg = smtpConfig();
+  const envelopeFrom = extractEmailAddress(cfg.from);
+
   if (!cfg.user || !cfg.pass) {
     throw new Error("SMTP_USER/SMTP_PASS no configurados.");
+  }
+  if (!validEmail(cfg.user)) {
+    throw new Error("SMTP_USER no es un correo válido.");
+  }
+  if (!envelopeFrom || !validEmail(envelopeFrom)) {
+    throw new Error("SMTP_FROM no es un correo válido.");
   }
   if (!validEmail(to)) {
     throw new Error("Correo de destino no válido.");
   }
+  if (![465, 587].includes(cfg.port)) {
+    throw new Error("SMTP_PORT debe ser 465 o 587 para Gmail.");
+  }
 
-  const socket = tls.connect({ host: cfg.host, port: cfg.port, servername: cfg.host, rejectUnauthorized: true });
-  const greeting = smtpReadResponse(socket);
+  console.log(`SMTP recuperación: intentando envío a ${normalizeEmail(to)} desde ${envelopeFrom} usando ${cfg.host}:${cfg.port} secure=${cfg.secure}`);
+
+  let socket;
+  let activeSocket;
   try {
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("Tiempo de espera de conexión SMTP agotado.")), 15000);
-      socket.once("secureConnect", () => { clearTimeout(timer); resolve(); });
-      socket.once("error", error => { clearTimeout(timer); reject(error); });
-    });
-    await greeting;
-    await smtpCommand(socket, `EHLO ${cfg.host}`);
-    await smtpCommand(socket, "AUTH LOGIN");
-    await smtpCommand(socket, Buffer.from(cfg.user).toString("base64"));
-    await smtpCommand(socket, Buffer.from(cfg.pass).toString("base64"));
-    await smtpCommand(socket, `MAIL FROM:<${cfg.from}>`);
-    await smtpCommand(socket, `RCPT TO:<${to}>`);
-    await smtpCommand(socket, "DATA");
+    if (cfg.port === 465 || cfg.secure) {
+      socket = tls.connect({
+        host: cfg.host,
+        port: cfg.port,
+        servername: cfg.host,
+        rejectUnauthorized: true
+      });
+      activeSocket = socket;
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Tiempo de espera de conexión SMTP agotado.")), 20000);
+        socket.once("secureConnect", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+        socket.once("error", error => {
+          clearTimeout(timer);
+          reject(error);
+        });
+      });
+      await smtpReadResponse(socket);
+      await smtpCommand(socket, `EHLO ${cfg.host}`);
+    } else {
+      const plainSocket = net.createConnection({ host: cfg.host, port: cfg.port });
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Tiempo de espera de conexión SMTP agotado.")), 20000);
+        plainSocket.once("connect", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+        plainSocket.once("error", error => {
+          clearTimeout(timer);
+          reject(error);
+        });
+      });
+      await smtpReadResponse(plainSocket);
+      activeSocket = await smtpStartTls(plainSocket, cfg);
+      await smtpCommand(activeSocket, `EHLO ${cfg.host}`);
+    }
+
+    await smtpCommand(activeSocket, "AUTH LOGIN");
+    await smtpCommand(activeSocket, Buffer.from(cfg.user, "utf8").toString("base64"));
+    await smtpCommand(activeSocket, Buffer.from(cfg.pass, "utf8").toString("base64"));
+    await smtpCommand(activeSocket, `MAIL FROM:<${envelopeFrom}>`);
+    await smtpCommand(activeSocket, `RCPT TO:<${normalizeEmail(to)}>`);
+    await smtpCommand(activeSocket, "DATA");
 
     const subject = "Código de recuperación de Mi Chat";
     const body = [
@@ -465,9 +565,10 @@ async function sendPasswordResetEmail(to, username, code) {
     ].join("\r\n");
 
     const headers = [
-      `From: Mi Chat <${cfg.from}>`,
-      `To: <${to}>`,
+      `From: Mi Chat <${envelopeFrom}>`,
+      `To: <${normalizeEmail(to)}>`,
       `Subject: ${subject}`,
+      "Date: " + new Date().toUTCString(),
       "MIME-Version: 1.0",
       "Content-Type: text/plain; charset=UTF-8",
       "Content-Transfer-Encoding: 8bit",
@@ -475,14 +576,20 @@ async function sendPasswordResetEmail(to, username, code) {
       body
     ].join("\r\n").replace(/(^|\r\n)\./g, "$1..");
 
-    socket.write(headers + "\r\n.\r\n");
-    await smtpReadResponse(socket);
-    await smtpCommand(socket, "QUIT");
+    activeSocket.write(headers + "\r\n.\r\n");
+    await smtpReadResponse(activeSocket);
+    await smtpCommand(activeSocket, "QUIT");
+    console.log(`SMTP recuperación: correo enviado correctamente a ${normalizeEmail(to)}.`);
+  } catch (error) {
+    console.error(`SMTP recuperación: fallo para ${normalizeEmail(to)}:`, error.message);
+    throw error;
   } finally {
-    try { socket.end(); } catch {}
+    try { activeSocket?.end(); } catch {}
+    if (socket && socket !== activeSocket) {
+      try { socket.end(); } catch {}
+    }
   }
 }
-
 function activeBanFor(username) {
   const target = norm(username);
   if (!target) return null;
