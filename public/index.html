@@ -33,6 +33,16 @@ button,input,textarea{font:inherit}
 
 .actions{padding:10px;border-bottom:1px solid #ddd}
 .actionBtn{width:100%;border:0;border-radius:10px;padding:11px;cursor:pointer;background:#25d366;color:#fff;font-weight:bold}
+.actions{display:grid;gap:8px}
+.requestBtn{background:#128c7e}
+.requestBadge{display:inline-flex;min-width:20px;height:20px;padding:0 6px;margin-left:4px;border-radius:20px;align-items:center;justify-content:center;background:#fff;color:#128c7e;font-size:12px}
+.requestItem{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #eee}
+.requestItem .avatar{width:42px;height:42px}
+.requestItemInfo{flex:1;min-width:0}
+.requestItemName{font-weight:bold}
+.requestItemUser{font-size:12px;color:#777;margin-top:2px}
+.requestItemActions{display:flex;gap:6px}
+.requestItemActions button{border:0;border-radius:8px;padding:8px 10px;cursor:pointer}
 
 .search{padding:10px;border-bottom:1px solid #ddd}
 .search input{width:100%;border:0;outline:none;padding:12px 14px;border-radius:20px;background:#f0f2f5}
@@ -361,7 +371,10 @@ button,input,textarea{font:inherit}
 
       <div class="actions">
         <button class="actionBtn" id="newChatButton">
-          ➕ Añadir contacto
+          ➕ Enviar solicitud
+        </button>
+        <button class="actionBtn requestBtn" id="requestsButton">
+          📥 Solicitudes <span id="requestsBadge" class="requestBadge hidden">0</span>
         </button>
       </div>
 
@@ -421,8 +434,8 @@ button,input,textarea{font:inherit}
 <!-- NUEVO CHAT -->
 <div id="newChatModal" class="modal">
   <div class="modalBox">
-    <h2>➕ Añadir contacto</h2>
-    <p>Escribe el nombre de usuario para añadirlo a tus contactos.</p>
+    <h2>➕ Enviar solicitud</h2>
+    <p>Para poder hablar con alguien, primero debes enviarle una solicitud y esperar a que la acepte.</p>
 
     <input id="newChatUsername" class="modalInput" placeholder="ejemplo: pedro123">
 
@@ -430,7 +443,19 @@ button,input,textarea{font:inherit}
 
     <div class="modalRow">
       <button id="cancelNewChat" class="muted">Cancelar</button>
-      <button id="contactButton" class="primary">Añadir</button>
+      <button id="contactButton" class="primary">Enviar solicitud</button>
+    </div>
+  </div>
+</div>
+
+<!-- SOLICITUDES -->
+<div id="requestsModal" class="modal">
+  <div class="modalBox">
+    <h2>📥 Solicitudes de contacto</h2>
+    <p>Acepta una solicitud para poder hablar con esa persona.</p>
+    <div id="requestsList"></div>
+    <div class="modalRow">
+      <button id="closeRequests" class="muted">Cerrar</button>
     </div>
   </div>
 </div>
@@ -670,6 +695,7 @@ let authMode = "login";
 let unread = {};
 let conversations = {};
 let pendingContactUser = null;
+let relationshipData = { contacts: [], incoming: [], outgoing: [] };
 
 const $ = id => document.getElementById(id);
 
@@ -730,6 +756,10 @@ let callSpeaker = true;
 
 const layout = $("layout");
 const notifications = $("notifications");
+const requestsButton = $("requestsButton");
+const requestsBadge = $("requestsBadge");
+const requestsModal = $("requestsModal");
+const requestsList = $("requestsList");
 
 let peerConnection = null;
 let localStream = null;
@@ -991,8 +1021,122 @@ socket.on("authenticationError",() => {
 });
 
 /* =====================================================
-   USUARIOS
+   USUARIOS Y SOLICITUDES
 ===================================================== */
+
+function isContact(username){
+  return relationshipData.contacts.some(x => norm(x) === norm(username));
+}
+function hasIncomingRequest(username){
+  return relationshipData.incoming.some(x => norm(x) === norm(username));
+}
+function hasOutgoingRequest(username){
+  return relationshipData.outgoing.some(x => norm(x) === norm(username));
+}
+function updateRequestsBadge(){
+  const count = relationshipData.incoming.length;
+  requestsBadge.textContent = count > 99 ? "99+" : String(count);
+  requestsBadge.classList.toggle("hidden", count === 0);
+}
+function renderRequests(){
+  updateRequestsBadge();
+  requestsList.innerHTML = "";
+  const incomingUsers = relationshipData.incoming
+    .map(username => allUsers.find(u => norm(u.username) === norm(username)))
+    .filter(Boolean);
+  if(!incomingUsers.length){
+    requestsList.innerHTML = `<div class="empty" style="min-height:120px">No tienes solicitudes pendientes.</div>`;
+    return;
+  }
+  incomingUsers.forEach(user => {
+    const row = document.createElement("div");
+    row.className = "requestItem";
+    row.innerHTML = `
+      <div class="avatar">${avatarHtml(user)}</div>
+      <div class="requestItemInfo">
+        <div class="requestItemName">${esc(user.displayName || user.username)}</div>
+        <div class="requestItemUser">@${esc(user.username)}</div>
+      </div>
+      <div class="requestItemActions">
+        <button class="primary" data-action="accept">Aceptar</button>
+        <button class="muted" data-action="reject">Rechazar</button>
+      </div>
+    `;
+    row.querySelector('[data-action="accept"]').onclick = () => socket.emit("acceptContactRequest", user.username);
+    row.querySelector('[data-action="reject"]').onclick = () => socket.emit("rejectContactRequest", user.username);
+    requestsList.appendChild(row);
+  });
+}
+
+socket.on("relationshipData", data => {
+  relationshipData = {
+    contacts: Array.isArray(data?.contacts) ? data.contacts.map(norm) : [],
+    incoming: Array.isArray(data?.incoming) ? data.incoming.map(norm) : [],
+    outgoing: Array.isArray(data?.outgoing) ? data.outgoing.map(norm) : []
+  };
+  renderRequests();
+  renderUsers();
+});
+
+requestsButton.onclick = () => {
+  renderRequests();
+  requestsModal.style.display = "flex";
+};
+$("closeRequests").onclick = () => {
+  requestsModal.style.display = "none";
+};
+
+socket.on("contactRequestReceived", user => {
+  if(user?.username && !hasIncomingRequest(user.username)){
+    relationshipData.incoming.push(norm(user.username));
+  }
+  renderRequests();
+  showNotification(
+    user?.displayName || user?.username || "Solicitud",
+    "Te ha enviado una solicitud de contacto."
+  );
+});
+
+socket.on("contactRequestSent", data => {
+  if(data?.username && !hasOutgoingRequest(data.username)){
+    relationshipData.outgoing.push(norm(data.username));
+  }
+  renderUsers();
+  $("newChatModal").style.display = "none";
+  pendingContactUser = null;
+  showNotification(
+    "Solicitud enviada",
+    `Solicitud enviada a ${data?.displayName || data?.username || "usuario"}.`
+  );
+});
+
+socket.on("contactRequestAccepted", user => {
+  if(user?.username){
+    if(!isContact(user.username)) relationshipData.contacts.push(norm(user.username));
+    relationshipData.incoming = relationshipData.incoming.filter(x => norm(x) !== norm(user.username));
+    relationshipData.outgoing = relationshipData.outgoing.filter(x => norm(x) !== norm(user.username));
+  }
+  renderRequests();
+  renderUsers();
+  showNotification(
+    "Solicitud aceptada",
+    `${user?.displayName || user?.username || "El usuario"} ya puede hablar contigo.`
+  );
+});
+
+socket.on("contactRequestRejected", data => {
+  const username = norm(data?.username || "");
+  if(username){
+    relationshipData.incoming = relationshipData.incoming.filter(x => norm(x) !== username);
+    relationshipData.outgoing = relationshipData.outgoing.filter(x => norm(x) !== username);
+  }
+  renderRequests();
+  renderUsers();
+});
+
+socket.on("contactRequestError", message => {
+  $("newChatError").textContent = message || "No se pudo gestionar la solicitud.";
+});
 
 socket.on("userList",users => {
 
@@ -1058,63 +1202,52 @@ function renderUsers(){
       document.createElement("div");
 
     row.className = "user";
-    row.style.cursor = "pointer";
 
-    const count =
-      unread[user.username] || 0;
+    const count = unread[user.username] || 0;
+    const contact = isContact(user.username);
+    const incoming = hasIncomingRequest(user.username);
+    const outgoing = hasOutgoingRequest(user.username);
+
+    let actionHtml = "";
+    if(contact) actionHtml = `<button class="toolBtn" data-action="open">Abrir</button>`;
+    else if(incoming) actionHtml = `<button class="toolBtn primary" data-action="accept">Aceptar</button>`;
+    else if(outgoing) actionHtml = `<button class="toolBtn" data-action="pending">Enviada</button>`;
+    else actionHtml = `<button class="toolBtn primary" data-action="request">Solicitar</button>`;
 
     row.innerHTML = `
-      <div class="avatar">
-        ${avatarHtml(user)}
-      </div>
-
+      <div class="avatar">${avatarHtml(user)}</div>
       <div class="userInfo">
-
-        <div class="userName">
-          ${esc(
-            user.displayName ||
-            user.username
-          )}
-        </div>
-
-        <div class="userSub">
-          @${esc(user.username)}
-        </div>
-
+        <div class="userName">${esc(user.displayName || user.username)}</div>
+        <div class="userSub">@${esc(user.username)}</div>
         <div class="statusRow">
-
-          <div class="${
-            user.online
-              ? "online"
-              : "offline"
-          }">
-            ${
-              user.online
-                ? "● En línea"
-                : "○ Desconectado"
-            }
+          <div class="${user.online ? "online" : "offline"}">${user.online ? "● En línea" : "○ Desconectado"}</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            ${actionHtml}
+            ${count ? `<div class="badge">${count > 99 ? "99+" : count}</div>` : ""}
           </div>
-
-          ${
-            count
-              ? `<div class="badge">
-                   ${count > 99 ? "99+" : count}
-                 </div>`
-              : ""
-          }
-
         </div>
       </div>
     `;
 
-    row.onclick = () => {
-      openChat(
-        user.username,
-        user.displayName || user.username,
-        user.online,
-        user.profileImage || ""
-      );
-    };
+    const actionButton = row.querySelector('[data-action]');
+    if(actionButton){
+      actionButton.onclick = event => {
+        event.stopPropagation();
+        const action = actionButton.dataset.action;
+        if(action === "open") {
+          openChat(user.username, user.displayName || user.username, user.online, user.profileImage || "");
+        }else if(action === "accept") {
+          socket.emit("acceptContactRequest", user.username);
+        }else if(action === "request") {
+          socket.emit("sendContactRequest", user.username);
+        }
+      };
+    }
+
+    if(contact){
+      row.style.cursor = "pointer";
+      row.onclick = () => openChat(user.username, user.displayName || user.username, user.online, user.profileImage || "");
+    }
 
     usersContainer.appendChild(row);
   });
@@ -1177,41 +1310,29 @@ socket.on("userFoundError",message => {
 });
 
 socket.on("userFound",user => {
-
   pendingContactUser = user;
+  const relationship = user.relationship || "none";
 
-  socket.emit(
-    "addContact",
-    user.username
-  );
-});
-
-socket.on("contactAdded",user => {
-
-  if(
-    pendingContactUser &&
-    norm(pendingContactUser.username) ===
-      norm(user.username)
-  ){
-
+  if(relationship === "accepted") {
     $("newChatModal").style.display = "none";
-
-    openChat(
-      user.username,
-      user.displayName || user.username,
-      !!user.online,
-      user.profileImage || ""
-    );
-
+    openChat(user.username, user.displayName || user.username, !!user.online, user.profileImage || "");
     pendingContactUser = null;
+    return;
   }
+  if(relationship === "outgoing") {
+    $("newChatError").textContent = "Ya has enviado una solicitud a este usuario.";
+    return;
+  }
+  if(relationship === "incoming") {
+    $("newChatError").textContent = "Este usuario ya te ha enviado una solicitud. Acepta la solicitud desde «Solicitudes».";
+    return;
+  }
+
+  socket.emit("sendContactRequest", user.username);
 });
 
-socket.on("contactError",message => {
-
-  $("newChatError").textContent =
-    message;
-
+socket.on("contactRequestError",message => {
+  $("newChatError").textContent = message;
   pendingContactUser = null;
 });
 
@@ -1225,6 +1346,18 @@ function openChat(
   online,
   profileImage = ""
 ){
+
+  if(!isContact(username)) {
+    selectedUser = "";
+    messageInput.disabled = true;
+    sendButton.disabled = true;
+    attachButton.disabled = true;
+    messagesContainer.innerHTML = `<div class="empty">Para poder hablar con ${esc(displayName || username)}, primero debes enviar una solicitud y esperar a que la acepte.</div>`;
+    chatTitle.textContent = displayName || username;
+    chatSubtitle.textContent = "🔒 Solicitud de contacto necesaria";
+    layout.classList.add("mobileChat");
+    return;
+  }
 
   selectedUser = username;
 
