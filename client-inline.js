@@ -327,6 +327,11 @@ socket.on("authenticated",data => {
     myUsername;
   loadStories();
 
+  // Refrescamos los avisos después de autenticar para no depender de una carrera de eventos.
+  setTimeout(() => {
+    if (socket.connected) socket.emit("getModerationNotices");
+  }, 120);
+
   // Una acción de una notificación puede haber llegado
   // antes de que Socket.IO terminara de autenticar.
   if (pendingNativeCallAction) {
@@ -363,7 +368,7 @@ socket.on("appealStatus", data => {
 
 function enqueueModerationNotice(notice){
   if(!notice?.id || moderationSeen(notice.id)) return;
-  markModerationSeen(notice.id);
+  if(!moderationModal || !moderationModalTitle || !moderationModalMessage) return;
   moderationQueue.push(notice);
   showNextModerationNotice();
 }
@@ -396,6 +401,7 @@ async function showNextModerationNotice(){
     }
   }catch{}
 
+  markModerationSeen(notice.id);
   moderationModal.classList.add("open");
   moderationModal.setAttribute("aria-hidden", "false");
 }
