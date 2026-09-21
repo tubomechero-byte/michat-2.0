@@ -20,12 +20,8 @@ const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
 const PUSH_FILE = path.join(DATA_DIR, "push.json");
 const STORIES_FILE = path.join(DATA_DIR, "stories.json");
 const FCM_FILE = path.join(DATA_DIR, "fcm.json");
-const RECORDINGS_FILE = path.join(DATA_DIR, "recordings.json");
-const REPORTS_FILE = path.join(DATA_DIR, "reports.json");
-const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
-fs.mkdirSync(RECORDINGS_DIR, { recursive: true });
 
 // =====================================================
 // SUPABASE / PERSISTENCIA
@@ -45,9 +41,7 @@ const STATE_FILES = {
   "sessions.json": {},
   "push.json": [],
   "stories.json": [],
-  "fcm.json": {},
-  "recordings.json": [],
-  "reports.json": []
+  "fcm.json": {}
 };
 
 let supabaseAvailable = false;
@@ -69,8 +63,6 @@ ensure(SESSIONS_FILE, {});
 ensure(PUSH_FILE, []);
 ensure(STORIES_FILE, []);
 ensure(FCM_FILE, {});
-ensure(RECORDINGS_FILE, []);
-ensure(REPORTS_FILE, []);
 
 function read(file, fallback) {
   try {
@@ -277,22 +269,6 @@ function saveStories(v) {
   write(STORIES_FILE, v);
 }
 
-function recordings() {
-  return read(RECORDINGS_FILE, []);
-}
-
-function saveRecordings(v) {
-  write(RECORDINGS_FILE, v);
-}
-
-function reports() {
-  return read(REPORTS_FILE, []);
-}
-
-function saveReports(v) {
-  write(REPORTS_FILE, v);
-}
-
 function fcmTokens() {
   return read(FCM_FILE, {});
 }
@@ -458,123 +434,6 @@ app.use(express.static(path.join(__dirname, "public")));
 const online = new Map();
 
 // =====================================================
-// GRABACIONES DE LLAMADAS (VISIBLES Y CON CONSENTIMIENTO)
-// =====================================================
-
-function requireUser(req, res, next) {
-  const user = sessionUser(authToken(req));
-  if (!user) {
-    return res.status(401).json({ error: "Sesión no válida." });
-  }
-  req.user = user;
-  next();
-}
-
-app.post(
-  "/api/call-recordings",
-  express.raw({ type: ["audio/webm", "audio/ogg", "audio/mp4"], limit: "8mb" }),
-  requireUser,
-  (req, res) => {
-    const to = norm(req.query.to || "");
-    const startedAt = Number(req.query.startedAt || Date.now());
-    const duration = Math.max(0, Math.min(15 * 60, Number(req.query.duration || 0)));
-
-    if (!to || !getUser(to)) {
-      return res.status(400).json({ error: "Destinatario de la llamada inválido." });
-    }
-
-    if (to === norm(req.user.username)) {
-      return res.status(400).json({ error: "Destinatario inválido." });
-    }
-
-    if (!Buffer.isBuffer(req.body) || !req.body.length) {
-      return res.status(400).json({ error: "La grabación está vacía." });
-    }
-
-    const id = crypto.randomBytes(16).toString("hex");
-    const mimeType = String(req.headers["content-type"] || "audio/webm").split(";")[0].toLowerCase();
-    const extension = mimeType === "audio/mp4" ? ".m4a" : mimeType === "audio/ogg" ? ".ogg" : ".webm";
-    const fileName = id + extension;
-    const filePath = path.join(RECORDINGS_DIR, fileName);
-
-    try {
-      fs.writeFileSync(filePath, req.body);
-    } catch (error) {
-      console.error("No se pudo guardar la grabación:", error);
-      return res.status(500).json({ error: "No se pudo guardar la grabación." });
-    }
-
-    const item = {
-      id,
-      from: norm(req.user.username),
-      fromDisplay: req.user.displayName || req.user.username,
-      to,
-      toDisplay: getUser(to)?.displayName || to,
-      startedAt: Number.isFinite(startedAt) ? startedAt : Date.now(),
-      duration,
-      size: req.body.length,
-      mimeType: req.headers["content-type"] || "audio/webm",
-      fileName,
-      createdAt: Date.now()
-    };
-
-    const list = recordings();
-    list.push(item);
-    if (list.length > 100) {
-      const removed = list.splice(0, list.length - 100);
-      for (const old of removed) {
-        try { fs.unlinkSync(path.join(RECORDINGS_DIR, old.fileName)); } catch {}
-      }
-    }
-    saveRecordings(list);
-
-    addAdminActivity(
-      `${item.fromDisplay} ha guardado una grabación de llamada con ${item.toDisplay}.`
-    );
-
-    res.json({ success: true, id });
-  }
-);
-
-// El participante puede avisar al otro de que ha empezado/terminado una grabación.
-
-// =====================================================
-// REPORTES DE USUARIOS
-// =====================================================
-
-app.post("/api/reports", requireUser, (req, res) => {
-  const text = String(req.body?.text || "").trim();
-  const category = String(req.body?.category || "Otro").trim().slice(0, 50);
-
-  if (text.length < 5) {
-    return res.status(400).json({ error: "El reporte debe tener al menos 5 caracteres." });
-  }
-
-  if (text.length > 2000) {
-    return res.status(400).json({ error: "El reporte no puede superar los 2000 caracteres." });
-  }
-
-  const report = {
-    id: Date.now() + "-" + crypto.randomBytes(5).toString("hex"),
-    username: req.user.username,
-    displayName: req.user.displayName || req.user.username,
-    category,
-    text,
-    status: "open",
-    createdAt: Date.now()
-  };
-
-  const list = reports();
-  list.push(report);
-  if (list.length > 500) list.splice(0, list.length - 500);
-  saveReports(list);
-
-  addAdminActivity(`${report.displayName} (@${report.username}) envió un reporte: ${category}.`);
-
-  res.json({ success: true, id: report.id });
-});
-
-// =====================================================
 // MI CHAT ADMIN
 // =====================================================
 
@@ -584,23 +443,6 @@ const ADMIN_SESSION_SECRET = String(
   process.env.ADMIN_SESSION_SECRET || "CAMBIA-ESTA-CLAVE-ADMIN-EN-RENDER"
 );
 const ADMIN_SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
-
-// Terminal de actividad del administrador.
-const adminActivity = [];
-
-function addAdminActivity(text) {
-  const line = {
-    id: Date.now() + "-" + crypto.randomBytes(4).toString("hex"),
-    time: new Date().toISOString(),
-    text: String(text || "")
-  };
-
-  adminActivity.push(line);
-
-  if (adminActivity.length > 200) {
-    adminActivity.splice(0, adminActivity.length - 200);
-  }
-}
 
 function createAdminToken() {
   const payload = Buffer.from(JSON.stringify({
@@ -730,8 +572,7 @@ app.get("/api/admin/stats", requireAdmin, (req, res) => {
     users: userList.length,
     messages: messageList.length,
     stories: storyList.length,
-    online: onlineUsers.size,
-    reports: reports().filter(r => r.status !== "resolved").length
+    online: onlineUsers.size
   });
 });
 
@@ -760,226 +601,6 @@ app.get("/api/admin/users", requireAdmin, (req, res) => {
   });
 
   res.json(result);
-});
-
-app.delete("/api/admin/users/:username", requireAdmin, (req, res) => {
-  const username = norm(req.params.username);
-
-  if (!username) {
-    return res.status(400).json({
-      error: "Usuario inválido."
-    });
-  }
-
-  const list = users();
-  const index = list.findIndex(
-    u => norm(u.username) === username
-  );
-
-  if (index < 0) {
-    return res.status(404).json({
-      error: "Usuario no encontrado."
-    });
-  }
-
-  const removed = list[index];
-  list.splice(index, 1);
-  saveUsers(list);
-
-  // Eliminar sus sesiones antiguas.
-  const sessionData = sessions();
-  let sessionChanged = false;
-
-  for (const [token, value] of Object.entries(sessionData)) {
-    if (norm(value?.username) === username) {
-      delete sessionData[token];
-      sessionChanged = true;
-    }
-  }
-
-  if (sessionChanged) {
-    saveSessions(sessionData);
-  }
-
-  // Quitar al usuario de contactos y bloqueos de los demás.
-  const updatedUsers = users();
-  let usersChanged = false;
-
-  for (const user of updatedUsers) {
-    const oldContacts = Array.isArray(user.contacts)
-      ? user.contacts
-      : [];
-    const oldBlocked = Array.isArray(user.blockedUsers)
-      ? user.blockedUsers
-      : [];
-
-    const newContacts = oldContacts.filter(
-      name => norm(name) !== username
-    );
-    const newBlocked = oldBlocked.filter(
-      name => norm(name) !== username
-    );
-
-    if (
-      newContacts.length !== oldContacts.length ||
-      newBlocked.length !== oldBlocked.length
-    ) {
-      user.contacts = newContacts;
-      user.blockedUsers = newBlocked;
-      usersChanged = true;
-    }
-  }
-
-  if (usersChanged) {
-    saveUsers(updatedUsers);
-  }
-
-  // Eliminar mensajes relacionados con la cuenta.
-  const remainingMessages = messages().filter(
-    message =>
-      norm(message.from) !== username &&
-      norm(message.to) !== username
-  );
-  saveMessages(remainingMessages);
-
-  // Eliminar estados de la cuenta.
-  const remainingStories = allStories().filter(
-    story => norm(story.username) !== username
-  );
-  saveStories(remainingStories);
-
-  // Eliminar grabaciones en las que participe la cuenta.
-  const recordingList = recordings();
-  const remainingRecordings = recordingList.filter(item => {
-    const belongs =
-      norm(item.from) === username ||
-      norm(item.to) === username;
-    if (belongs) {
-      try { fs.unlinkSync(path.join(RECORDINGS_DIR, item.fileName)); } catch {}
-    }
-    return !belongs;
-  });
-  saveRecordings(remainingRecordings);
-
-  // Eliminar sus suscripciones Web Push.
-  const remainingPush = pushSubs().filter(
-    item => norm(item.username) !== username
-  );
-  savePushSubs(remainingPush);
-
-  // Eliminar sus tokens FCM.
-  const fcmData = fcmTokens();
-  if (Object.prototype.hasOwnProperty.call(fcmData, username)) {
-    delete fcmData[username];
-    saveFcmTokens(fcmData);
-  }
-
-  // Desconectar cualquier sesión Socket.IO activa.
-  for (const [socketId, name] of online.entries()) {
-    if (norm(name) === username) {
-      online.delete(socketId);
-      const targetSocket = io.sockets.sockets.get(socketId);
-      if (targetSocket) {
-        targetSocket.disconnect(true);
-      }
-    }
-  }
-
-  sendUserList();
-
-  console.log(
-    `Administrador eliminó la cuenta ${username}.`
-  );
-
-  res.json({
-    success: true,
-    username: removed.username
-  });
-});
-
-app.post("/api/admin/users/:username/reset-password", requireAdmin, (req, res) => {
-  const username = norm(req.params.username);
-  const newPassword = String(req.body?.password || "");
-
-  if (!username) {
-    return res.status(400).json({
-      error: "Usuario inválido."
-    });
-  }
-
-  if (newPassword.length < 6) {
-    return res.status(400).json({
-      error: "La nueva contraseña debe tener al menos 6 caracteres."
-    });
-  }
-
-  const list = users();
-  const index = list.findIndex(
-    u => norm(u.username) === username
-  );
-
-  if (index < 0) {
-    return res.status(404).json({
-      error: "Usuario no encontrado."
-    });
-  }
-
-  const p = passwordHash(newPassword);
-
-  list[index].salt = p.salt;
-  list[index].passwordHash = p.hash;
-
-  saveUsers(list);
-
-  console.log(
-    `Administrador restableció la contraseña de ${username}.`
-  );
-
-  res.json({
-    success: true,
-    username: list[index].username
-  });
-});
-
-app.get("/api/admin/recordings", requireAdmin, (req, res) => {
-  res.json(
-    recordings()
-      .slice()
-      .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
-      .map(item => ({ ...item }))
-  );
-});
-
-app.get("/api/admin/recordings/:id", (req, res) => {
-  const token = adminToken(req) || String(req.query.token || "");
-  const admin = verifyAdminToken(token);
-  if (!admin) {
-    return res.status(401).send("Sesión de administrador no válida.");
-  }
-
-  const item = recordings().find(x => String(x.id) === String(req.params.id));
-  if (!item) return res.status(404).send("Grabación no encontrada.");
-
-  const filePath = path.join(RECORDINGS_DIR, item.fileName);
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send("El archivo de la grabación ya no está disponible en el servidor.");
-  }
-
-  res.type(item.mimeType || "audio/webm");
-  fs.createReadStream(filePath).pipe(res);
-});
-
-app.delete("/api/admin/recordings/:id", requireAdmin, (req, res) => {
-  const list = recordings();
-  const index = list.findIndex(x => String(x.id) === String(req.params.id));
-  if (index < 0) return res.status(404).json({ error: "Grabación no encontrada." });
-
-  const removed = list.splice(index, 1)[0];
-  saveRecordings(list);
-  try { fs.unlinkSync(path.join(RECORDINGS_DIR, removed.fileName)); } catch {}
-
-  addAdminActivity(`Administrador eliminó una grabación de ${removed.fromDisplay} con ${removed.toDisplay}.`);
-  res.json({ success: true });
 });
 
 app.get("/api/admin/users/:username/stories", requireAdmin, (req, res) => {
@@ -1043,47 +664,6 @@ app.delete("/api/admin/stories/:id", requireAdmin, (req, res) => {
     removed.username
   );
 
-  res.json({ success: true });
-});
-
-app.get("/api/admin/activity", requireAdmin, (req, res) => {
-  res.json(adminActivity.slice(-100).reverse());
-});
-
-app.get("/api/admin/reports", requireAdmin, (req, res) => {
-  res.json(reports().slice().reverse());
-});
-
-app.patch("/api/admin/reports/:id", requireAdmin, (req, res) => {
-  const id = String(req.params.id || "");
-  const status = String(req.body?.status || "").trim().toLowerCase();
-
-  if (!["open", "resolved"].includes(status)) {
-    return res.status(400).json({ error: "Estado de reporte inválido." });
-  }
-
-  const list = reports();
-  const item = list.find(r => String(r.id) === id);
-  if (!item) return res.status(404).json({ error: "Reporte no encontrado." });
-
-  item.status = status;
-  item.resolvedAt = status === "resolved" ? Date.now() : null;
-  saveReports(list);
-  addAdminActivity(`Administrador marcó el reporte de @${item.username} como ${status === "resolved" ? "resuelto" : "abierto"}.`);
-
-  res.json({ success: true });
-});
-
-app.delete("/api/admin/reports/:id", requireAdmin, (req, res) => {
-  const id = String(req.params.id || "");
-  const list = reports();
-  const index = list.findIndex(r => String(r.id) === id);
-  if (index < 0) return res.status(404).json({ error: "Reporte no encontrado." });
-
-  const removed = list[index];
-  list.splice(index, 1);
-  saveReports(list);
-  addAdminActivity(`Administrador eliminó el reporte de @${removed.username}.`);
   res.json({ success: true });
 });
 
@@ -1362,6 +942,16 @@ function getContactList(username) {
     }));
 }
 
+function areContacts(a, b) {
+  const ua = getUser(a);
+  const ub = getUser(b);
+  if (!ua || !ub) return false;
+  const ca = Array.isArray(ua.contacts) ? ua.contacts : [];
+  const cb = Array.isArray(ub.contacts) ? ub.contacts : [];
+  return ca.some(x => norm(x) === norm(b)) &&
+         cb.some(x => norm(x) === norm(a));
+}
+
 function socketIdFor(username) {
   for (const [sid, name] of online.entries()) {
     if (norm(name) === norm(username)) {
@@ -1426,14 +1016,11 @@ app.post("/api/register", (req, res) => {
     profileImage: "",
     blockedUsers: [],
     contacts: [],
+    contactRequests: [],
     createdAt: Date.now()
   });
 
   saveUsers(list);
-
-  addAdminActivity(
-    `${displayName} (@${username}) se ha registrado.`
-  );
 
   const token = newSession(username);
 
@@ -1483,6 +1070,10 @@ app.post("/api/login", (req, res) => {
 
     if (!Array.isArray(list[idx].blockedUsers)) {
       list[idx].blockedUsers = [];
+    }
+
+    if (!Array.isArray(list[idx].contactRequests)) {
+      list[idx].contactRequests = [];
     }
 
     saveUsers(list);
@@ -1633,93 +1224,28 @@ app.get("/api/contacts", (req, res) => {
 });
 
 app.post("/api/contacts/add", (req, res) => {
-  const u = sessionUser(
-    authToken(req)
-  );
+  const u = sessionUser(authToken(req));
+  if (!u) return res.status(401).json({ error: "No autorizado" });
 
-  if (!u) {
-    return res.status(401).json({
-      error: "No autorizado"
-    });
-  }
-
-  const target =
-    norm(req.body.username);
-
-  const targetUser =
-    getUser(target);
-
-  if (!target) {
-    return res.status(400).json({
-      error:
-        "Escribe un nombre de usuario."
-    });
-  }
-
-  if (
-    target === norm(u.username)
-  ) {
-    return res.status(400).json({
-      error:
-        "No puedes añadirte a ti mismo."
-    });
-  }
-
-  if (!targetUser) {
-    return res.status(404).json({
-      error:
-        "Ese usuario no existe."
-    });
-  }
-
-  if (
-    isEitherBlocked(
-      u.username,
-      target
-    )
-  ) {
-    return res.status(400).json({
-      error:
-        "No puedes añadir a este usuario."
-    });
-  }
+  const target = norm(req.body.username);
+  const targetUser = getUser(target);
+  if (!target) return res.status(400).json({ error: "Escribe un nombre de usuario." });
+  if (target === norm(u.username)) return res.status(400).json({ error: "No puedes añadirte a ti mismo." });
+  if (!targetUser) return res.status(404).json({ error: "Ese usuario no existe." });
+  if (isEitherBlocked(u.username, target)) return res.status(400).json({ error: "No puedes contactar con este usuario." });
+  if (areContacts(u.username, target)) return res.status(400).json({ error: "Ya sois contactos." });
 
   const list = users();
+  const idx = list.findIndex(x => norm(x.username) === target);
+  if (idx < 0) return res.status(404).json({ error: "Usuario no encontrado." });
+  if (!Array.isArray(list[idx].contactRequests)) list[idx].contactRequests = [];
+  if (list[idx].contactRequests.some(x => norm(x) === norm(u.username))) return res.json({ success: true, pending: true });
+  list[idx].contactRequests.push(norm(u.username));
+  saveUsers(list);
 
-  const idx = list.findIndex(
-    x => norm(x.username) ===
-      norm(u.username)
-  );
-
-  if (idx < 0) {
-    return res.status(404).json({
-      error:
-        "Usuario no encontrado."
-    });
-  }
-
-  if (!Array.isArray(list[idx].contacts)) {
-    list[idx].contacts = [];
-  }
-
-  if (
-    !list[idx].contacts.some(
-      x => norm(x) === target
-    )
-  ) {
-    list[idx].contacts.push(target);
-    saveUsers(list);
-  }
-
-  res.json({
-    success: true,
-    contact:
-      getContactList(
-        u.username
-      ).find(
-        x => norm(x.username) === target
-      ) || null
-  });
+  const sid = socketIdFor(target);
+  if (sid) io.to(sid).emit("contactRequest", { username: u.username, displayName: u.displayName || u.username, profileImage: u.profileImage || "", online: true });
+  res.json({ success: true, pending: true });
 });
 
 app.post("/api/contacts/remove", (req, res) => {
@@ -2363,103 +1889,76 @@ io.on("connection", socket => {
     );
   });
 
-  socket.on(
-    "addContact",
-    username => {
-      const me =
-        online.get(socket.id);
+  socket.on("requestContact", username => {
+    const me = online.get(socket.id);
+    const target = norm(username);
+    if (!me || !target) return;
+    if (target === norm(me)) return socket.emit("contactError", "No puedes añadirte a ti mismo.");
+    if (!getUser(target)) return socket.emit("contactError", "Ese usuario no existe.");
+    if (isEitherBlocked(me, target)) return socket.emit("contactError", "No puedes contactar con este usuario.");
+    if (areContacts(me, target)) return socket.emit("contactError", "Ya sois contactos.");
 
-      const target =
-        norm(username);
-
-      if (!me || !target) return;
-
-      if (
-        target === norm(me)
-      ) {
-        return socket.emit(
-          "contactError",
-          "No puedes añadirte a ti mismo."
-        );
-      }
-
-      if (!getUser(target)) {
-        return socket.emit(
-          "contactError",
-          "Ese usuario no existe."
-        );
-      }
-
-      if (
-        isEitherBlocked(
-          me,
-          target
-        )
-      ) {
-        return socket.emit(
-          "contactError",
-          "No puedes añadir a este usuario."
-        );
-      }
-
-      const list = users();
-
-      const idx =
-        list.findIndex(
-          u =>
-            norm(u.username) ===
-            norm(me)
-        );
-
-      if (idx < 0) {
-        return socket.emit(
-          "contactError",
-          "Usuario no encontrado."
-        );
-      }
-
-      if (
-        !Array.isArray(
-          list[idx].contacts
-        )
-      ) {
-        list[idx].contacts = [];
-      }
-
-      if (
-        !list[idx].contacts.some(
-          x =>
-            norm(x) ===
-            target
-        )
-      ) {
-        list[idx].contacts.push(
-          target
-        );
-
-        saveUsers(list);
-      }
-
-      const contact =
-        getContactList(me).find(
-          x =>
-            norm(x.username) ===
-            target
-        );
-
-      socket.emit(
-        "contactAdded",
-        contact || {
-          username: target
-        }
-      );
-
-      socket.emit(
-        "contactsUpdated",
-        getContactList(me)
-      );
+    const list = users();
+    const idx = list.findIndex(u => norm(u.username) === target);
+    if (idx < 0) return socket.emit("contactError", "Usuario no encontrado.");
+    if (!Array.isArray(list[idx].contactRequests)) list[idx].contactRequests = [];
+    if (!list[idx].contactRequests.some(x => norm(x) === norm(me))) {
+      list[idx].contactRequests.push(norm(me));
+      saveUsers(list);
     }
-  );
+    socket.emit("contactRequestSent", target);
+    const sid = socketIdFor(target);
+    if (sid) {
+      const sender = getUser(me);
+      io.to(sid).emit("contactRequest", { username: sender?.username || me, displayName: sender?.displayName || me, profileImage: sender?.profileImage || "", online: true });
+    }
+  });
+
+  socket.on("getContactRequests", () => {
+    const me = online.get(socket.id);
+    if (!me) return;
+    const u = getUser(me);
+    const requests = (Array.isArray(u?.contactRequests) ? u.contactRequests : []).map(name => getUser(name)).filter(Boolean).map(u => ({ username: u.username, displayName: u.displayName || u.username, profileImage: u.profileImage || "", online: !!socketIdFor(u.username) }));
+    socket.emit("contactRequests", requests);
+  });
+
+  socket.on("acceptContact", username => {
+    const me = online.get(socket.id);
+    const target = norm(username);
+    if (!me || !target || !getUser(target)) return;
+    if (isEitherBlocked(me, target)) return socket.emit("contactError", "No puedes contactar con este usuario.");
+    const list = users();
+    const meIdx = list.findIndex(u => norm(u.username) === norm(me));
+    const targetIdx = list.findIndex(u => norm(u.username) === target);
+    if (meIdx < 0 || targetIdx < 0) return;
+    list[meIdx].contactRequests = (list[meIdx].contactRequests || []).filter(x => norm(x) !== target);
+    list[meIdx].contacts = Array.isArray(list[meIdx].contacts) ? list[meIdx].contacts : [];
+    list[targetIdx].contacts = Array.isArray(list[targetIdx].contacts) ? list[targetIdx].contacts : [];
+    if (!list[meIdx].contacts.some(x => norm(x) === target)) list[meIdx].contacts.push(target);
+    if (!list[targetIdx].contacts.some(x => norm(x) === norm(me))) list[targetIdx].contacts.push(norm(me));
+    saveUsers(list);
+    const contactForMe = getContactList(me).find(x => norm(x.username) === target);
+    const contactForTarget = getContactList(target).find(x => norm(x.username) === norm(me));
+    socket.emit("contactAccepted", contactForMe || { username: target });
+    socket.emit("contactsUpdated", getContactList(me));
+    const sid = socketIdFor(target);
+    if (sid) {
+      io.to(sid).emit("contactAccepted", contactForTarget || { username: me });
+      io.to(sid).emit("contactsUpdated", getContactList(target));
+    }
+  });
+
+  socket.on("rejectContact", username => {
+    const me = online.get(socket.id);
+    const target = norm(username);
+    if (!me || !target) return;
+    const list = users();
+    const idx = list.findIndex(u => norm(u.username) === norm(me));
+    if (idx < 0) return;
+    list[idx].contactRequests = (list[idx].contactRequests || []).filter(x => norm(x) !== target);
+    saveUsers(list);
+    socket.emit("contactRequestRejected", target);
+  });
 
   socket.on(
     "removeContact",
@@ -2619,6 +2118,13 @@ io.on("connection", socket => {
         return;
       }
 
+      if (!areContacts(me, other)) {
+        return socket.emit(
+          "conversationBlocked",
+          "Solo puedes hablar con contactos que hayan aceptado tu petición."
+        );
+      }
+
       if (
         isEitherBlocked(
           me,
@@ -2686,63 +2192,13 @@ io.on("connection", socket => {
           data?.message || ""
         ).trim();
 
-      const media = data?.media && typeof data.media === "object"
-        ? data.media
-        : null;
-
-      const mediaData = media
-        ? String(media.data || "")
-        : "";
-
-      const mediaMime = media
-        ? String(media.mimeType || "").slice(0, 120)
-        : "";
-
-      const mediaName = media
-        ? String(media.fileName || "archivo").slice(0, 180)
-        : "";
-
-      const mediaType = media
-        ? String(media.type || "file").slice(0, 30)
-        : "";
-
-      const allowedMedia = !mediaMime ||
-        mediaMime.startsWith("image/") ||
-        mediaMime.startsWith("video/") ||
-        mediaMime.startsWith("audio/") ||
-        [
-          "application/pdf",
-          "text/plain",
-          "application/zip",
-          "application/msword",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "application/vnd.ms-excel",
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "application/vnd.ms-powerpoint",
-          "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        ].includes(mediaMime);
-
-      const hasMedia = Boolean(
-        mediaData &&
-        mediaData.startsWith("data:") &&
-        mediaData.length <= 10 * 1024 * 1024 &&
-        allowedMedia
-      );
-
       if (
         !me ||
         !to ||
-        (!text && !hasMedia) ||
+        !text ||
         text.length > 5000
       ) {
         return;
-      }
-
-      if (media && !hasMedia) {
-        return socket.emit(
-          "messageError",
-          "El archivo no es válido, no está permitido o supera el límite de 7 MB."
-        );
       }
 
       if (!getUser(to)) {
@@ -2758,6 +2214,13 @@ io.on("connection", socket => {
         return socket.emit(
           "messageError",
           "No puedes enviarte mensajes."
+        );
+      }
+
+      if (!areContacts(me, to)) {
+        return socket.emit(
+          "messageError",
+          "Solo puedes enviar mensajes a contactos que hayan aceptado tu petición."
         );
       }
 
@@ -2793,22 +2256,6 @@ io.on("connection", socket => {
 
         message: text,
 
-        type: hasMedia
-          ? mediaType || "file"
-          : "text",
-
-        media: hasMedia
-          ? mediaData
-          : "",
-
-        fileName: hasMedia
-          ? mediaName
-          : "",
-
-        mimeType: hasMedia
-          ? mediaMime
-          : "",
-
         time:
           new Date().toISOString(),
 
@@ -2830,13 +2277,6 @@ io.on("connection", socket => {
       }
 
       saveMessages(list);
-
-      addAdminActivity(
-        `${msg.fromDisplay} ha enviado un mensaje a ${msg.toDisplay}: ${
-          msg.message ||
-          (msg.fileName ? "📎 " + msg.fileName : "Archivo multimedia")
-        }`
-      );
 
       const targetSid =
         socketIdFor(to);
@@ -2860,10 +2300,7 @@ io.on("connection", socket => {
           from:
             msg.fromDisplay,
           message:
-            msg.message ||
-            (msg.fileName
-              ? "📎 " + msg.fileName
-              : "Archivo multimedia"),
+            msg.message,
           username:
             msg.from
         }
@@ -3135,6 +2572,13 @@ io.on("connection", socket => {
         );
       }
 
+      if (!areContacts(caller, target)) {
+        return socket.emit(
+          "callError",
+          "Solo puedes llamar a contactos que hayan aceptado tu petición."
+        );
+      }
+
       if (
         isEitherBlocked(
           caller,
@@ -3374,28 +2818,6 @@ io.on("connection", socket => {
           }
         );
       }
-    }
-  );
-
-  socket.on(
-    "recordingStarted",
-    ({ to }) => {
-      const sender = online.get(socket.id);
-      const target = norm(to);
-      if (!sender || !target || isEitherBlocked(sender, target)) return;
-      const targetSid = socketIdFor(target);
-      if (targetSid) io.to(targetSid).emit("recordingStarted", { from: norm(sender) });
-    }
-  );
-
-  socket.on(
-    "recordingStopped",
-    ({ to }) => {
-      const sender = online.get(socket.id);
-      const target = norm(to);
-      if (!sender || !target) return;
-      const targetSid = socketIdFor(target);
-      if (targetSid) io.to(targetSid).emit("recordingStopped", { from: norm(sender) });
     }
   );
 
