@@ -1362,6 +1362,70 @@ function getContactList(username) {
     }));
 }
 
+function ensureContactRequests(user) {
+  if (!user || typeof user !== "object") return;
+
+  if (!Array.isArray(user.contacts)) user.contacts = [];
+
+  if (!user.contactRequests || typeof user.contactRequests !== "object") {
+    user.contactRequests = { incoming: [], outgoing: [] };
+  }
+
+  if (!Array.isArray(user.contactRequests.incoming)) user.contactRequests.incoming = [];
+  if (!Array.isArray(user.contactRequests.outgoing)) user.contactRequests.outgoing = [];
+}
+
+function areContacts(a, b) {
+  const userA = getUser(a);
+  const target = norm(b);
+
+  if (!userA || !target) return false;
+  ensureContactRequests(userA);
+
+  return userA.contacts.some(name => norm(name) === target) && !isEitherBlocked(a, b);
+}
+
+function relationshipBetween(a, b) {
+  const me = getUser(a);
+  const target = getUser(b);
+
+  if (!me || !target) return "none";
+  ensureContactRequests(me);
+  ensureContactRequests(target);
+
+  if (isEitherBlocked(a, b)) return "blocked";
+  if (areContacts(a, b)) return "accepted";
+
+  const other = norm(b);
+  if (me.contactRequests.outgoing.some(x => norm(x) === other)) return "outgoing";
+  if (me.contactRequests.incoming.some(x => norm(x) === other)) return "incoming";
+
+  return "none";
+}
+
+function getRelationshipData(username) {
+  const me = getUser(username);
+  if (!me) return { contacts: [], incoming: [], outgoing: [] };
+  ensureContactRequests(me);
+
+  return {
+    contacts: me.contacts.map(norm),
+    incoming: me.contactRequests.incoming.map(norm),
+    outgoing: me.contactRequests.outgoing.map(norm)
+  };
+}
+
+function emitRelationshipData(socket, username) {
+  socket.emit("relationshipData", getRelationshipData(username));
+}
+
+function emitRelationshipToUser(username) {
+  const sid = socketIdFor(username);
+  if (!sid) return;
+  const targetSocket = io.sockets.sockets.get(sid);
+  if (targetSocket) emitRelationshipData(targetSocket, username);
+}
+
 function socketIdFor(username) {
   for (const [sid, name] of online.entries()) {
     if (norm(name) === norm(username)) {
@@ -1426,6 +1490,7 @@ app.post("/api/register", (req, res) => {
     profileImage: "",
     blockedUsers: [],
     contacts: [],
+    contactRequests: { incoming: [], outgoing: [] },
     createdAt: Date.now()
   });
 
@@ -1480,6 +1545,8 @@ app.post("/api/login", (req, res) => {
     if (!Array.isArray(list[idx].contacts)) {
       list[idx].contacts = [];
     }
+
+    ensureContactRequests(list[idx]);
 
     if (!Array.isArray(list[idx].blockedUsers)) {
       list[idx].blockedUsers = [];
@@ -1633,134 +1700,81 @@ app.get("/api/contacts", (req, res) => {
 });
 
 app.post("/api/contacts/add", (req, res) => {
-  const u = sessionUser(
-    authToken(req)
-  );
+  const u = sessionUser(authToken(req));
+  if (!u) return res.status(401).json({ error: "No autorizado" });
 
-  if (!u) {
-    return res.status(401).json({
-      error: "No autorizado"
-    });
-  }
+  const target = norm(req.body.username);
+  const targetUser = getUser(target);
 
-  const target =
-    norm(req.body.username);
-
-  const targetUser =
-    getUser(target);
-
-  if (!target) {
-    return res.status(400).json({
-      error:
-        "Escribe un nombre de usuario."
-    });
-  }
-
-  if (
-    target === norm(u.username)
-  ) {
-    return res.status(400).json({
-      error:
-        "No puedes añadirte a ti mismo."
-    });
-  }
-
-  if (!targetUser) {
-    return res.status(404).json({
-      error:
-        "Ese usuario no existe."
-    });
-  }
-
-  if (
-    isEitherBlocked(
-      u.username,
-      target
-    )
-  ) {
-    return res.status(400).json({
-      error:
-        "No puedes añadir a este usuario."
-    });
-  }
+  if (!target) return res.status(400).json({ error: "Escribe un nombre de usuario." });
+  if (target === norm(u.username)) return res.status(400).json({ error: "No puedes añadirte a ti mismo." });
+  if (!targetUser) return res.status(404).json({ error: "Ese usuario no existe." });
+  if (isEitherBlocked(u.username, target)) return res.status(400).json({ error: "No puedes añadir a este usuario." });
 
   const list = users();
+  const meIdx = list.findIndex(x => norm(x.username) === norm(u.username));
+  const targetIdx = list.findIndex(x => norm(x.username) === target);
+  if (meIdx < 0 || targetIdx < 0) return res.status(404).json({ error: "Usuario no encontrado." });
 
-  const idx = list.findIndex(
-    x => norm(x.username) ===
-      norm(u.username)
-  );
+  ensureContactRequests(list[meIdx]);
+  ensureContactRequests(list[targetIdx]);
 
-  if (idx < 0) {
-    return res.status(404).json({
-      error:
-        "Usuario no encontrado."
+  if (areContacts(u.username, target)) return res.status(409).json({ error: "Ya sois contactos." });
+  if (list[meIdx].contactRequests.outgoing.some(x => norm(x) === target)) {
+    return res.status(409).json({ error: "Ya has enviado una solicitud a este usuario." });
+  }
+  if (list[meIdx].contactRequests.incoming.some(x => norm(x) === target)) {
+    return res.status(409).json({ error: "Este usuario ya te ha enviado una solicitud. Acéptala desde Solicitudes." });
+  }
+
+  list[meIdx].contactRequests.outgoing.push(target);
+  list[targetIdx].contactRequests.incoming.push(norm(u.username));
+  saveUsers(list);
+
+  emitRelationshipToUser(u.username);
+  emitRelationshipToUser(target);
+
+  const targetSid = socketIdFor(target);
+  if (targetSid) {
+    io.to(targetSid).emit("contactRequestReceived", {
+      username: norm(u.username),
+      displayName: list[meIdx].displayName || list[meIdx].username,
+      profileImage: list[meIdx].profileImage || "",
+      online: true
     });
   }
 
-  if (!Array.isArray(list[idx].contacts)) {
-    list[idx].contacts = [];
-  }
-
-  if (
-    !list[idx].contacts.some(
-      x => norm(x) === target
-    )
-  ) {
-    list[idx].contacts.push(target);
-    saveUsers(list);
-  }
-
-  res.json({
-    success: true,
-    contact:
-      getContactList(
-        u.username
-      ).find(
-        x => norm(x.username) === target
-      ) || null
-  });
+  res.json({ success: true, status: "outgoing" });
 });
 
 app.post("/api/contacts/remove", (req, res) => {
-  const u = sessionUser(
-    authToken(req)
-  );
+  const u = sessionUser(authToken(req));
+  if (!u) return res.status(401).json({ error: "No autorizado" });
 
-  if (!u) {
-    return res.status(401).json({
-      error: "No autorizado"
-    });
-  }
-
-  const target =
-    norm(req.body.username);
-
+  const target = norm(req.body.username);
   const list = users();
+  const idx = list.findIndex(x => norm(x.username) === norm(u.username));
 
-  const idx = list.findIndex(
-    x => norm(x.username) ===
-      norm(u.username)
-  );
+  if (idx < 0) return res.status(404).json({ error: "Usuario no encontrado." });
 
-  if (idx < 0) {
-    return res.status(404).json({
-      error:
-        "Usuario no encontrado."
-    });
+  ensureContactRequests(list[idx]);
+  list[idx].contacts = list[idx].contacts.filter(x => norm(x) !== target);
+  list[idx].contactRequests.incoming = list[idx].contactRequests.incoming.filter(x => norm(x) !== target);
+  list[idx].contactRequests.outgoing = list[idx].contactRequests.outgoing.filter(x => norm(x) !== target);
+
+  const targetIdx = list.findIndex(x => norm(x.username) === target);
+  if (targetIdx >= 0) {
+    ensureContactRequests(list[targetIdx]);
+    list[targetIdx].contacts = list[targetIdx].contacts.filter(x => norm(x) !== norm(u.username));
+    list[targetIdx].contactRequests.incoming = list[targetIdx].contactRequests.incoming.filter(x => norm(x) !== norm(u.username));
+    list[targetIdx].contactRequests.outgoing = list[targetIdx].contactRequests.outgoing.filter(x => norm(x) !== norm(u.username));
   }
-
-  list[idx].contacts =
-    (list[idx].contacts || [])
-      .filter(
-        x => norm(x) !== target
-      );
 
   saveUsers(list);
+  emitRelationshipToUser(u.username);
+  emitRelationshipToUser(target);
 
-  res.json({
-    success: true
-  });
+  res.json({ success: true });
 });
 
 // =====================================================
@@ -2345,6 +2359,8 @@ io.on("connection", socket => {
         u.username
       )
     );
+
+    emitRelationshipData(socket, u.username);
   });
 
   // ===================================================
@@ -2364,100 +2380,148 @@ io.on("connection", socket => {
   });
 
   socket.on(
-    "addContact",
+    "sendContactRequest",
     username => {
-      const me =
-        online.get(socket.id);
-
-      const target =
-        norm(username);
-
+      const me = online.get(socket.id);
+      const target = norm(username);
       if (!me || !target) return;
 
-      if (
-        target === norm(me)
-      ) {
-        return socket.emit(
-          "contactError",
-          "No puedes añadirte a ti mismo."
-        );
+      if (target === norm(me)) {
+        return socket.emit("contactRequestError", "No puedes enviarte una solicitud a ti mismo.");
       }
-
       if (!getUser(target)) {
-        return socket.emit(
-          "contactError",
-          "Ese usuario no existe."
-        );
+        return socket.emit("contactRequestError", "Ese usuario no existe.");
       }
-
-      if (
-        isEitherBlocked(
-          me,
-          target
-        )
-      ) {
-        return socket.emit(
-          "contactError",
-          "No puedes añadir a este usuario."
-        );
+      if (isEitherBlocked(me, target)) {
+        return socket.emit("contactRequestError", "No puedes contactar con este usuario.");
       }
 
       const list = users();
-
-      const idx =
-        list.findIndex(
-          u =>
-            norm(u.username) ===
-            norm(me)
-        );
-
-      if (idx < 0) {
-        return socket.emit(
-          "contactError",
-          "Usuario no encontrado."
-        );
+      const meIdx = list.findIndex(u => norm(u.username) === norm(me));
+      const targetIdx = list.findIndex(u => norm(u.username) === target);
+      if (meIdx < 0 || targetIdx < 0) {
+        return socket.emit("contactRequestError", "Usuario no encontrado.");
       }
 
-      if (
-        !Array.isArray(
-          list[idx].contacts
-        )
-      ) {
-        list[idx].contacts = [];
+      ensureContactRequests(list[meIdx]);
+      ensureContactRequests(list[targetIdx]);
+
+      if (areContacts(me, target)) {
+        return socket.emit("contactRequestError", "Ya sois contactos.");
+      }
+      if (list[meIdx].contactRequests.outgoing.some(x => norm(x) === target)) {
+        return socket.emit("contactRequestError", "Ya has enviado una solicitud a este usuario.");
+      }
+      if (list[meIdx].contactRequests.incoming.some(x => norm(x) === target)) {
+        return socket.emit("contactRequestError", "Este usuario ya te ha enviado una solicitud. Acéptala desde Solicitudes.");
       }
 
-      if (
-        !list[idx].contacts.some(
-          x =>
-            norm(x) ===
-            target
-        )
-      ) {
-        list[idx].contacts.push(
-          target
-        );
+      list[meIdx].contactRequests.outgoing.push(target);
+      list[targetIdx].contactRequests.incoming.push(norm(me));
+      saveUsers(list);
 
-        saveUsers(list);
+      emitRelationshipData(socket, me);
+      emitRelationshipToUser(target);
+
+      const targetSid = socketIdFor(target);
+      if (targetSid) {
+        io.to(targetSid).emit("contactRequestReceived", {
+          username: norm(me),
+          displayName: list[meIdx].displayName || list[meIdx].username,
+          profileImage: list[meIdx].profileImage || "",
+          online: true
+        });
       }
 
-      const contact =
-        getContactList(me).find(
-          x =>
-            norm(x.username) ===
-            target
-        );
+      socket.emit("contactRequestSent", {
+        username: target,
+        displayName: list[targetIdx].displayName || list[targetIdx].username
+      });
+    }
+  );
 
-      socket.emit(
-        "contactAdded",
-        contact || {
-          username: target
-        }
-      );
+  socket.on(
+    "acceptContactRequest",
+    username => {
+      const me = online.get(socket.id);
+      const target = norm(username);
+      if (!me || !target || target === norm(me)) return;
 
-      socket.emit(
-        "contactsUpdated",
-        getContactList(me)
-      );
+      const list = users();
+      const meIdx = list.findIndex(u => norm(u.username) === norm(me));
+      const targetIdx = list.findIndex(u => norm(u.username) === target);
+      if (meIdx < 0 || targetIdx < 0) return;
+
+      ensureContactRequests(list[meIdx]);
+      ensureContactRequests(list[targetIdx]);
+
+      if (isEitherBlocked(me, target)) {
+        return socket.emit("contactRequestError", "No puedes aceptar esta solicitud porque hay un bloqueo activo.");
+      }
+
+      const hasRequest = list[meIdx].contactRequests.incoming.some(x => norm(x) === target);
+      if (!hasRequest) {
+        return socket.emit("contactRequestError", "La solicitud ya no está disponible.");
+      }
+
+      list[meIdx].contactRequests.incoming = list[meIdx].contactRequests.incoming.filter(x => norm(x) !== target);
+      list[targetIdx].contactRequests.outgoing = list[targetIdx].contactRequests.outgoing.filter(x => norm(x) !== norm(me));
+
+      if (!list[meIdx].contacts.some(x => norm(x) === target)) list[meIdx].contacts.push(target);
+      if (!list[targetIdx].contacts.some(x => norm(x) === norm(me))) list[targetIdx].contacts.push(norm(me));
+
+      saveUsers(list);
+
+      const meInfo = {
+        username: norm(me),
+        displayName: list[meIdx].displayName || list[meIdx].username,
+        profileImage: list[meIdx].profileImage || "",
+        online: true
+      };
+      const targetInfo = {
+        username: target,
+        displayName: list[targetIdx].displayName || list[targetIdx].username,
+        profileImage: list[targetIdx].profileImage || "",
+        online: !!socketIdFor(target)
+      };
+
+      socket.emit("contactRequestAccepted", targetInfo);
+      emitRelationshipData(socket, me);
+      emitRelationshipToUser(target);
+
+      const targetSid = socketIdFor(target);
+      if (targetSid) io.to(targetSid).emit("contactRequestAccepted", meInfo);
+      socket.emit("contactsUpdated", getContactList(me));
+
+      if (targetSid) io.to(targetSid).emit("contactsUpdated", getContactList(target));
+    }
+  );
+
+  socket.on(
+    "rejectContactRequest",
+    username => {
+      const me = online.get(socket.id);
+      const target = norm(username);
+      if (!me || !target || target === norm(me)) return;
+
+      const list = users();
+      const meIdx = list.findIndex(u => norm(u.username) === norm(me));
+      const targetIdx = list.findIndex(u => norm(u.username) === target);
+      if (meIdx < 0 || targetIdx < 0) return;
+
+      ensureContactRequests(list[meIdx]);
+      ensureContactRequests(list[targetIdx]);
+
+      list[meIdx].contactRequests.incoming = list[meIdx].contactRequests.incoming.filter(x => norm(x) !== target);
+      list[targetIdx].contactRequests.outgoing = list[targetIdx].contactRequests.outgoing.filter(x => norm(x) !== norm(me));
+
+      saveUsers(list);
+      socket.emit("contactRequestRejected", { username: target });
+      emitRelationshipData(socket, me);
+      emitRelationshipToUser(target);
+
+      const targetSid = socketIdFor(target);
+      if (targetSid) io.to(targetSid).emit("contactRequestRejected", { username: norm(me) });
     }
   );
 
@@ -2483,29 +2547,32 @@ io.on("connection", socket => {
 
       if (idx < 0) return;
 
-      list[idx].contacts =
-        (
-          list[idx].contacts ||
-          []
-        ).filter(
-          x =>
-            norm(x) !==
-            target
-        );
+      ensureContactRequests(list[idx]);
+      list[idx].contacts = list[idx].contacts.filter(x => norm(x) !== target);
+      list[idx].contactRequests.incoming = list[idx].contactRequests.incoming.filter(x => norm(x) !== target);
+      list[idx].contactRequests.outgoing = list[idx].contactRequests.outgoing.filter(x => norm(x) !== target);
+
+      const targetIdx = list.findIndex(u => norm(u.username) === target);
+      if (targetIdx >= 0) {
+        ensureContactRequests(list[targetIdx]);
+        list[targetIdx].contacts = list[targetIdx].contacts.filter(x => norm(x) !== norm(me));
+        list[targetIdx].contactRequests.incoming = list[targetIdx].contactRequests.incoming.filter(x => norm(x) !== norm(me));
+        list[targetIdx].contactRequests.outgoing = list[targetIdx].contactRequests.outgoing.filter(x => norm(x) !== norm(me));
+      }
 
       saveUsers(list);
 
       socket.emit(
         "contactRemoved",
-        {
-          username: target
-        }
+        { username: target }
       );
 
       socket.emit(
         "contactsUpdated",
         getContactList(me)
       );
+      emitRelationshipData(socket, me);
+      emitRelationshipToUser(target);
     }
   );
 
@@ -2593,7 +2660,8 @@ io.on("connection", socket => {
                 x =>
                   norm(x) ===
                   target
-              )
+              ),
+          relationship: relationshipBetween(me, target)
         }
       );
     }
@@ -2628,6 +2696,13 @@ io.on("connection", socket => {
         return socket.emit(
           "conversationBlocked",
           "Esta conversación está bloqueada."
+        );
+      }
+
+      if (!areContacts(me, other)) {
+        return socket.emit(
+          "conversationBlocked",
+          "Para hablar con este usuario primero debes enviar una solicitud y esperar a que la acepte."
         );
       }
 
@@ -2770,6 +2845,13 @@ io.on("connection", socket => {
         return socket.emit(
           "messageError",
           "No puedes contactar con este usuario."
+        );
+      }
+
+      if (!areContacts(me, to)) {
+        return socket.emit(
+          "messageError",
+          "Para hablar con este usuario primero debes enviar una solicitud y esperar a que la acepte."
         );
       }
 
@@ -3018,17 +3100,22 @@ io.on("connection", socket => {
           ])
         );
 
-      list[idx].contacts =
-        (
-          list[idx].contacts ||
-          []
-        ).filter(
-          x =>
-            norm(x) !==
-            target
-        );
+      ensureContactRequests(list[idx]);
+      list[idx].contacts = list[idx].contacts.filter(x => norm(x) !== target);
+      list[idx].contactRequests.incoming = list[idx].contactRequests.incoming.filter(x => norm(x) !== target);
+      list[idx].contactRequests.outgoing = list[idx].contactRequests.outgoing.filter(x => norm(x) !== target);
+
+      const targetIdx = list.findIndex(u => norm(u.username) === target);
+      if (targetIdx >= 0) {
+        ensureContactRequests(list[targetIdx]);
+        list[targetIdx].contacts = list[targetIdx].contacts.filter(x => norm(x) !== norm(me));
+        list[targetIdx].contactRequests.incoming = list[targetIdx].contactRequests.incoming.filter(x => norm(x) !== norm(me));
+        list[targetIdx].contactRequests.outgoing = list[targetIdx].contactRequests.outgoing.filter(x => norm(x) !== norm(me));
+      }
 
       saveUsers(list);
+      emitRelationshipData(socket, me);
+      emitRelationshipToUser(target);
 
       socket.emit(
         "blockUpdated",
@@ -3147,6 +3234,13 @@ io.on("connection", socket => {
         );
       }
 
+      if (!areContacts(caller, target)) {
+        return socket.emit(
+          "callError",
+          "Para llamar a este usuario primero debes ser un contacto aceptado."
+        );
+      }
+
       const targetUser =
         getUser(target);
 
@@ -3224,6 +3318,10 @@ io.on("connection", socket => {
         return;
       }
 
+      if (!areContacts(callee, target)) {
+        return;
+      }
+
       const targetSid =
         socketIdFor(target);
 
@@ -3292,6 +3390,10 @@ io.on("connection", socket => {
         !target ||
         !offer
       ) {
+        return;
+      }
+
+      if (!areContacts(sender, target)) {
         return;
       }
 
