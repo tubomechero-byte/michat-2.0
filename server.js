@@ -24,6 +24,7 @@ const RECORDINGS_FILE = path.join(DATA_DIR, "recordings.json");
 const REPORTS_FILE = path.join(DATA_DIR, "reports.json");
 const MODERATION_FILE = path.join(DATA_DIR, "moderation.json");
 const APPEALS_FILE = path.join(DATA_DIR, "appeals.json");
+const BANS_FILE = path.join(DATA_DIR, "bans.json");
 const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -51,7 +52,8 @@ const STATE_FILES = {
   "recordings.json": [],
   "reports.json": [],
   "moderation.json": [],
-  "appeals.json": []
+  "appeals.json": [],
+  "bans.json": []
 };
 
 let supabaseAvailable = false;
@@ -77,6 +79,7 @@ ensure(RECORDINGS_FILE, []);
 ensure(REPORTS_FILE, []);
 ensure(MODERATION_FILE, []);
 ensure(APPEALS_FILE, []);
+ensure(BANS_FILE, []);
 
 function read(file, fallback) {
   try {
@@ -315,6 +318,58 @@ function saveAppeals(v) {
   write(APPEALS_FILE, v);
 }
 
+function bans() {
+  return read(BANS_FILE, []);
+}
+
+function saveBans(v) {
+  write(BANS_FILE, v);
+}
+
+function activeBanFor(username) {
+  const target = norm(username);
+  if (!target) return null;
+
+  const now = Date.now();
+  const list = bans();
+  return list
+    .filter(item =>
+      norm(item.username) === target &&
+      !item.revokedAt &&
+      (!item.expiresAt || Number(item.expiresAt) > now)
+    )
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))[0] || null;
+}
+
+function parseBanDuration(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return null;
+  if (raw === "0" || raw === "permanente" || raw === "permanent") {
+    return { minutes: null, expiresAt: null, label: "Permanente" };
+  }
+
+  const match = raw.match(/^(\d+(?:\.\d+)?)\s*(m|min|minutos?|h|horas?|d|d[ií]as?|w|semanas?|s|semanas?)$/i);
+  if (!match) return null;
+
+  const amount = Number(match[1]);
+  const unit = match[2];
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  let multiplier = 1;
+  if (/^h|hora/i.test(unit)) multiplier = 60;
+  else if (/^d|d[ií]a/i.test(unit)) multiplier = 1440;
+  else if (/^w|sem/i.test(unit)) multiplier = 10080;
+
+  const minutes = Math.round(amount * multiplier);
+  if (minutes < 1 || minutes > 525600) return null;
+
+  return {
+    minutes,
+    expiresAt: Date.now() + minutes * 60 * 1000,
+    label: `${minutes} minuto${minutes === 1 ? "" : "s"}`
+  };
+}
+
 function fcmTokens() {
   return read(FCM_FILE, {});
 }
@@ -438,7 +493,7 @@ function newSession(username) {
   return createSessionToken(username);
 }
 
-function sessionUser(token) {
+function sessionUserRaw(token) {
   if (!token) return null;
 
   // Tokens nuevos: no dependen de sessions.json.
@@ -454,6 +509,12 @@ function sessionUser(token) {
   if (!legacy) return null;
 
   return getUser(legacy.username);
+}
+
+function sessionUser(token) {
+  const user = sessionUserRaw(token);
+  if (!user) return null;
+  return activeBanFor(user.username) ? null : user;
 }
 
 function deleteSession(token) {
@@ -770,7 +831,11 @@ app.get("/api/admin/users", requireAdmin, (req, res) => {
     createdAt: user.createdAt || null,
     contacts: Array.isArray(user.contacts)
       ? user.contacts.length
-      : 0
+      : 0,
+    ban: activeBanFor(user.username),
+    banActive: Boolean(activeBanFor(user.username)),
+    banUntil: activeBanFor(user.username)?.expiresAt || null,
+    banReason: activeBanFor(user.username)?.reason || ""
   }));
 
   result.sort((a, b) => {
@@ -974,6 +1039,105 @@ app.post("/api/admin/users/:username/reset-password", requireAdmin, (req, res) =
     success: true,
     username: list[index].username
   });
+});
+
+app.post("/api/admin/users/:username/ban", requireAdmin, (req, res) => {
+  const username = norm(req.params.username);
+  const reason = String(req.body?.reason || "").trim().slice(0, 500);
+  const duration = parseBanDuration(req.body?.duration);
+
+  if (!username) {
+    return res.status(400).json({ error: "Usuario inválido." });
+  }
+
+  const user = getUser(username);
+  if (!user) {
+    return res.status(404).json({ error: "Usuario no encontrado." });
+  }
+
+  if (!duration) {
+    return res.status(400).json({
+      error: "Duración inválida. Usa formatos como 30m, 2h, 7d o 0 para permanente."
+    });
+  }
+
+  const now = Date.now();
+  const list = bans();
+  const existing = activeBanFor(username);
+  if (existing) {
+    existing.revokedAt = now;
+    existing.revokedBy = req.admin.username;
+  }
+
+  const ban = {
+    id: now + "-" + crypto.randomBytes(5).toString("hex"),
+    username: norm(user.username),
+    displayName: user.displayName || user.username,
+    reason,
+    createdAt: now,
+    expiresAt: duration.expiresAt,
+    createdBy: req.admin.username,
+    status: "active"
+  };
+
+  list.push(ban);
+  if (list.length > 2000) list.splice(0, list.length - 2000);
+  saveBans(list);
+
+  for (const [socketId, name] of online.entries()) {
+    if (norm(name) !== username) continue;
+    online.delete(socketId);
+    const targetSocket = io.sockets.sockets.get(socketId);
+    if (targetSocket) {
+      targetSocket.emit("banned", {
+        reason: ban.reason,
+        expiresAt: ban.expiresAt,
+        createdAt: ban.createdAt
+      });
+      targetSocket.disconnect(true);
+    }
+  }
+
+  sendUserList();
+  addAdminActivity(
+    `Administrador baneó a @${user.username} ${duration.label === "Permanente" ? "permanentemente" : `durante ${duration.minutes} minutos`}.`
+  );
+
+  res.json({ success: true, ban });
+});
+
+app.post("/api/admin/users/:username/unban", requireAdmin, (req, res) => {
+  const username = norm(req.params.username);
+  const user = getUser(username);
+
+  if (!user) {
+    return res.status(404).json({ error: "Usuario no encontrado." });
+  }
+
+  const list = bans();
+  let changed = false;
+  const now = Date.now();
+  for (const item of list) {
+    if (norm(item.username) === username && !item.revokedAt && (!item.expiresAt || Number(item.expiresAt) > now)) {
+      item.revokedAt = now;
+      item.revokedBy = req.admin.username;
+      item.status = "revoked";
+      changed = true;
+    }
+  }
+
+  if (changed) saveBans(list);
+  addAdminActivity(`Administrador quitó el baneo de @${user.username}.`);
+  res.json({ success: true, changed });
+});
+
+app.get("/api/admin/bans", requireAdmin, (req, res) => {
+  const now = Date.now();
+  const list = bans().slice().sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+  res.json(list.slice(0, 200).map(item => ({
+    ...item,
+    active: !item.revokedAt && (!item.expiresAt || Number(item.expiresAt) > now)
+  })));
 });
 
 app.get("/api/admin/moderation", requireAdmin, (req, res) => {
@@ -1742,6 +1906,18 @@ app.post("/api/login", (req, res) => {
     });
   }
 
+  const ban = activeBanFor(u.username);
+  if (ban) {
+    return res.status(403).json({
+      error: ban.expiresAt
+        ? `Tu cuenta está baneada hasta ${new Date(Number(ban.expiresAt)).toLocaleString("es-ES")}.`
+        : "Tu cuenta está baneada permanentemente.",
+      banned: true,
+      banUntil: ban.expiresAt || null,
+      banReason: ban.reason || ""
+    });
+  }
+
   const list = users();
 
   const idx = list.findIndex(
@@ -1773,15 +1949,29 @@ app.post("/api/login", (req, res) => {
 });
 
 app.get("/api/session", (req, res) => {
-  const u = sessionUser(
-    authToken(req)
-  );
+  const token = authToken(req);
+  const rawUser = sessionUserRaw(token);
+  const ban = rawUser ? activeBanFor(rawUser.username) : null;
 
-  if (!u) {
+  if (!rawUser) {
     return res.status(401).json({
       loggedIn: false
     });
   }
+
+  if (ban) {
+    return res.status(403).json({
+      loggedIn: false,
+      banned: true,
+      banUntil: ban.expiresAt || null,
+      banReason: ban.reason || "",
+      error: ban.expiresAt
+        ? `Tu cuenta está baneada hasta ${new Date(Number(ban.expiresAt)).toLocaleString("es-ES")}.`
+        : "Tu cuenta está baneada permanentemente."
+    });
+  }
+
+  const u = rawUser;
 
   res.json({
     loggedIn: true,
@@ -2503,13 +2693,22 @@ app.delete("/api/stories/:id", (req, res) => {
 
 io.on("connection", socket => {
   socket.on("authenticate", token => {
-    const u =
-      sessionUser(token);
+    const u = sessionUserRaw(token);
 
     if (!u) {
       return socket.emit(
         "authenticationError"
       );
+    }
+
+    const ban = activeBanFor(u.username);
+    if (ban) {
+      socket.emit("banned", {
+        reason: ban.reason || "",
+        expiresAt: ban.expiresAt || null,
+        createdAt: ban.createdAt || Date.now()
+      });
+      return socket.disconnect(true);
     }
 
     for (const [
