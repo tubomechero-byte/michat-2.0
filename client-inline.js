@@ -75,6 +75,16 @@ const requestsButton = $("requestsButton");
 const requestsBadge = $("requestsBadge");
 const requestsModal = $("requestsModal");
 const requestsList = $("requestsList");
+const moderationModal = $("moderationModal");
+const moderationModalTitle = $("moderationModalTitle");
+const moderationModalDate = $("moderationModalDate");
+const moderationModalMessage = $("moderationModalMessage");
+const moderationAppealText = $("moderationAppealText");
+const moderationModalStatus = $("moderationModalStatus");
+const sendModerationAppeal = $("sendModerationAppeal");
+let activeModerationNotice = null;
+const moderationQueue = [];
+let moderationQueueOpen = false;
 
 let peerConnection = null;
 let localStream = null;
@@ -329,49 +339,111 @@ socket.on("authenticated",data => {
 });
 
 socket.on("moderationNotice", notice => {
-  if(!notice) return;
-  markModerationSeen(notice.id);
-  showNotification(
-    notice.title || "Aviso de moderación",
-    notice.message || "",
-    "",
-    "moderation"
-  );
+  enqueueModerationNotice(notice);
 });
 
 socket.on("moderationNotices", list => {
   const notices = Array.isArray(list) ? list : [];
   const newestFirst = notices.slice().sort((a,b) => Number(b.createdAt||0) - Number(a.createdAt||0));
-  let shown = 0;
   for(const notice of newestFirst){
     if(!notice?.id || moderationSeen(notice.id)) continue;
-    markModerationSeen(notice.id);
-    showNotification(
-      notice.title || "Aviso de moderación",
-      notice.message || "",
-      "",
-      "moderation"
-    );
-    shown++;
-    if(shown >= 5) break;
+    enqueueModerationNotice(notice);
   }
 });
 
-function moderationSeen(id){
-  try{
-    const seen = JSON.parse(localStorage.getItem("michat_moderation_seen") || "[]");
-    return seen.includes(String(id));
-  }catch{return false}
+socket.on("appealStatus", data => {
+  if(!data?.id) return;
+  const label = data.status === "approved" ? "aprobada" : data.status === "rejected" ? "rechazada" : "pendiente";
+  if(activeModerationNotice?.id === data.noticeId){
+    moderationModalStatus.textContent = `Tu apelación está ${label}.`;
+    moderationModalStatus.style.color = data.status === "approved" ? "#15803d" : data.status === "rejected" ? "#b91c1c" : "#555";
+  }
+  showNotification("Estado de apelación", `Tu apelación está ${label}.`, "", "moderation");
+});
+
+function enqueueModerationNotice(notice){
+  if(!notice?.id || moderationSeen(notice.id)) return;
+  markModerationSeen(notice.id);
+  moderationQueue.push(notice);
+  showNextModerationNotice();
 }
 
-function markModerationSeen(id){
+async function showNextModerationNotice(){
+  if(moderationQueueOpen || !moderationQueue.length) return;
+  const notice = moderationQueue.shift();
+  activeModerationNotice = notice;
+  moderationQueueOpen = true;
+  moderationModalTitle.textContent = notice.title || "Aviso de moderación";
+  moderationModalDate.textContent = notice.createdAt ? new Date(Number(notice.createdAt)).toLocaleString("es-ES") : "";
+  moderationModalMessage.textContent = notice.message || "";
+  moderationAppealText.value = "";
+  moderationModalStatus.textContent = "";
+  sendModerationAppeal.disabled = false;
+  sendModerationAppeal.textContent = "Enviar apelación";
+
   try{
-    const key = "michat_moderation_seen";
-    const seen = JSON.parse(localStorage.getItem(key) || "[]");
-    const value = String(id);
-    if(!seen.includes(value)) seen.push(value);
-    localStorage.setItem(key, JSON.stringify(seen.slice(-100)));
+    const token = localStorage.getItem("chatToken") || "";
+    const response = await fetch("/api/appeals", {headers:{Authorization:"Bearer "+token}});
+    if(response.ok){
+      const list = await response.json();
+      const existing = Array.isArray(list) ? list.find(item => String(item.noticeId) === String(notice.id)) : null;
+      if(existing){
+        moderationModalStatus.textContent = existing.status === "approved" ? "Tu apelación fue aprobada." : existing.status === "rejected" ? "Tu apelación fue rechazada." : "Ya has enviado una apelación para este aviso.";
+        moderationModalStatus.style.color = existing.status === "approved" ? "#15803d" : existing.status === "rejected" ? "#b91c1c" : "#555";
+        sendModerationAppeal.disabled = true;
+        sendModerationAppeal.textContent = "Apelación enviada";
+      }
+    }
   }catch{}
+
+  moderationModal.classList.add("open");
+  moderationModal.setAttribute("aria-hidden", "false");
+}
+
+function closeModerationModal(){
+  moderationModal.classList.remove("open");
+  moderationModal.setAttribute("aria-hidden", "true");
+  moderationQueueOpen = false;
+  activeModerationNotice = null;
+  setTimeout(showNextModerationNotice, 80);
+}
+
+async function submitModerationAppeal(){
+  if(!activeModerationNotice) return;
+  const text = moderationAppealText.value.trim();
+  if(text.length < 5){
+    moderationModalStatus.textContent = "Escribe una apelación de al menos 5 caracteres.";
+    moderationModalStatus.style.color = "#b91c1c";
+    return;
+  }
+  try{
+    sendModerationAppeal.disabled = true;
+    moderationModalStatus.style.color = "#555";
+    moderationModalStatus.textContent = "Enviando apelación...";
+    const token = localStorage.getItem("chatToken") || "";
+    const response = await fetch("/api/appeals", {
+      method:"POST",
+      headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},
+      body:JSON.stringify({noticeId:activeModerationNotice.id,text})
+    });
+    let data={}; try{data=await response.json()}catch{}
+    if(!response.ok) throw new Error(data.error || "No se pudo enviar la apelación.");
+    moderationAppealText.value = "";
+    moderationModalStatus.textContent = "Apelación enviada. El administrador revisará tu solicitud.";
+    moderationModalStatus.style.color = "#15803d";
+    sendModerationAppeal.textContent = "Apelación enviada";
+  }catch(e){
+    sendModerationAppeal.disabled = false;
+    moderationModalStatus.textContent = e.message || "No se pudo enviar la apelación.";
+    moderationModalStatus.style.color = "#b91c1c";
+  }
+}
+
+function moderationSeen(id){
+  try{ const seen = JSON.parse(localStorage.getItem("michat_moderation_seen") || "[]"); return seen.includes(String(id)); }catch{return false}
+}
+function markModerationSeen(id){
+  try{ const key="michat_moderation_seen"; const seen=JSON.parse(localStorage.getItem(key)||"[]"); const value=String(id); if(!seen.includes(value))seen.push(value); localStorage.setItem(key,JSON.stringify(seen.slice(-100))); }catch{}
 }
 
 socket.on("authenticationError",() => {
@@ -446,6 +518,9 @@ requestsButton.onclick = () => {
 $("closeRequests").onclick = () => {
   requestsModal.style.display = "none";
 };
+if($("closeModerationModal")) $("closeModerationModal").onclick = closeModerationModal;
+if($("closeModerationModalBottom")) $("closeModerationModalBottom").onclick = closeModerationModal;
+if($("sendModerationAppeal")) $("sendModerationAppeal").onclick = submitModerationAppeal;
 
 socket.on("contactRequestReceived", user => {
   if(user?.username && !hasIncomingRequest(user.username)){
