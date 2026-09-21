@@ -71,9 +71,19 @@ button,input,textarea{font:inherit}
 .messageContext{display:flex;align-items:center;gap:6px;margin-top:5px}
 .deleteBtn{border:0;background:transparent;color:#b00;font-size:11px;cursor:pointer}
 
-.messageInput{display:flex;gap:10px;padding:10px;background:#f0f2f5;border-top:1px solid #ddd}
-.messageInput input{flex:1;border:0;outline:none;border-radius:25px;padding:14px 18px}
-.send{width:50px;height:50px;border:0;border-radius:50%;background:#128c7e;color:#fff;cursor:pointer;font-size:20px}
+.messageInput{display:flex;gap:8px;padding:10px;background:#f0f2f5;border-top:1px solid #ddd;align-items:center}
+.messageInput input{flex:1;border:0;outline:none;border-radius:25px;padding:14px 18px;min-width:0}
+.attachBtn{width:50px;height:50px;border:0;border-radius:50%;background:#fff;color:#128c7e;cursor:pointer;font-size:21px;flex-shrink:0}
+.attachBtn:disabled{opacity:.5;cursor:not-allowed}
+.mediaName{font-size:12px;color:#555;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.send{width:50px;height:50px;border:0;border-radius:50%;background:#128c7e;color:#fff;cursor:pointer;font-size:20px;flex-shrink:0}
+.send:disabled{opacity:.5;cursor:not-allowed}
+.chatMedia{max-width:min(320px,70vw);border-radius:12px;margin:5px 0;display:block}
+.chatVideo{max-height:280px;background:#000}
+.chatAudio{width:min(320px,70vw);margin:5px 0}
+.fileAttachment{display:flex;align-items:center;gap:9px;padding:10px 12px;background:rgba(0,0,0,.06);border-radius:12px;text-decoration:none;color:inherit;max-width:320px}
+.fileAttachmentIcon{font-size:24px}
+.fileAttachmentName{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .back{display:none;border:0;background:transparent;font-size:25px;cursor:pointer}
 
 #notifications{position:fixed;top:15px;right:15px;z-index:9999;width:min(360px,calc(100vw - 30px))}
@@ -248,6 +258,7 @@ button,input,textarea{font:inherit}
   -webkit-tap-highlight-color:transparent;
 }
 
+.recordingBanner{display:none;margin:10px auto 0;padding:8px 12px;border-radius:999px;background:#7f1d1d;color:#fff;font-size:13px;font-weight:bold;width:max-content}.recordingBanner.visible{display:block}.recordingDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#fff;margin-right:6px}
 .activeCallControl:active{
   transform:scale(.95);
 }
@@ -352,9 +363,6 @@ button,input,textarea{font:inherit}
         <button class="actionBtn" id="newChatButton">
           ➕ Añadir contacto
         </button>
-        <button class="actionBtn" id="requestsButton" style="margin-top:6px">
-          📩 Peticiones <span id="requestsBadge" class="badge" style="display:none">0</span>
-        </button>
       </div>
 
       <div id="storiesBar" class="storiesBar"></div>
@@ -397,6 +405,9 @@ button,input,textarea{font:inherit}
       </div>
 
       <div class="messageInput">
+        <button id="attachButton" class="attachBtn" type="button" disabled title="Enviar archivo">📎</button>
+        <input id="fileInput" type="file" hidden accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx">
+        <span id="mediaName" class="mediaName" style="display:none"></span>
         <input id="messageInput" placeholder="Escribe un mensaje..." autocomplete="off" disabled maxlength="5000">
         <button id="sendButton" class="send" disabled>➤</button>
       </div>
@@ -411,7 +422,7 @@ button,input,textarea{font:inherit}
 <div id="newChatModal" class="modal">
   <div class="modalBox">
     <h2>➕ Añadir contacto</h2>
-    <p>Escribe el nombre de usuario para enviarle una petición de contacto.</p>
+    <p>Escribe el nombre de usuario para añadirlo a tus contactos.</p>
 
     <input id="newChatUsername" class="modalInput" placeholder="ejemplo: pedro123">
 
@@ -419,18 +430,7 @@ button,input,textarea{font:inherit}
 
     <div class="modalRow">
       <button id="cancelNewChat" class="muted">Cancelar</button>
-      <button id="contactButton" class="primary">Enviar petición</button>
-    </div>
-  </div>
-</div>
-
-<!-- PETICIONES DE CONTACTO -->
-<div id="requestsModal" class="modal">
-  <div class="modalBox">
-    <h2>📩 Peticiones de contacto</h2>
-    <div id="requestsList"></div>
-    <div class="modalRow">
-      <button id="closeRequests" class="muted">Cerrar</button>
+      <button id="contactButton" class="primary">Añadir</button>
     </div>
   </div>
 </div>
@@ -463,10 +463,40 @@ button,input,textarea{font:inherit}
         </div>
       </button>
 
+      <button id="settingsReport" class="settingsItem">
+        <div class="settingsItemTitle">⚠️ Reportar un problema al administrador</div>
+        <div class="settingsItemSub">
+          Envía un reporte al administrador de Mi Chat.
+        </div>
+      </button>
+
     </div>
 
     <div class="modalRow">
       <button id="closeSettings" class="muted">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- REPORTAR PROBLEMA -->
+<div id="reportModal" class="modal">
+  <div class="modalBox">
+    <h2>⚠️ Reportar un problema</h2>
+    <p style="color:#777;font-size:14px">Cuéntanos qué ha ocurrido. El administrador podrá ver tu usuario y este mensaje.</p>
+    <label for="reportCategory">Categoría</label>
+    <select id="reportCategory" style="width:100%;padding:12px;border-radius:10px;border:1px solid #ddd;margin:6px 0 12px">
+      <option>Problema técnico</option>
+      <option>Usuario</option>
+      <option>Contenido inapropiado</option>
+      <option>Seguridad</option>
+      <option>Otro</option>
+    </select>
+    <textarea id="reportText" maxlength="2000" placeholder="Escribe tu reporte..." style="width:100%;min-height:140px;resize:vertical;padding:12px;border-radius:10px;border:1px solid #ddd;box-sizing:border-box"></textarea>
+    <div id="reportMessage" style="min-height:22px;margin-top:8px"></div>
+    <div class="modalRow">
+      <button id="closeReport" class="muted">Cancelar</button>
+      <button id="sendReport" class="primary">Enviar reporte</button>
     </div>
   </div>
 </div>
@@ -599,6 +629,7 @@ button,input,textarea{font:inherit}
     <div id="activeCallName" class="activeCallName">Usuario</div>
     <div id="activeCallStatus" class="activeCallStatus">Conectando...</div>
     <div id="activeCallTimer" class="activeCallTimer">00:00</div>
+    <div id="recordingBanner" class="recordingBanner"><span class="recordingDot"></span>Llamada grabándose</div>
 
     <div class="activeCallFill"></div>
 
@@ -606,6 +637,11 @@ button,input,textarea{font:inherit}
       <button id="muteCallButton" class="activeCallControl" type="button" aria-label="Silenciar micrófono">
         <span id="muteCallIcon" class="activeCallControlIcon">🎤</span>
         <span id="muteCallText" class="activeCallControlText">Silenciar</span>
+      </button>
+
+      <button id="recordCallButton" class="activeCallControl" type="button" aria-label="Grabar llamada">
+        <span id="recordCallIcon" class="activeCallControlIcon">🔴</span>
+        <span id="recordCallText" class="activeCallControlText">Grabar</span>
       </button>
 
       <button id="speakerCallButton" class="activeCallControl active" type="button" aria-label="Altavoz">
@@ -630,8 +666,6 @@ const socket = io({autoConnect:false});
 let myUsername = "";
 let selectedUser = "";
 let allUsers = [];
-let contacts = [];
-let contactRequests = [];
 let authMode = "login";
 let unread = {};
 let conversations = {};
@@ -649,15 +683,14 @@ const authDescription = $("authDescription");
 const authError = $("authError");
 
 const usersContainer = $("users");
-const requestsButton = $("requestsButton");
-const requestsBadge = $("requestsBadge");
-const requestsModal = $("requestsModal");
-const requestsList = $("requestsList");
-const closeRequests = $("closeRequests");
 const searchInput = $("searchInput");
 const messagesContainer = $("messages");
 const messageInput = $("messageInput");
 const sendButton = $("sendButton");
+const attachButton = $("attachButton");
+const fileInput = $("fileInput");
+const mediaName = $("mediaName");
+let pendingMedia = null;
 const chatTitle = $("chatTitle");
 const chatSubtitle = $("chatSubtitle");
 const headerAvatar = $("headerAvatar");
@@ -684,6 +717,10 @@ const muteCallText = $("muteCallText");
 const speakerCallButton = $("speakerCallButton");
 const speakerCallIcon = $("speakerCallIcon");
 const speakerCallText = $("speakerCallText");
+const recordCallButton = $("recordCallButton");
+const recordCallIcon = $("recordCallIcon");
+const recordCallText = $("recordCallText");
+const recordingBanner = $("recordingBanner");
 const activeHangupButton = $("activeHangupButton");
 
 let activeCallTimerInterval = null;
@@ -700,6 +737,13 @@ let callPeer = "";
 let callState = "idle";
 let pendingOffer = null;
 let queuedIceCandidates = [];
+let callRecorder = null;
+let callRecordingChunks = [];
+let callRecordingStartedAt = 0;
+let callRecordingMimeType = "audio/webm";
+let callRecordingPeer = "";
+let callRecordingAudioContext = null;
+let callRecordingDestination = null;
 
 function esc(value){
   const d = document.createElement("div");
@@ -927,8 +971,6 @@ socket.on("authenticated",data => {
     data.username ||
     myUsername;
   loadStories();
-  socket.emit("getContacts");
-  socket.emit("getContactRequests");
 
   // Una acción de una notificación puede haber llegado
   // antes de que Socket.IO terminara de autenticar.
@@ -977,103 +1019,106 @@ function renderUsers(){
   usersContainer.innerHTML = "";
 
   const list =
-    contacts.filter(user => {
-      if(!user || norm(user.username) === norm(myUsername)) return false;
-      return (user.displayName || user.username).toLowerCase().includes(query) ||
-             user.username.toLowerCase().includes(query);
+    allUsers.filter(user => {
+
+      if(
+        !user ||
+        norm(user.username) ===
+          norm(myUsername)
+      ){
+        return false;
+      }
+
+      return (
+        (
+          user.displayName ||
+          user.username
+        )
+        .toLowerCase()
+        .includes(query)
+      ) ||
+      user.username
+        .toLowerCase()
+        .includes(query);
     });
 
   if(!list.length){
+
     usersContainer.innerHTML =
       `<div style="padding:20px;text-align:center;color:#777">
-        ${query ? "No hay contactos que coincidan." : "No tienes contactos añadidos."}
+        No tienes contactos añadidos.
       </div>`;
+
     return;
   }
 
   list.forEach(user => {
-    const row = document.createElement("div");
+
+    const row =
+      document.createElement("div");
+
     row.className = "user";
     row.style.cursor = "pointer";
-    const count = unread[user.username] || 0;
+
+    const count =
+      unread[user.username] || 0;
+
     row.innerHTML = `
-      <div class="avatar">${avatarHtml(user)}</div>
+      <div class="avatar">
+        ${avatarHtml(user)}
+      </div>
+
       <div class="userInfo">
-        <div class="userName">${esc(user.displayName || user.username)}</div>
-        <div class="userSub">@${esc(user.username)}</div>
-        <div class="statusRow">
-          <div class="${user.online ? "online" : "offline"}">${user.online ? "● En línea" : "○ Desconectado"}</div>
-          ${count ? `<div class="badge">${count > 99 ? "99+" : count}</div>` : ""}
+
+        <div class="userName">
+          ${esc(
+            user.displayName ||
+            user.username
+          )}
         </div>
-      </div>`;
-    row.onclick = () => openChat(user.username, user.displayName || user.username, user.online, user.profileImage || "");
+
+        <div class="userSub">
+          @${esc(user.username)}
+        </div>
+
+        <div class="statusRow">
+
+          <div class="${
+            user.online
+              ? "online"
+              : "offline"
+          }">
+            ${
+              user.online
+                ? "● En línea"
+                : "○ Desconectado"
+            }
+          </div>
+
+          ${
+            count
+              ? `<div class="badge">
+                   ${count > 99 ? "99+" : count}
+                 </div>`
+              : ""
+          }
+
+        </div>
+      </div>
+    `;
+
+    row.onclick = () => {
+      openChat(
+        user.username,
+        user.displayName || user.username,
+        user.online,
+        user.profileImage || ""
+      );
+    };
+
     usersContainer.appendChild(row);
   });
 }
-
-function renderContactRequests(){
-  requestsList.innerHTML = "";
-  requestsBadge.textContent = contactRequests.length;
-  requestsBadge.style.display = contactRequests.length ? "inline-block" : "none";
-
-  if(!contactRequests.length){
-    requestsList.innerHTML = `<div style="padding:18px;text-align:center;color:#777">No tienes peticiones pendientes.</div>`;
-    return;
-  }
-
-  contactRequests.forEach(user => {
-    const row = document.createElement("div");
-    row.style.cssText = "display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #eee";
-    row.innerHTML = `
-      <div class="avatar" style="width:42px;height:42px">${avatarHtml(user)}</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:bold">${esc(user.displayName || user.username)}</div>
-        <div style="font-size:12px;color:#777">@${esc(user.username)}</div>
-      </div>
-      <button class="primary acceptRequest">Aceptar</button>
-      <button class="muted rejectRequest">Rechazar</button>`;
-    row.querySelector(".acceptRequest").onclick = () => socket.emit("acceptContact", user.username);
-    row.querySelector(".rejectRequest").onclick = () => socket.emit("rejectContact", user.username);
-    requestsList.appendChild(row);
-  });
-}
-
-socket.on("contactsUpdated", list => {
-  contacts = Array.isArray(list) ? list : [];
-  renderUsers();
-});
-
-socket.on("contactRequests", list => {
-  contactRequests = Array.isArray(list) ? list : [];
-  renderContactRequests();
-});
-
-socket.on("contactRequest", user => {
-  if(!contactRequests.some(x => norm(x.username) === norm(user.username))) {
-    contactRequests.push(user);
-  }
-  renderContactRequests();
-  showNotification("Nueva petición", `${esc(user.displayName || user.username)} quiere ser tu contacto.`);
-});
-
-socket.on("contactRequestSent", username => {
-  $("newChatError").textContent = "Petición enviada. Debe aceptarla para poder hablar.";
-});
-
-socket.on("contactAccepted", user => {
-  socket.emit("getContacts");
-  socket.emit("getContactRequests");
-  showNotification("Contacto aceptado", `${user.displayName || user.username} ya está en tus contactos.`);
-});
-
-socket.on("contactRequestRejected", () => {
-  socket.emit("getContactRequests");
-});
-
-socket.on("contactError", message => {
-  $("newChatError").textContent = message;
-  pendingContactUser = null;
-});
 
 searchInput.oninput = renderUsers;
 
@@ -1095,16 +1140,6 @@ $("newChatButton").onclick = () => {
 
 $("cancelNewChat").onclick = () => {
   $("newChatModal").style.display = "none";
-};
-
-requestsButton.onclick = () => {
-  socket.emit("getContactRequests");
-  renderContactRequests();
-  requestsModal.style.display = "flex";
-};
-
-closeRequests.onclick = () => {
-  requestsModal.style.display = "none";
 };
 
 $("contactButton").onclick = () => {
@@ -1141,9 +1176,43 @@ socket.on("userFoundError",message => {
     message;
 });
 
-socket.on("userFound", user => {
+socket.on("userFound",user => {
+
   pendingContactUser = user;
-  socket.emit("requestContact", user.username);
+
+  socket.emit(
+    "addContact",
+    user.username
+  );
+});
+
+socket.on("contactAdded",user => {
+
+  if(
+    pendingContactUser &&
+    norm(pendingContactUser.username) ===
+      norm(user.username)
+  ){
+
+    $("newChatModal").style.display = "none";
+
+    openChat(
+      user.username,
+      user.displayName || user.username,
+      !!user.online,
+      user.profileImage || ""
+    );
+
+    pendingContactUser = null;
+  }
+});
+
+socket.on("contactError",message => {
+
+  $("newChatError").textContent =
+    message;
+
+  pendingContactUser = null;
 });
 
 /* =====================================================
@@ -1190,6 +1259,7 @@ function openChat(
 
   messageInput.disabled = false;
   sendButton.disabled = false;
+  attachButton.disabled = false;
 
   messagesContainer.innerHTML =
     `<div class="empty">
@@ -1227,6 +1297,8 @@ socket.on("conversationBlocked",message => {
 
   messageInput.disabled = true;
   sendButton.disabled = true;
+  attachButton.disabled = true;
+  clearPendingMedia();
 });
 
 function renderConversation(username){
@@ -1287,7 +1359,7 @@ function addMessage(message){
       ? `<span class="deletedText">
            Mensaje eliminado
          </span>`
-      : esc(message.message);
+      : esc(message.message || "");
 
   bubble.innerHTML = `
     ${
@@ -1301,12 +1373,18 @@ function addMessage(message){
            </div>`
     }
 
-    <div>${text}</div>
+    ${message.message ? `<div>${text}</div>` : ""}
 
     <div class="time">
       ${time}
     </div>
   `;
+
+  if(!message.deleted && message.media){
+    const mediaWrap = document.createElement("div");
+    mediaWrap.innerHTML = mediaHtml(message);
+    bubble.insertBefore(mediaWrap.firstElementChild, bubble.querySelector(".time"));
+  }
 
   if(mine && !message.deleted){
 
@@ -1373,6 +1451,79 @@ socket.on("messageDeleted",data => {
   }
 });
 
+attachButton.onclick = () => fileInput.click();
+
+fileInput.onchange = () => {
+  const file = fileInput.files && fileInput.files[0];
+  if(!file){
+    clearPendingMedia();
+    return;
+  }
+
+  if(file.size > 7 * 1024 * 1024){
+    showNotification("Mi Chat", "El archivo no puede superar los 7 MB.");
+    clearPendingMedia();
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = String(reader.result || "");
+    if(!dataUrl.startsWith("data:")){
+      showNotification("Mi Chat", "No se pudo preparar el archivo.");
+      clearPendingMedia();
+      return;
+    }
+
+    let type = "file";
+    if(file.type.startsWith("image/")) type = "image";
+    else if(file.type.startsWith("video/")) type = "video";
+    else if(file.type.startsWith("audio/")) type = "audio";
+
+    pendingMedia = {
+      data: dataUrl,
+      mimeType: file.type || "application/octet-stream",
+      fileName: file.name,
+      type
+    };
+
+    mediaName.textContent = "📎 " + file.name;
+    mediaName.style.display = "block";
+  };
+  reader.onerror = () => {
+    showNotification("Mi Chat", "No se pudo leer el archivo.");
+    clearPendingMedia();
+  };
+  reader.readAsDataURL(file);
+};
+
+function clearPendingMedia(){
+  pendingMedia = null;
+  fileInput.value = "";
+  mediaName.textContent = "";
+  mediaName.style.display = "none";
+}
+
+function mediaHtml(message){
+  const src = esc(message.media || "");
+  const name = esc(message.fileName || "archivo");
+  const mime = String(message.mimeType || "");
+
+  if(message.type === "image" || mime.startsWith("image/")){
+    return `<img class="chatMedia" src="${src}" alt="${name}" loading="lazy">`;
+  }
+
+  if(message.type === "video" || mime.startsWith("video/")){
+    return `<video class="chatMedia chatVideo" src="${src}" controls playsinline preload="metadata"></video>`;
+  }
+
+  if(message.type === "audio" || mime.startsWith("audio/")){
+    return `<audio class="chatAudio" src="${src}" controls preload="metadata"></audio>`;
+  }
+
+  return `<a class="fileAttachment" href="${src}" download="${name}"><span class="fileAttachmentIcon">📎</span><span class="fileAttachmentName">${name}</span></a>`;
+}
+
 sendButton.onclick = sendMessage;
 
 messageInput.onkeydown = event => {
@@ -1386,7 +1537,7 @@ function sendMessage(){
   const text =
     messageInput.value.trim();
 
-  if(!text || !selectedUser){
+  if((!text && !pendingMedia) || !selectedUser){
     return;
   }
 
@@ -1394,11 +1545,13 @@ function sendMessage(){
     "privateMessage",
     {
       to:selectedUser,
-      message:text
+      message:text,
+      media:pendingMedia
     }
   );
 
   messageInput.value = "";
+  clearPendingMedia();
 }
 
 socket.on("messageSent",message => {
@@ -1895,6 +2048,182 @@ speakerCallButton.onclick = toggleCallSpeaker;
 activeHangupButton.onclick = () => cleanupCall(true);
 
 
+function setRecordingUI(active){
+  recordingBanner.classList.toggle("visible", !!active);
+  recordCallButton.classList.toggle("active", !!active);
+  recordCallIcon.textContent = active ? "⏹️" : "🔴";
+  recordCallText.textContent = active ? "Detener" : "Grabar";
+}
+
+async function startCallRecording(){
+  if(callRecorder || callState !== "in-call") return;
+  if(!callPeer || !localStream) return;
+
+  const remoteStream = remoteAudio.srcObject;
+  if(!remoteStream){
+    showNotification("Grabación", "Espera a que la llamada esté conectada.");
+    return;
+  }
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if(!AudioContextClass){
+    showNotification("Grabación", "Tu navegador no permite mezclar el audio de la llamada.");
+    return;
+  }
+
+  try{
+    callRecordingAudioContext = new AudioContextClass();
+
+    // En Android/WebView el AudioContext puede arrancar suspendido.
+    // Hay que reactivarlo antes de crear la grabación.
+    if (callRecordingAudioContext.state === "suspended") {
+      await callRecordingAudioContext.resume();
+    }
+
+    callRecordingDestination = callRecordingAudioContext.createMediaStreamDestination();
+
+    const localTracks = localStream.getAudioTracks ? localStream.getAudioTracks() : [];
+    if (!localTracks.length) {
+      throw new Error("No se encontró el micrófono de la llamada.");
+    }
+
+    const localSource = callRecordingAudioContext.createMediaStreamSource(
+      new MediaStream(localTracks)
+    );
+
+    // Primero intentamos capturar el audio tal como se reproduce en el elemento
+    // <audio>. Esto evita que algunos WebView entreguen una pista remota que
+    // luego no pasa correctamente al AudioContext.
+    let remoteCaptureStream = null;
+    if (typeof remoteAudio.captureStream === "function") {
+      try {
+        remoteCaptureStream = remoteAudio.captureStream();
+      } catch (e) {
+        console.warn("captureStream no disponible para el audio remoto:", e);
+      }
+    }
+
+    if (!remoteCaptureStream || !remoteCaptureStream.getAudioTracks().length) {
+      remoteCaptureStream = remoteStream;
+    }
+
+    const remoteTracks = remoteCaptureStream.getAudioTracks
+      ? remoteCaptureStream.getAudioTracks()
+      : [];
+
+    if (!remoteTracks.length) {
+      throw new Error("Todavía no se ha recibido el audio de la otra persona.");
+    }
+
+    const remoteSource = callRecordingAudioContext.createMediaStreamSource(
+      new MediaStream(remoteTracks)
+    );
+
+    localSource.connect(callRecordingDestination);
+    remoteSource.connect(callRecordingDestination);
+
+    const preferred = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4",
+      "audio/ogg;codecs=opus"
+    ];
+    callRecordingMimeType = preferred.find(x => MediaRecorder.isTypeSupported(x)) || "audio/webm";
+    callRecorder = new MediaRecorder(callRecordingDestination.stream, {
+      mimeType: callRecordingMimeType,
+      audioBitsPerSecond: 32000
+    });
+    callRecordingChunks = [];
+    callRecordingStartedAt = Date.now();
+    callRecordingPeer = callPeer;
+
+    callRecorder.ondataavailable = event => {
+      if(event.data && event.data.size) callRecordingChunks.push(event.data);
+    };
+
+    callRecorder.onerror = event => {
+      console.error("Error grabando llamada:", event.error);
+      showNotification("Grabación", "Se produjo un error durante la grabación.");
+      stopCallRecording(false);
+    };
+
+    callRecorder.onstop = async () => {
+      const duration = Math.round((Date.now() - callRecordingStartedAt) / 1000);
+      const blob = new Blob(callRecordingChunks, { type: callRecordingMimeType });
+      callRecordingChunks = [];
+
+      if(blob.size){
+        try{
+          const token = localStorage.getItem("chatToken");
+          const response = await fetch(
+            "/api/call-recordings?to=" + encodeURIComponent(callRecordingPeer) +
+            "&startedAt=" + encodeURIComponent(callRecordingStartedAt) +
+            "&duration=" + encodeURIComponent(duration),
+            {
+              method: "POST",
+              headers: {
+                "Authorization": "Bearer " + token,
+                "Content-Type": callRecordingMimeType
+              },
+              body: blob
+            }
+          );
+          const data = await response.json().catch(() => ({}));
+          if(!response.ok) throw new Error(data.error || "No se pudo guardar la grabación.");
+          showNotification("Grabación", "Grabación guardada correctamente.");
+        }catch(error){
+          console.error(error);
+          showNotification("Grabación", error.message || "No se pudo guardar la grabación.");
+        }
+      }
+
+      try{ callRecordingAudioContext?.close(); }catch{}
+      callRecordingAudioContext = null;
+      callRecordingDestination = null;
+      callRecordingPeer = "";
+      callRecorder = null;
+      setRecordingUI(false);
+    };
+
+    callRecorder.start(1000);
+    setRecordingUI(true);
+    socket.emit("recordingStarted", { to: callPeer });
+    showNotification("Grabación", "La llamada se está grabando y ambos participantes han sido avisados.");
+  }catch(error){
+    console.error(error);
+    try{ callRecordingAudioContext?.close(); }catch{}
+    callRecordingAudioContext = null;
+    callRecordingDestination = null;
+    callRecorder = null;
+    setRecordingUI(false);
+    showNotification("Grabación", error.message || "No se pudo iniciar la grabación.");
+  }
+}
+
+function stopCallRecording(notify = true){
+  if(!callRecorder){
+    setRecordingUI(false);
+    return;
+  }
+  if(notify && callPeer) socket.emit("recordingStopped", { to: callPeer });
+  try{ callRecorder.stop(); }catch{}
+}
+
+recordCallButton.onclick = () => {
+  if(callRecorder) stopCallRecording(true);
+  else startCallRecording();
+};
+
+socket.on("recordingStarted", () => {
+  recordingBanner.classList.add("visible");
+  showNotification("Grabación", "La otra persona ha iniciado la grabación de la llamada.");
+});
+
+socket.on("recordingStopped", () => {
+  if(!callRecorder) recordingBanner.classList.remove("visible");
+  showNotification("Grabación", "La grabación de la llamada ha terminado.");
+});
+
 async function createAndSendOffer(){
 
   await startPeer();
@@ -2111,6 +2440,13 @@ function rejectCall(){
 function cleanupCall(
   notifyRemote = true
 ){
+
+  if(callRecorder){
+    stopCallRecording(false);
+  } else {
+    setRecordingUI(false);
+  }
+
 
   if(
     notifyRemote &&
@@ -2544,6 +2880,62 @@ $("settingsPush").onclick = async () => {
     "none";
 
   await activatePushNotifications();
+};
+
+$("settingsReport").onclick = () => {
+  $("settingsModal").style.display = "none";
+  $("reportText").value = "";
+  $("reportCategory").value = "Problema técnico";
+  $("reportMessage").textContent = "";
+  $("reportModal").style.display = "flex";
+};
+
+$("closeReport").onclick = () => {
+  $("reportModal").style.display = "none";
+};
+
+$("sendReport").onclick = async () => {
+  const button = $("sendReport");
+  const message = $("reportMessage");
+  const text = $("reportText").value.trim();
+
+  if (text.length < 5) {
+    message.style.color = "#c00";
+    message.textContent = "Escribe al menos 5 caracteres.";
+    return;
+  }
+
+  button.disabled = true;
+  message.style.color = "#777";
+  message.textContent = "Enviando...";
+
+  try {
+    const token = localStorage.getItem("chatToken");
+    const response = await fetch("/api/reports", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + token
+      },
+      body: JSON.stringify({
+        category: $("reportCategory").value,
+        text
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudo enviar el reporte.");
+
+    message.style.color = "#087f23";
+    message.textContent = "Reporte enviado correctamente. Gracias.";
+    $("reportText").value = "";
+    setTimeout(() => { $("reportModal").style.display = "none"; }, 1200);
+  } catch (error) {
+    message.style.color = "#c00";
+    message.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
 };
 
 $("closeBlocked").onclick = () => {
