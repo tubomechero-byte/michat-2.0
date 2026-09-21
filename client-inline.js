@@ -275,13 +275,16 @@ async function checkSession(){
         }
       );
 
+    const data =
+      await response.json().catch(() => ({}));
+
     if(!response.ok){
       localStorage.removeItem("chatToken");
+      if(data.banned){
+        authError.textContent = data.error || "Tu cuenta está temporalmente bloqueada.";
+      }
       return;
     }
-
-    const data =
-      await response.json();
 
     if(data.loggedIn){
 
@@ -452,6 +455,17 @@ function markModerationSeen(id){
   try{ const key="michat_moderation_seen"; const seen=JSON.parse(localStorage.getItem(key)||"[]"); const value=String(id); if(!seen.includes(value))seen.push(value); localStorage.setItem(key,JSON.stringify(seen.slice(-100))); }catch{}
 }
 
+socket.on("banned", data => {
+  localStorage.removeItem("chatToken");
+  try { closeModerationModal(); } catch {}
+  if(socket.connected) socket.disconnect();
+  app.style.display = "none";
+  authScreen.style.display = "flex";
+  const until = data?.expiresAt ? ` hasta ${new Date(Number(data.expiresAt)).toLocaleString("es-ES")}` : " permanentemente";
+  const reason = data?.reason ? ` Motivo: ${data.reason}` : "";
+  authError.textContent = `Tu cuenta ha sido baneada${until}.${reason}`;
+});
+
 socket.on("authenticationError",() => {
 
   localStorage.removeItem("chatToken");
@@ -517,13 +531,21 @@ socket.on("relationshipData", data => {
   renderUsers();
 });
 
+function closeRequestsModal(){
+  requestsModal.style.display = "none";
+}
 requestsButton.onclick = () => {
   renderRequests();
   requestsModal.style.display = "flex";
 };
-$("closeRequests").onclick = () => {
-  requestsModal.style.display = "none";
-};
+$("closeRequests").onclick = closeRequestsModal;
+$("exitRequests").onclick = closeRequestsModal;
+requestsModal.addEventListener("click", event => {
+  if(event.target === requestsModal) closeRequestsModal();
+});
+document.addEventListener("keydown", event => {
+  if(event.key === "Escape" && requestsModal.style.display === "flex") closeRequestsModal();
+});
 if($("closeModerationModal")) $("closeModerationModal").onclick = closeModerationModal;
 if($("closeModerationModalBottom")) $("closeModerationModalBottom").onclick = closeModerationModal;
 if($("sendModerationAppeal")) $("sendModerationAppeal").onclick = submitModerationAppeal;
