@@ -5,6 +5,7 @@ const webpush = require("web-push");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const tls = require("tls");
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getMessaging } = require("firebase-admin/messaging");
 
@@ -25,6 +26,7 @@ const REPORTS_FILE = path.join(DATA_DIR, "reports.json");
 const MODERATION_FILE = path.join(DATA_DIR, "moderation.json");
 const APPEALS_FILE = path.join(DATA_DIR, "appeals.json");
 const BANS_FILE = path.join(DATA_DIR, "bans.json");
+const PASSWORD_RESETS_FILE = path.join(DATA_DIR, "password-resets.json");
 const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -53,7 +55,8 @@ const STATE_FILES = {
   "reports.json": [],
   "moderation.json": [],
   "appeals.json": [],
-  "bans.json": []
+  "bans.json": [],
+  "password-resets.json": []
 };
 
 let supabaseAvailable = false;
@@ -80,6 +83,7 @@ ensure(REPORTS_FILE, []);
 ensure(MODERATION_FILE, []);
 ensure(APPEALS_FILE, []);
 ensure(BANS_FILE, []);
+ensure(PASSWORD_RESETS_FILE, []);
 
 function read(file, fallback) {
   try {
@@ -326,6 +330,159 @@ function saveBans(v) {
   write(BANS_FILE, v);
 }
 
+function passwordResets() {
+  return read(PASSWORD_RESETS_FILE, []);
+}
+
+function savePasswordResets(v) {
+  write(PASSWORD_RESETS_FILE, v);
+}
+
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function validEmail(value) {
+  const email = normalizeEmail(value);
+  return email.length >= 5 && email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+}
+
+const PASSWORD_RESET_SECRET = String(
+  process.env.PASSWORD_RESET_SECRET ||
+  process.env.SESSION_SECRET ||
+  "CAMBIA-ESTA-CLAVE-DE-RECUPERACION-EN-RENDER"
+);
+const PASSWORD_RESET_TTL = 10 * 60 * 1000;
+const PASSWORD_RESET_RESEND_COOLDOWN = 60 * 1000;
+const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+
+function hashResetCode(username, resetId, code) {
+  return crypto
+    .createHmac("sha256", PASSWORD_RESET_SECRET)
+    .update(`${norm(username)}|${resetId}|${code}`)
+    .digest("hex");
+}
+
+function prunePasswordResets() {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  const list = passwordResets().filter(item => Number(item.createdAt || 0) >= cutoff);
+  if (list.length !== passwordResets().length) savePasswordResets(list);
+  return list;
+}
+
+function smtpConfig() {
+  const user = String(process.env.SMTP_USER || "").trim();
+  const pass = String(process.env.SMTP_PASS || "");
+  const host = String(process.env.SMTP_HOST || "smtp.gmail.com").trim();
+  const port = Number(process.env.SMTP_PORT || 465);
+  const secure = String(process.env.SMTP_SECURE || "true").trim().toLowerCase() !== "false";
+  const from = String(process.env.SMTP_FROM || user).trim();
+  return { user, pass, host, port, secure, from };
+}
+
+function smtpReadResponse(socket) {
+  return new Promise((resolve, reject) => {
+    let buffer = "";
+    const onData = chunk => {
+      buffer += chunk.toString("utf8");
+      const lines = buffer.split(/\r?\n/);
+      const complete = [];
+      while (lines.length > 1) complete.push(lines.shift());
+      buffer = lines[0] || "";
+      const valid = complete.filter(Boolean);
+      if (!valid.length) return;
+      const last = valid[valid.length - 1];
+      if (/^\d{3} /.test(last)) {
+        cleanup();
+        const code = Number(last.slice(0, 3));
+        if (code >= 200 && code < 400) resolve(valid.join("\n"));
+        else reject(new Error(last));
+      }
+    };
+    const onError = error => { cleanup(); reject(error); };
+    const onClose = () => { cleanup(); reject(new Error("Conexión SMTP cerrada.")); };
+    const timer = setTimeout(() => { cleanup(); reject(new Error("Tiempo de espera SMTP agotado.")); }, 15000);
+    function cleanup() {
+      clearTimeout(timer);
+      socket.off("data", onData);
+      socket.off("error", onError);
+      socket.off("close", onClose);
+    }
+    socket.on("data", onData);
+    socket.on("error", onError);
+    socket.on("close", onClose);
+  });
+}
+
+async function smtpCommand(socket, command) {
+  socket.write(command + "\r\n");
+  return smtpReadResponse(socket);
+}
+
+function smtpQuit(socket) {
+  try { socket.write("QUIT\r\n"); } catch {}
+  try { socket.end(); } catch {}
+}
+
+async function sendPasswordResetEmail(to, username, code) {
+  const cfg = smtpConfig();
+  if (!cfg.user || !cfg.pass) {
+    throw new Error("SMTP_USER/SMTP_PASS no configurados.");
+  }
+  if (!validEmail(to)) {
+    throw new Error("Correo de destino no válido.");
+  }
+
+  const socket = tls.connect({ host: cfg.host, port: cfg.port, servername: cfg.host, rejectUnauthorized: true });
+  const greeting = smtpReadResponse(socket);
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Tiempo de espera de conexión SMTP agotado.")), 15000);
+      socket.once("secureConnect", () => { clearTimeout(timer); resolve(); });
+      socket.once("error", error => { clearTimeout(timer); reject(error); });
+    });
+    await greeting;
+    await smtpCommand(socket, `EHLO ${cfg.host}`);
+    await smtpCommand(socket, "AUTH LOGIN");
+    await smtpCommand(socket, Buffer.from(cfg.user).toString("base64"));
+    await smtpCommand(socket, Buffer.from(cfg.pass).toString("base64"));
+    await smtpCommand(socket, `MAIL FROM:<${cfg.from}>`);
+    await smtpCommand(socket, `RCPT TO:<${to}>`);
+    await smtpCommand(socket, "DATA");
+
+    const subject = "Código de recuperación de Mi Chat";
+    const body = [
+      "Hola,",
+      "",
+      `Hemos recibido una solicitud para restablecer la contraseña de @${username}.`,
+      "",
+      `Tu código de recuperación es: ${code}`,
+      "",
+      "Este código caduca en 10 minutos y solo puede utilizarse una vez.",
+      "Si no has solicitado este cambio, puedes ignorar este mensaje.",
+      "",
+      "Mi Chat"
+    ].join("\r\n");
+
+    const headers = [
+      `From: Mi Chat <${cfg.from}>`,
+      `To: <${to}>`,
+      `Subject: ${subject}`,
+      "MIME-Version: 1.0",
+      "Content-Type: text/plain; charset=UTF-8",
+      "Content-Transfer-Encoding: 8bit",
+      "",
+      body
+    ].join("\r\n").replace(/(^|\r\n)\./g, "$1..");
+
+    socket.write(headers + "\r\n.\r\n");
+    await smtpReadResponse(socket);
+    await smtpCommand(socket, "QUIT");
+  } finally {
+    try { socket.end(); } catch {}
+  }
+}
+
 function activeBanFor(username) {
   const target = norm(username);
   if (!target) return null;
@@ -480,6 +637,12 @@ function verifySessionToken(token) {
     );
 
     if (!data || !data.username) {
+      return null;
+    }
+
+    const account = getUser(data.username);
+    if (!account) return null;
+    if (Number(account.passwordChangedAt || 0) > Number(data.createdAt || 0)) {
       return null;
     }
 
@@ -1815,6 +1978,8 @@ app.post("/api/register", (req, res) => {
   const password =
     String(req.body.password || "");
 
+  const email = normalizeEmail(req.body.email);
+
   if (
     displayName.length < 3 ||
     displayName.length > 24
@@ -1839,6 +2004,12 @@ app.post("/api/register", (req, res) => {
     });
   }
 
+  if (!validEmail(email)) {
+    return res.status(400).json({
+      error: "Introduce un correo electrónico válido para recuperar la contraseña."
+    });
+  }
+
   const username = norm(displayName);
   const list = users();
 
@@ -1852,6 +2023,12 @@ app.post("/api/register", (req, res) => {
     });
   }
 
+  if (list.some(u => normalizeEmail(u.email) === email)) {
+    return res.status(400).json({
+      error: "Ese correo electrónico ya está vinculado a otra cuenta."
+    });
+  }
+
   const p = passwordHash(password);
 
   list.push({
@@ -1859,6 +2036,7 @@ app.post("/api/register", (req, res) => {
     displayName,
     salt: p.salt,
     passwordHash: p.hash,
+    email,
     profileImage: "",
     blockedUsers: [],
     contacts: [],
@@ -1881,6 +2059,152 @@ app.post("/api/register", (req, res) => {
     username: displayName,
     token
   });
+});
+
+app.post("/api/forgot-password", async (req, res) => {
+  const identifier = String(req.body?.identifier || "").trim();
+  const lookup = norm(identifier);
+  const emailLookup = normalizeEmail(identifier);
+  const list = users();
+  const user = list.find(u => norm(u.username) === lookup || normalizeEmail(u.email) === emailLookup);
+
+  // Respuesta neutra para no revelar si existe una cuenta.
+  const generic = {
+    success: true,
+    message: "Si la cuenta existe y tiene un correo asociado, recibirás un código en unos instantes."
+  };
+
+  if (!user || !validEmail(user.email)) {
+    return res.json(generic);
+  }
+
+  const now = Date.now();
+  let resets = prunePasswordResets();
+  const recent = resets
+    .filter(item => norm(item.username) === norm(user.username))
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+
+  if (recent[0] && now - Number(recent[0].createdAt || 0) < PASSWORD_RESET_RESEND_COOLDOWN) {
+    return res.json(generic);
+  }
+
+  const lastHour = recent.filter(item => now - Number(item.createdAt || 0) < 60 * 60 * 1000).length;
+  if (lastHour >= 5) {
+    return res.json(generic);
+  }
+
+  const code = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+  const resetId = crypto.randomBytes(16).toString("hex");
+  const item = {
+    id: resetId,
+    username: norm(user.username),
+    email: normalizeEmail(user.email),
+    codeHash: hashResetCode(user.username, resetId, code),
+    createdAt: now,
+    expiresAt: now + PASSWORD_RESET_TTL,
+    attempts: 0,
+    usedAt: null
+  };
+
+  // Invalida códigos anteriores de la misma cuenta.
+  resets = resets.map(entry =>
+    norm(entry.username) === norm(user.username)
+      ? { ...entry, usedAt: entry.usedAt || now, invalidatedAt: now }
+      : entry
+  );
+  resets.push(item);
+  if (resets.length > 500) resets.splice(0, resets.length - 500);
+  savePasswordResets(resets);
+
+  try {
+    await sendPasswordResetEmail(user.email, user.username, code);
+    addAdminActivity(`Se envió un código de recuperación a @${user.username}.`);
+    return res.json(generic);
+  } catch (error) {
+    console.error("No se pudo enviar el correo de recuperación:", error.message);
+    // No dejamos un código válido guardado si el correo no pudo salir.
+    const current = passwordResets().map(entry =>
+      entry.id === resetId ? { ...entry, usedAt: Date.now(), mailError: true } : entry
+    );
+    savePasswordResets(current);
+    return res.status(503).json({
+      error: "No se pudo enviar el correo de recuperación. El servicio de correo no está configurado correctamente."
+    });
+  }
+});
+
+app.post("/api/reset-password", (req, res) => {
+  const identifier = String(req.body?.identifier || "").trim();
+  const code = String(req.body?.code || "").replace(/\D/g, "").slice(0, 6);
+  const newPassword = String(req.body?.newPassword || "");
+
+  if (!identifier || !/^\d{6}$/.test(code)) {
+    return res.status(400).json({ error: "Introduce el usuario/correo y el código de 6 dígitos." });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: "La nueva contraseña debe tener al menos 6 caracteres." });
+  }
+
+  const list = users();
+  const lookup = norm(identifier);
+  const emailLookup = normalizeEmail(identifier);
+  const userIndex = list.findIndex(u => norm(u.username) === lookup || normalizeEmail(u.email) === emailLookup);
+  if (userIndex < 0) {
+    return res.status(400).json({ error: "Código no válido o caducado." });
+  }
+
+  const username = norm(list[userIndex].username);
+  const now = Date.now();
+  let resets = prunePasswordResets();
+  const reset = resets
+    .filter(item => norm(item.username) === username && !item.usedAt && !item.invalidatedAt)
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))[0];
+
+  if (!reset || Number(reset.expiresAt || 0) <= now || Number(reset.attempts || 0) >= PASSWORD_RESET_MAX_ATTEMPTS) {
+    return res.status(400).json({ error: "Código no válido o caducado." });
+  }
+
+  const expected = hashResetCode(username, reset.id, code);
+  const a = Buffer.from(String(reset.codeHash || ""), "hex");
+  const b = Buffer.from(expected, "hex");
+  let matches = a.length === b.length;
+  try {
+    if (matches) matches = crypto.timingSafeEqual(a, b);
+  } catch {
+    matches = false;
+  }
+
+  if (!matches) {
+    reset.attempts = Number(reset.attempts || 0) + 1;
+    if (reset.attempts >= PASSWORD_RESET_MAX_ATTEMPTS) reset.invalidatedAt = now;
+    savePasswordResets(resets);
+    return res.status(400).json({ error: "Código no válido o caducado." });
+  }
+
+  const p = passwordHash(newPassword);
+  list[userIndex].salt = p.salt;
+  list[userIndex].passwordHash = p.hash;
+  list[userIndex].passwordChangedAt = now;
+  saveUsers(list);
+
+  reset.usedAt = now;
+  savePasswordResets(resets);
+
+  // Invalida también las sesiones legacy almacenadas en sessions.json.
+  const legacySessions = sessions();
+  let changed = false;
+  for (const [token, session] of Object.entries(legacySessions)) {
+    if (norm(session?.username) === username) {
+      delete legacySessions[token];
+      changed = true;
+    }
+  }
+  if (changed) saveSessions(legacySessions);
+
+  addAdminActivity(`@${username} ha restablecido su contraseña mediante recuperación por correo.`);
+
+  res.json({ success: true, message: "Contraseña cambiada correctamente. Ya puedes iniciar sesión." });
 });
 
 app.post("/api/login", (req, res) => {
@@ -1977,6 +2301,7 @@ app.get("/api/session", (req, res) => {
     loggedIn: true,
     username: u.username,
     displayName: u.displayName,
+    email: u.email || "",
     profileImage:
       u.profileImage || ""
   });
@@ -2027,6 +2352,8 @@ app.post("/api/profile", (req, res) => {
     u.displayName
   ).trim();
 
+  const email = normalizeEmail(req.body.email || u.email || "");
+
   const profileImage = String(
     req.body.profileImage || ""
   );
@@ -2047,6 +2374,10 @@ app.post("/api/profile", (req, res) => {
     });
   }
 
+  if (email && !validEmail(email)) {
+    return res.status(400).json({ error: "Correo electrónico inválido." });
+  }
+
   const list = users();
 
   const idx = list.findIndex(
@@ -2061,8 +2392,14 @@ app.post("/api/profile", (req, res) => {
     });
   }
 
+  if (email && list.some((item, itemIndex) => itemIndex !== idx && normalizeEmail(item.email) === email)) {
+    return res.status(400).json({ error: "Ese correo electrónico ya está vinculado a otra cuenta." });
+  }
+
   list[idx].displayName =
     displayName;
+
+  list[idx].email = email;
 
   list[idx].profileImage =
     profileImage;
@@ -2073,6 +2410,7 @@ app.post("/api/profile", (req, res) => {
   res.json({
     success: true,
     displayName,
+    email,
     profileImage
   });
 });
