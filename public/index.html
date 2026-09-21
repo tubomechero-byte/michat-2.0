@@ -100,6 +100,8 @@ button,input,textarea{font:inherit}
 .back{display:none;border:0;background:transparent;font-size:25px;cursor:pointer}
 
 #notifications{position:fixed;top:15px;right:15px;z-index:9999;width:min(360px,calc(100vw - 30px))}
+
+.moderationModalBackdrop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.62);z-index:12000}.moderationModalBackdrop.open{display:flex}.moderationModalBox{width:min(560px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 18px 70px rgba(0,0,0,.35);padding:24px;box-sizing:border-box}.moderationModalHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.moderationModalIcon{font-size:38px;line-height:1}.moderationModalTitle{margin:0;font-size:22px}.moderationModalMeta{margin-top:4px;color:#777;font-size:13px}.moderationModalMessage{margin:18px 0;padding:16px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;white-space:pre-wrap;word-break:break-word;color:#3f3f46}.moderationAppealLabel{display:block;font-weight:700;margin:12px 0 7px}.moderationAppealText{width:100%;min-height:130px;resize:vertical;box-sizing:border-box;padding:13px;border:1px solid #d4d4d8;border-radius:12px;font:inherit;outline:none}.moderationAppealText:focus{border-color:#128c7e;box-shadow:0 0 0 3px rgba(18,140,126,.1)}.moderationModalActions{display:flex;gap:10px;margin-top:14px}.moderationModalActions button{flex:1;padding:12px;border:0;border-radius:12px;cursor:pointer}.moderationClose{background:#eee}.moderationAppeal{background:#128c7e;color:#fff}.moderationModalStatus{min-height:22px;margin-top:10px;font-size:14px}
 .notification{padding:14px;margin-bottom:10px;background:#fff;border-left:5px solid #25d366;border-radius:14px;box-shadow:0 6px 25px rgba(0,0,0,.2);cursor:pointer}
 .notificationTitle{font-weight:bold;margin-bottom:5px}
 .notificationText{color:#555;font-size:14px}
@@ -433,6 +435,20 @@ button,input,textarea{font:inherit}
 </div>
 
 <div id="notifications"></div>
+
+<div id="moderationModal" class="moderationModalBackdrop" aria-hidden="true">
+  <div class="moderationModalBox" role="dialog" aria-modal="true" aria-labelledby="moderationModalTitle">
+    <div class="moderationModalHead">
+      <div><div class="moderationModalIcon">⚠️</div><h2 id="moderationModalTitle" class="moderationModalTitle">Aviso de moderación</h2><div id="moderationModalDate" class="moderationModalMeta"></div></div>
+      <button id="closeModerationModal" class="muted" type="button">✕</button>
+    </div>
+    <div id="moderationModalMessage" class="moderationModalMessage"></div>
+    <label for="moderationAppealText" class="moderationAppealLabel">¿Quieres apelar este aviso?</label>
+    <textarea id="moderationAppealText" class="moderationAppealText" maxlength="3000" placeholder="Explica por qué consideras que el aviso debería revisarse..."></textarea>
+    <div id="moderationModalStatus" class="moderationModalStatus"></div>
+    <div class="moderationModalActions"><button id="closeModerationModalBottom" class="moderationClose" type="button">Cerrar</button><button id="sendModerationAppeal" class="moderationAppeal" type="button">Enviar apelación</button></div>
+  </div>
+</div>
 
 <!-- NUEVO CHAT -->
 <div id="newChatModal" class="modal">
