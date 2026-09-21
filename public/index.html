@@ -101,13 +101,13 @@ button,input,textarea{font:inherit}
 
 #notifications{position:fixed;top:15px;right:15px;z-index:9999;width:min(360px,calc(100vw - 30px))}
 
-.moderationModalBackdrop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.62);z-index:12000}.moderationModalBackdrop.open{display:flex}.moderationModalBox{width:min(560px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 18px 70px rgba(0,0,0,.35);padding:24px;box-sizing:border-box}.moderationModalHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.moderationModalIcon{font-size:38px;line-height:1}.moderationModalTitle{margin:0;font-size:22px}.moderationModalMeta{margin-top:4px;color:#777;font-size:13px}.moderationModalMessage{margin:18px 0;padding:16px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;white-space:pre-wrap;word-break:break-word;color:#3f3f46}.moderationAppealLabel{display:block;font-weight:700;margin:12px 0 7px}.moderationAppealText{width:100%;min-height:130px;resize:vertical;box-sizing:border-box;padding:13px;border:1px solid #d4d4d8;border-radius:12px;font:inherit;outline:none}.moderationAppealText:focus{border-color:#128c7e;box-shadow:0 0 0 3px rgba(18,140,126,.1)}.moderationModalActions{display:flex;gap:10px;margin-top:14px}.moderationModalActions button{flex:1;padding:12px;border:0;border-radius:12px;cursor:pointer}.moderationClose{background:#eee}.moderationAppeal{background:#128c7e;color:#fff}.moderationModalStatus{min-height:22px;margin-top:10px;font-size:14px}
+.moderationModalBackdrop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.62);z-index:12000}.moderationModalBackdrop.open{display:flex}.moderationModalBox{width:min(560px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 18px 70px rgba(0,0,0,.35);padding:24px;box-sizing:border-box}.moderationModalHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.moderationModalIcon{font-size:38px;line-height:1}.moderationModalTitle{margin:0;font-size:22px}.moderationModalMeta{margin-top:4px;color:#777;font-size:13px}.moderationModalMessage{margin:18px 0;padding:16px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;white-space:pre-wrap;word-break:break-word;color:#3f3f46}.moderationAppealLabel{display:block;font-weight:700;margin:12px 0 7px}.moderationAppealText{width:100%;min-height:130px;resize:vertical;box-sizing:border-box;padding:13px;border:1px solid #d4d4d8;border-radius:12px;font:inherit;outline:none}.moderationAppealText:focus{border-color:#128c7e;box-shadow:0 0 0 3px rgba(18,140,126,.1)}.moderationModalActions{display:flex;gap:10px;margin-top:14px}.moderationModalActions button{flex:1;padding:12px;border:0;border-radius:12px;cursor:pointer}.moderationClose{background:#eee}.moderationAppeal{background:#128c7e;color:#fff}.moderationModalStatus{min-height:22px;margin-top:10px;font-size:14px}.moderationCloseTop{min-width:44px;min-height:44px;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center}.moderationModalBackdrop.open{display:flex !important}.moderationModalBackdrop button{pointer-events:auto}.moderationModalBackdrop{pointer-events:auto}
 .notification{padding:14px;margin-bottom:10px;background:#fff;border-left:5px solid #25d366;border-radius:14px;box-shadow:0 6px 25px rgba(0,0,0,.2);cursor:pointer}
 .notificationTitle{font-weight:bold;margin-bottom:5px}
 .notificationText{color:#555;font-size:14px}
 
 .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.45);z-index:5000}
-.modalBox{width:100%;max-width:440px;background:#fff;border-radius:18px;padding:25px}
+.modalBox{position:relative;width:100%;max-width:440px;max-height:90vh;overflow-y:auto;background:#fff;border-radius:18px;padding:25px;box-sizing:border-box}.modalHeaderRow{position:sticky;top:-25px;z-index:5;background:#fff;padding:25px 0 12px}
 .modalBox h2{margin-top:0}
 .modalInput{width:100%;padding:13px;border:1px solid #ddd;border-radius:10px;outline:none;margin:6px 0}
 .modalRow{display:flex;gap:10px;margin-top:12px}
@@ -440,13 +440,13 @@ button,input,textarea{font:inherit}
   <div class="moderationModalBox" role="dialog" aria-modal="true" aria-labelledby="moderationModalTitle">
     <div class="moderationModalHead">
       <div><div class="moderationModalIcon">⚠️</div><h2 id="moderationModalTitle" class="moderationModalTitle">Aviso de moderación</h2><div id="moderationModalDate" class="moderationModalMeta"></div></div>
-      <button id="closeModerationModal" class="muted" type="button">✕</button>
+      <button id="closeModerationModal" class="muted moderationCloseTop" type="button" aria-label="Cerrar aviso de moderación">✕</button>
     </div>
     <div id="moderationModalMessage" class="moderationModalMessage"></div>
     <label for="moderationAppealText" class="moderationAppealLabel">¿Quieres apelar este aviso?</label>
     <textarea id="moderationAppealText" class="moderationAppealText" maxlength="3000" placeholder="Explica por qué consideras que el aviso debería revisarse..."></textarea>
     <div id="moderationModalStatus" class="moderationModalStatus"></div>
-    <div class="moderationModalActions"><button id="closeModerationModalBottom" class="moderationClose" type="button">Cerrar</button><button id="sendModerationAppeal" class="moderationAppeal" type="button">Enviar apelación</button></div>
+    <div class="moderationModalActions"><button id="closeModerationModalBottom" class="moderationClose" type="button" aria-label="Cerrar aviso de moderación">Cerrar</button><button id="sendModerationAppeal" class="moderationAppeal" type="button">Enviar apelación</button></div>
   </div>
 </div>
 
@@ -472,7 +472,7 @@ button,input,textarea{font:inherit}
   <div class="modalBox">
     <div class="modalHeaderRow">
       <h2>📥 Solicitudes de contacto</h2>
-      <button id="exitRequests" class="muted requestsExitBtn" type="button" aria-label="Volver al chat">← Volver al chat</button>
+      <button id="exitRequests" class="muted requestsExitBtn" type="button" aria-label="Volver al chat">✕ Cerrar</button>
     </div>
     <p>Acepta una solicitud para poder hablar con esa persona.</p>
     <div id="requestsList"></div>
@@ -706,6 +706,7 @@ button,input,textarea{font:inherit}
 <audio id="remoteAudio" autoplay playsinline></audio>
 
 <script>
+
 "use strict";
 
 const socket = io({autoConnect:false});
@@ -792,6 +793,40 @@ const sendModerationAppeal = $("sendModerationAppeal");
 let activeModerationNotice = null;
 const moderationQueue = [];
 let moderationQueueOpen = false;
+
+// Cierre de emergencia para el aviso de moderación.
+window.addEventListener("click", event => {
+  const id = event.target?.id;
+  if(id === "closeModerationModal" || id === "closeModerationModalBottom") {
+    event.preventDefault();
+    event.stopPropagation();
+    if(moderationModal){
+      moderationModal.classList.remove("open");
+      moderationModal.setAttribute("aria-hidden", "true");
+      moderationModal.style.display = "none";
+    }
+    moderationQueueOpen = false;
+    activeModerationNotice = null;
+    return;
+  }
+  if(event.target === moderationModal){
+    moderationModal.classList.remove("open");
+    moderationModal.setAttribute("aria-hidden", "true");
+    moderationModal.style.display = "none";
+    moderationQueueOpen = false;
+    activeModerationNotice = null;
+  }
+}, true);
+window.addEventListener("keydown", event => {
+  if(event.key === "Escape" && moderationModal?.classList.contains("open")){
+    event.preventDefault();
+    moderationModal.classList.remove("open");
+    moderationModal.setAttribute("aria-hidden", "true");
+    moderationModal.style.display = "none";
+    moderationQueueOpen = false;
+    activeModerationNotice = null;
+  }
+}, true);
 
 let peerConnection = null;
 let localStream = null;
@@ -1109,16 +1144,22 @@ async function showNextModerationNotice(){
   }catch{}
 
   markModerationSeen(notice.id);
+  moderationModal.style.display = "";
   moderationModal.classList.add("open");
   moderationModal.setAttribute("aria-hidden", "false");
 }
 
 function closeModerationModal(){
+  if(!moderationModal) return;
   moderationModal.classList.remove("open");
   moderationModal.setAttribute("aria-hidden", "true");
+  moderationModal.style.display = "none";
   moderationQueueOpen = false;
   activeModerationNotice = null;
-  setTimeout(showNextModerationNotice, 80);
+  setTimeout(() => {
+    if(moderationModal) moderationModal.style.display = "";
+    showNextModerationNotice();
+  }, 80);
 }
 
 async function submitModerationAppeal(){
@@ -1224,15 +1265,25 @@ socket.on("relationshipData", data => {
   renderUsers();
 });
 
+function closeRequestsModal(){
+  if(!requestsModal) return;
+  requestsModal.style.display = "none";
+}
 requestsButton.onclick = () => {
   renderRequests();
   requestsModal.style.display = "flex";
 };
-function closeRequestsModal(){
-  requestsModal.style.display = "none";
-}
-$("closeRequests").onclick = closeRequestsModal;
+if($("closeRequests")) $("closeRequests").onclick = closeRequestsModal;
 if($("exitRequests")) $("exitRequests").onclick = closeRequestsModal;
+if(requestsModal) requestsModal.addEventListener("click", event => {
+  if(event.target === requestsModal) closeRequestsModal();
+});
+document.addEventListener("keydown", event => {
+  if(event.key === "Escape" && requestsModal && requestsModal.style.display === "flex") closeRequestsModal();
+}, true);
+if($("closeModerationModal")) $("closeModerationModal").onclick = closeModerationModal;
+if($("closeModerationModalBottom")) $("closeModerationModalBottom").onclick = closeModerationModal;
+if($("sendModerationAppeal")) $("sendModerationAppeal").onclick = submitModerationAppeal;
 
 socket.on("contactRequestReceived", user => {
   if(user?.username && !hasIncomingRequest(user.username)){
@@ -1941,6 +1992,8 @@ function showNotification(
       ${
         type === "call"
           ? "📞 "
+          : type === "moderation"
+          ? "⚠️ "
           : "💬 "
       }${esc(title)}
     </div>
@@ -4818,8 +4871,8 @@ window.addEventListener(
 ===================================================== */
 
 checkSession();
-
 </script>
+
 
 </body>
 </html>
