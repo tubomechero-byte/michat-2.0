@@ -5,6 +5,8 @@ const webpush = require("web-push");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const tls = require("tls");
+const net = require("net");
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getMessaging } = require("firebase-admin/messaging");
 
@@ -369,15 +371,17 @@ function prunePasswordResets() {
   return list;
 }
 
-function resendConfig() {
-  const apiKey = String(process.env.RESEND_API_KEY || "").trim();
-  const from = String(process.env.RESEND_FROM || "onboarding@resend.dev").trim();
-  const timeoutMs = Math.max(
-    5000,
-    Math.min(Number(process.env.RESEND_TIMEOUT_MS || 15000), 30000)
-  );
-
-  return { apiKey, from, timeoutMs };
+function smtpConfig() {
+  const user = String(process.env.SMTP_USER || "").trim();
+  // Google muestra las contraseñas de aplicación separadas por espacios.
+  // Los quitamos para evitar un AUTH LOGIN inválido si se pega tal cual.
+  const pass = String(process.env.SMTP_PASS || "").replace(/\s+/g, "");
+  const host = String(process.env.SMTP_HOST || "smtp.gmail.com").trim();
+  const port = Number(process.env.SMTP_PORT || 465);
+  const secure = String(process.env.SMTP_SECURE || (port === 465 ? "true" : "false"))
+    .trim().toLowerCase() !== "false";
+  const from = String(process.env.SMTP_FROM || user).trim();
+  return { user, pass, host, port, secure, from };
 }
 
 function extractEmailAddress(value) {
@@ -386,129 +390,206 @@ function extractEmailAddress(value) {
   return normalizeEmail(match ? match[1] : raw);
 }
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+function smtpReadResponse(socket) {
+  return new Promise((resolve, reject) => {
+    let buffer = "";
+    let finished = false;
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      socket.off("data", onData);
+      socket.off("error", onError);
+      socket.off("close", onClose);
+      socket.off("end", onClose);
+    };
+
+    const fail = error => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      reject(error);
+    };
+
+    const succeed = text => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      resolve(text);
+    };
+
+    const onData = chunk => {
+      buffer += chunk.toString("utf8");
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || "";
+
+      const complete = lines.filter(Boolean);
+      if (!complete.length) return;
+
+      const last = complete[complete.length - 1];
+      const match = last.match(/^(\d{3})([ -])(.*)$/);
+      if (!match || match[2] !== " ") return;
+
+      const code = Number(match[1]);
+      const response = complete.join("\n");
+      if (code >= 200 && code < 400) {
+        succeed(response);
+      } else {
+        fail(new Error(`SMTP ${code}: ${match[3] || last}`));
+      }
+    };
+
+    const onError = error => fail(error);
+    const onClose = () => fail(new Error("Conexión SMTP cerrada antes de completar la respuesta."));
+    const timer = setTimeout(() => fail(new Error("Tiempo de espera SMTP agotado.")), 20000);
+
+    socket.on("data", onData);
+    socket.on("error", onError);
+    socket.on("close", onClose);
+    socket.on("end", onClose);
+  });
 }
 
-async function sendPasswordResetEmail(to, username, code, resetId) {
-  const cfg = resendConfig();
-  const recipient = normalizeEmail(to);
-  const fromAddress = extractEmailAddress(cfg.from);
+async function smtpCommand(socket, command) {
+  socket.write(command + "\r\n");
+  return smtpReadResponse(socket);
+}
 
-  if (!cfg.apiKey) {
-    throw new Error("RESEND_API_KEY no configurada.");
+async function smtpStartTls(socket, cfg) {
+  await smtpCommand(socket, `EHLO ${cfg.host}`);
+  await smtpCommand(socket, "STARTTLS");
+
+  const secureSocket = tls.connect({
+    socket,
+    servername: cfg.host,
+    rejectUnauthorized: true
+  });
+
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Tiempo de espera de TLS SMTP agotado.")), 20000);
+    secureSocket.once("secureConnect", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    secureSocket.once("error", error => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+
+  return secureSocket;
+}
+
+async function sendPasswordResetEmail(to, username, code) {
+  const cfg = smtpConfig();
+  const envelopeFrom = extractEmailAddress(cfg.from);
+
+  if (!cfg.user || !cfg.pass) {
+    throw new Error("SMTP_USER/SMTP_PASS no configurados.");
   }
-  if (!validEmail(fromAddress)) {
-    throw new Error("RESEND_FROM no es un correo válido.");
+  if (!validEmail(cfg.user)) {
+    throw new Error("SMTP_USER no es un correo válido.");
   }
-  if (!validEmail(recipient)) {
+  if (!envelopeFrom || !validEmail(envelopeFrom)) {
+    throw new Error("SMTP_FROM no es un correo válido.");
+  }
+  if (!validEmail(to)) {
     throw new Error("Correo de destino no válido.");
   }
+  if (![465, 587].includes(cfg.port)) {
+    throw new Error("SMTP_PORT debe ser 465 o 587 para Gmail.");
+  }
 
-  const safeUsername = escapeHtml(username);
-  const safeCode = escapeHtml(code);
+  console.log(`SMTP recuperación: intentando envío a ${normalizeEmail(to)} desde ${envelopeFrom} usando ${cfg.host}:${cfg.port} secure=${cfg.secure}`);
 
-  const html = `
-    <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#222">
-      <h2 style="margin:0 0 16px">Código de recuperación de Mi Chat</h2>
-      <p>Hola,</p>
-      <p>Hemos recibido una solicitud para restablecer la contraseña de <strong>@${safeUsername}</strong>.</p>
-      <div style="margin:24px 0;padding:18px;text-align:center;background:#f4f4f4;border-radius:12px">
-        <div style="font-size:13px;color:#666;margin-bottom:8px">Tu código de recuperación</div>
-        <div style="font-size:32px;font-weight:700;letter-spacing:7px">${safeCode}</div>
-      </div>
-      <p>Este código caduca en 10 minutos y solo puede utilizarse una vez.</p>
-      <p>Si no has solicitado este cambio, puedes ignorar este mensaje.</p>
-      <p>Mi Chat</p>
-    </div>
-  `;
-
-  const text = [
-    "Código de recuperación de Mi Chat",
-    "",
-    `Hemos recibido una solicitud para restablecer la contraseña de @${username}.`,
-    "",
-    `Tu código de recuperación es: ${code}`,
-    "",
-    "Este código caduca en 10 minutos y solo puede utilizarse una vez.",
-    "Si no has solicitado este cambio, puedes ignorar este mensaje.",
-    "",
-    "Mi Chat"
-  ].join("\n");
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), cfg.timeoutMs);
-
+  let socket;
+  let activeSocket;
   try {
-    console.log(
-      `Resend recuperación: enviando a ${recipient} desde ${cfg.from}.`
-    );
-
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${cfg.apiKey}`,
-        "Content-Type": "application/json",
-        "Idempotency-Key": `password-reset/${resetId}`
-      },
-      body: JSON.stringify({
-        from: cfg.from,
-        to: [recipient],
-        subject: "Código de recuperación de Mi Chat",
-        html,
-        text
-      }),
-      signal: controller.signal
-    });
-
-    const responseText = await response.text();
-    let payload = null;
-
-    if (responseText) {
-      try {
-        payload = JSON.parse(responseText);
-      } catch {
-        payload = { raw: responseText };
-      }
+    if (cfg.port === 465 || cfg.secure) {
+      socket = tls.connect({
+        host: cfg.host,
+        port: cfg.port,
+        servername: cfg.host,
+        rejectUnauthorized: true
+      });
+      activeSocket = socket;
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Tiempo de espera de conexión SMTP agotado.")), 20000);
+        socket.once("secureConnect", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+        socket.once("error", error => {
+          clearTimeout(timer);
+          reject(error);
+        });
+      });
+      await smtpReadResponse(socket);
+      await smtpCommand(socket, `EHLO ${cfg.host}`);
+    } else {
+      const plainSocket = net.createConnection({ host: cfg.host, port: cfg.port });
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Tiempo de espera de conexión SMTP agotado.")), 20000);
+        plainSocket.once("connect", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+        plainSocket.once("error", error => {
+          clearTimeout(timer);
+          reject(error);
+        });
+      });
+      await smtpReadResponse(plainSocket);
+      activeSocket = await smtpStartTls(plainSocket, cfg);
+      await smtpCommand(activeSocket, `EHLO ${cfg.host}`);
     }
 
-    if (!response.ok) {
-      const detail =
-        payload?.message ||
-        payload?.error?.message ||
-        payload?.name ||
-        payload?.raw ||
-        `HTTP ${response.status}`;
+    await smtpCommand(activeSocket, "AUTH LOGIN");
+    await smtpCommand(activeSocket, Buffer.from(cfg.user, "utf8").toString("base64"));
+    await smtpCommand(activeSocket, Buffer.from(cfg.pass, "utf8").toString("base64"));
+    await smtpCommand(activeSocket, `MAIL FROM:<${envelopeFrom}>`);
+    await smtpCommand(activeSocket, `RCPT TO:<${normalizeEmail(to)}>`);
+    await smtpCommand(activeSocket, "DATA");
 
-      throw new Error(`Resend HTTP ${response.status}: ${detail}`);
-    }
+    const subject = "Código de recuperación de Mi Chat";
+    const body = [
+      "Hola,",
+      "",
+      `Hemos recibido una solicitud para restablecer la contraseña de @${username}.`,
+      "",
+      `Tu código de recuperación es: ${code}`,
+      "",
+      "Este código caduca en 10 minutos y solo puede utilizarse una vez.",
+      "Si no has solicitado este cambio, puedes ignorar este mensaje.",
+      "",
+      "Mi Chat"
+    ].join("\r\n");
 
-    const emailId = payload?.id || null;
-    console.log(
-      `Resend recuperación: correo aceptado para ${recipient}` +
-      (emailId ? ` (id ${emailId})` : "") +
-      "."
-    );
-    return { id: emailId };
+    const headers = [
+      `From: Mi Chat <${envelopeFrom}>`,
+      `To: <${normalizeEmail(to)}>`,
+      `Subject: ${subject}`,
+      "Date: " + new Date().toUTCString(),
+      "MIME-Version: 1.0",
+      "Content-Type: text/plain; charset=UTF-8",
+      "Content-Transfer-Encoding: 8bit",
+      "",
+      body
+    ].join("\r\n").replace(/(^|\r\n)\./g, "$1..");
+
+    activeSocket.write(headers + "\r\n.\r\n");
+    await smtpReadResponse(activeSocket);
+    await smtpCommand(activeSocket, "QUIT");
+    console.log(`SMTP recuperación: correo enviado correctamente a ${normalizeEmail(to)}.`);
   } catch (error) {
-    if (error?.name === "AbortError") {
-      throw new Error("Resend agotó el tiempo de espera al enviar el correo.");
-    }
-    console.error(
-      `Resend recuperación: fallo para ${recipient}:`,
-      error?.message || error
-    );
+    console.error(`SMTP recuperación: fallo para ${normalizeEmail(to)}:`, error.message);
     throw error;
   } finally {
-    clearTimeout(timeout);
+    try { activeSocket?.end(); } catch {}
+    if (socket && socket !== activeSocket) {
+      try { socket.end(); } catch {}
+    }
   }
 }
-
 function activeBanFor(username) {
   const target = norm(username);
   if (!target) return null;
@@ -2143,7 +2224,7 @@ app.post("/api/forgot-password", async (req, res) => {
   savePasswordResets(resets);
 
   try {
-    await sendPasswordResetEmail(user.email, user.username, code, resetId);
+    await sendPasswordResetEmail(user.email, user.username, code);
     addAdminActivity(`Se envió un código de recuperación a @${user.username}.`);
     return res.json(generic);
   } catch (error) {
@@ -2290,6 +2371,10 @@ app.post("/api/login", (req, res) => {
   }
 
   const token = newSession(u.username);
+
+  addAdminActivity(
+    `@${u.username} ha iniciado sesión.`
+  );
 
   res.json({
     success: true,
@@ -3098,6 +3183,10 @@ io.on("connection", socket => {
     online.set(
       socket.id,
       u.username
+    );
+
+    addAdminActivity(
+      `@${u.username} se ha conectado.`
     );
 
     socket.emit(
@@ -4341,6 +4430,12 @@ io.on("connection", socket => {
   socket.on(
     "disconnect",
     () => {
+      const username = online.get(socket.id);
+      if (username) {
+        addAdminActivity(
+          `@${username} se ha desconectado.`
+        );
+      }
       online.delete(socket.id);
       sendUserList();
     }
@@ -4471,12 +4566,6 @@ app.get("/{*splat}", (req, res, next) => {
     PORT,
     "0.0.0.0",
     () => {
-      const resend = resendConfig();
-      console.log(
-        resend.apiKey
-          ? `Resend recuperación configurado (${resend.from}).`
-          : "Resend recuperación NO configurado: falta RESEND_API_KEY."
-      );
       console.log(
         `Mi Chat funcionando en http://localhost:${PORT}`
       );
