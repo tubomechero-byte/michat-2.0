@@ -1680,6 +1680,23 @@ socket.on("contactRequestRejected", data => {
   renderUsers();
 });
 
+socket.on("contactRemoved", data => {
+  const username = norm(data?.username || "");
+  if(username){
+    relationshipData.contacts = relationshipData.contacts.filter(x => norm(x) !== username);
+    relationshipData.incoming = relationshipData.incoming.filter(x => norm(x) !== username);
+    relationshipData.outgoing = relationshipData.outgoing.filter(x => norm(x) !== username);
+    if(norm(selectedUser) === username){
+      selectedUser = "";
+      if(typeof chatView !== "undefined" && chatView) chatView.style.display = "none";
+      if(typeof emptyView !== "undefined" && emptyView) emptyView.style.display = "flex";
+    }
+  }
+  renderRequests();
+  renderUsers();
+  showNotification("Contacto eliminado", "El contacto se ha eliminado correctamente.");
+});
+
 socket.on("contactRequestError", message => {
   $("newChatError").textContent = message || "No se pudo gestionar la solicitud.";
 });
@@ -1763,7 +1780,7 @@ function renderUsers(){
     const outgoing = hasOutgoingRequest(user.username);
 
     let actionHtml = "";
-    if(contact) actionHtml = `<button class="toolBtn" data-action="open">Abrir</button>`;
+    if(contact) actionHtml = `<button class="toolBtn" data-action="open">Abrir</button><button class="toolBtn" data-action="remove" title="Eliminar contacto">🗑️ Eliminar</button>`;
     else if(incoming) actionHtml = `<button class="toolBtn primary" data-action="accept">Aceptar</button>`;
     else if(outgoing) actionHtml = `<button class="toolBtn" data-action="pending">Enviada</button>`;
     else actionHtml = `<button class="toolBtn primary" data-action="request">Solicitar</button>`;
@@ -1794,6 +1811,12 @@ function renderUsers(){
           socket.emit("acceptContactRequest", user.username);
         }else if(action === "request") {
           socket.emit("sendContactRequest", user.username);
+        }else if(action === "remove") {
+          const display = user.displayName || user.username;
+          const ok = window.confirm(`¿Seguro que quieres eliminar a ${display} de tus contactos?`);
+          if(ok){
+            socket.emit("removeContact", user.username);
+          }
         }
       };
     }
