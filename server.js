@@ -28,6 +28,7 @@ const MODERATION_FILE = path.join(DATA_DIR, "moderation.json");
 const APPEALS_FILE = path.join(DATA_DIR, "appeals.json");
 const BANS_FILE = path.join(DATA_DIR, "bans.json");
 const PASSWORD_RESETS_FILE = path.join(DATA_DIR, "password-resets.json");
+const COMMAND_ACCESS_FILE = path.join(DATA_DIR, "command-access.json");
 const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -57,7 +58,8 @@ const STATE_FILES = {
   "moderation.json": [],
   "appeals.json": [],
   "bans.json": [],
-  "password-resets.json": []
+  "password-resets.json": [],
+  "command-access.json": []
 };
 
 let supabaseAvailable = false;
@@ -85,6 +87,7 @@ ensure(MODERATION_FILE, []);
 ensure(APPEALS_FILE, []);
 ensure(BANS_FILE, []);
 ensure(PASSWORD_RESETS_FILE, []);
+ensure(COMMAND_ACCESS_FILE, []);
 
 function read(file, fallback) {
   try {
@@ -337,6 +340,154 @@ function passwordResets() {
 
 function savePasswordResets(v) {
   write(PASSWORD_RESETS_FILE, v);
+}
+
+function commandAccessUsers() {
+  const value = read(COMMAND_ACCESS_FILE, []);
+  if (Array.isArray(value)) return value.map(norm).filter(Boolean);
+  return [];
+}
+
+function saveCommandAccessUsers(v) {
+  const unique = [...new Set((Array.isArray(v) ? v : []).map(norm).filter(Boolean))];
+  write(COMMAND_ACCESS_FILE, unique);
+}
+
+function hasCommandAccess(username) {
+  const target = norm(username);
+  return !!target && commandAccessUsers().includes(target);
+}
+
+function emitCommandAccessUpdate(username) {
+  const target = norm(username);
+  if (!target) return;
+  const enabled = hasCommandAccess(target);
+  for (const [socketId, name] of online.entries()) {
+    if (norm(name) === target) {
+      io.to(socketId).emit("commandAccessUpdated", { enabled });
+    }
+  }
+}
+
+function commandHelpLines() {
+  return [
+    "/help — muestra esta ayuda",
+    "/me — muestra tu usuario y nombre",
+    "/status — estado general de Mi Chat",
+    "/online — usuarios conectados ahora",
+    "/users [límite] — lista de usuarios registrados",
+    "/whois @usuario — información básica de un usuario",
+    "/time — fecha y hora del servidor",
+    "/echo texto — repite un texto",
+    "/clear — limpia esta consola"
+  ];
+}
+
+function executeCommand(username, rawInput) {
+  const input = String(rawInput || "").trim();
+  if (!input) {
+    return { ok: false, output: ["Escribe un comando. Usa /help para ver los comandos disponibles."] };
+  }
+
+  const match = input.match(/^\/?([a-zA-Z][a-zA-Z0-9_-]*)(?:\s+([\s\S]*))?$/);
+  if (!match) {
+    return { ok: false, output: ["Comando no válido. Usa /help."] };
+  }
+
+  const command = match[1].toLowerCase();
+  const args = String(match[2] || "").trim();
+
+  switch (command) {
+    case "help":
+      return { ok: true, output: commandHelpLines() };
+
+    case "me": {
+      const user = getUser(username);
+      return {
+        ok: true,
+        output: [
+          `Usuario: @${user?.username || username}`,
+          `Nombre: ${user?.displayName || user?.username || username}`
+        ]
+      };
+    }
+
+    case "status": {
+      const activeStories = cleanExpiredStories().length;
+      return {
+        ok: true,
+        output: [
+          "Mi Chat — estado",
+          `Usuarios: ${users().length}`,
+          `Conectados: ${new Set([...online.values()].map(norm)).size}`,
+          `Mensajes: ${messages().length}`,
+          `Historias activas: ${activeStories}`,
+          `Persistencia: ${supabaseAvailable ? "Supabase activa" : "local temporal"}`,
+          `Uptime: ${Math.floor(process.uptime())} s`
+        ]
+      };
+    }
+
+    case "online": {
+      const list = [...new Set([...online.values()].map(norm))].sort();
+      return {
+        ok: true,
+        output: list.length
+          ? [`Conectados (${list.length}):`, ...list.map(name => `@${name}`)]
+          : ["No hay usuarios conectados."]
+      };
+    }
+
+    case "users": {
+      let limit = Number(args || 50);
+      if (!Number.isFinite(limit)) limit = 50;
+      limit = Math.max(1, Math.min(Math.floor(limit), 50));
+      const list = users()
+        .map(user => ({
+          username: String(user.username || ""),
+          displayName: String(user.displayName || user.username || "")
+        }))
+        .filter(user => user.username)
+        .sort((a, b) => a.username.localeCompare(b.username))
+        .slice(0, limit);
+      return {
+        ok: true,
+        output: list.length
+          ? [`Usuarios (${list.length}${users().length > list.length ? ` de ${users().length}` : ""}):`, ...list.map(user => `@${user.username} — ${user.displayName}`)]
+          : ["No hay usuarios registrados."]
+      };
+    }
+
+    case "whois": {
+      const target = norm(args.replace(/^@+/, ""));
+      if (!target) return { ok: false, output: ["Uso: /whois @usuario"] };
+      const user = getUser(target);
+      if (!user) return { ok: false, output: [`No existe @${target}.`] };
+      const onlineNow = [...online.values()].some(name => norm(name) === target);
+      return {
+        ok: true,
+        output: [
+          `Usuario: @${user.username}`,
+          `Nombre: ${user.displayName || user.username}`,
+          `Estado: ${onlineNow ? "Online" : "Offline"}`,
+          `Contactos: ${Array.isArray(user.contacts) ? user.contacts.length : 0}`,
+          `Registrado: ${user.createdAt ? new Date(Number(user.createdAt)).toLocaleString("es-ES") : "Desconocido"}`
+        ]
+      };
+    }
+
+    case "time":
+      return { ok: true, output: [new Date().toLocaleString("es-ES", { dateStyle: "full", timeStyle: "medium" })] };
+
+    case "echo":
+      return { ok: true, output: [args ? args.slice(0, 1000) : ""] };
+
+    case "clear":
+      return { ok: true, output: ["Usa el botón Limpiar para vaciar la consola."] };
+
+    default:
+      return { ok: false, output: [`Comando desconocido: /${command}`, "Usa /help para ver los comandos disponibles."] };
+  }
 }
 
 function normalizeEmail(value) {
@@ -1244,6 +1395,9 @@ app.delete("/api/admin/users/:username", requireAdmin, (req, res) => {
     saveFcmTokens(fcmData);
   }
 
+  const commandAccess = commandAccessUsers().filter(name => norm(name) !== username);
+  saveCommandAccessUsers(commandAccess);
+
   // Desconectar cualquier sesión Socket.IO activa.
   for (const [socketId, name] of online.entries()) {
     if (norm(name) === username) {
@@ -1408,6 +1562,51 @@ app.get("/api/admin/bans", requireAdmin, (req, res) => {
     ...item,
     active: !item.revokedAt && (!item.expiresAt || Number(item.expiresAt) > now)
   })));
+});
+
+app.get("/api/admin/command-access", requireAdmin, (req, res) => {
+  const onlineUsers = new Set([...online.values()].map(name => norm(name)));
+  const result = commandAccessUsers()
+    .map(username => getUser(username))
+    .filter(Boolean)
+    .map(user => ({
+      username: user.username,
+      displayName: user.displayName || user.username,
+      online: onlineUsers.has(norm(user.username))
+    }))
+    .sort((a, b) => String(a.username).localeCompare(String(b.username)));
+
+  res.json(result);
+});
+
+app.put("/api/admin/command-access/:username", requireAdmin, (req, res) => {
+  const username = norm(req.params.username);
+  const user = getUser(username);
+  if (!user) return res.status(404).json({ error: "Usuario no encontrado." });
+
+  const list = commandAccessUsers();
+  if (!list.includes(username)) {
+    list.push(username);
+    saveCommandAccessUsers(list);
+  }
+
+  emitCommandAccessUpdate(username);
+  addAdminActivity(`Administrador dio acceso a la consola a @${user.username}.`);
+  res.json({ success: true, username: user.username, enabled: true });
+});
+
+app.delete("/api/admin/command-access/:username", requireAdmin, (req, res) => {
+  const username = norm(req.params.username);
+  const user = getUser(username);
+  if (!user) return res.status(404).json({ error: "Usuario no encontrado." });
+
+  const before = commandAccessUsers();
+  const after = before.filter(name => name !== username);
+  saveCommandAccessUsers(after);
+
+  emitCommandAccessUpdate(username);
+  addAdminActivity(`Administrador quitó el acceso a la consola a @${user.username}.`);
+  res.json({ success: true, username: user.username, enabled: false, changed: before.length !== after.length });
 });
 
 app.get("/api/admin/moderation", requireAdmin, (req, res) => {
@@ -3198,7 +3397,8 @@ io.on("connection", socket => {
         displayName:
           u.displayName,
         profileImage:
-          u.profileImage || ""
+          u.profileImage || "",
+        commandConsoleEnabled: hasCommandAccess(u.username)
       }
     );
 
@@ -3261,6 +3461,22 @@ io.on("connection", socket => {
           createdAt: item.createdAt
         }))
     );
+  });
+
+  socket.on("command", rawInput => {
+    const username = online.get(socket.id);
+    if (!username) {
+      return socket.emit("commandResult", { ok: false, output: ["No estás autenticado."] });
+    }
+
+    if (!hasCommandAccess(username)) {
+      return socket.emit("commandResult", { ok: false, output: ["No tienes acceso a la consola de comandos."] });
+    }
+
+    const result = executeCommand(username, rawInput);
+    const commandLabel = String(rawInput || "").trim().split(/\s+/)[0].slice(0, 80) || "(vacío)";
+    addAdminActivity(`@${username} ejecutó ${commandLabel} en la consola.`);
+    socket.emit("commandResult", result);
   });
 
   socket.on("getContacts", () => {
