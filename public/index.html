@@ -17,7 +17,7 @@ button,input,textarea{font:inherit}
 #authScreen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(135deg,#128c7e,#075e54)}
 .authBox{width:100%;max-width:420px;padding:30px;background:#fff;border-radius:20px;text-align:center;box-shadow:0 15px 40px rgba(0,0,0,.25)}
 .authInput{width:100%;padding:14px;margin:7px 0;border:1px solid #ddd;border-radius:10px;outline:none}
-.authButton{width:100%;padding:14px;margin-top:8px;border:0;border-radius:10px;background:#128c7e;color:#fff;font-weight:bold;cursor:pointer}
+.authButton{width:100%;min-height:54px;padding:16px 18px;margin-top:10px;border:0;border-radius:12px;background:#128c7e;color:#fff;font-size:18px;font-weight:bold;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.12)}
 .switchButton{border:0;background:transparent;color:#075e54;cursor:pointer;margin-top:15px}
 #authError{min-height:22px;margin-top:10px;color:#c00}
 
@@ -1800,8 +1800,8 @@ function renderUsers(){
       </div>
     `;
 
-    const actionButton = row.querySelector('[data-action]');
-    if(actionButton){
+    const actionButtons = row.querySelectorAll('[data-action]');
+    actionButtons.forEach(actionButton => {
       actionButton.onclick = event => {
         event.stopPropagation();
         const action = actionButton.dataset.action;
@@ -1819,7 +1819,7 @@ function renderUsers(){
           }
         }
       };
-    }
+    });
 
     if(contact){
       row.style.cursor = "pointer";
