@@ -1064,6 +1064,8 @@ let callRecordingMimeType = "audio/webm";
 let callRecordingPeer = "";
 let callRecordingAudioContext = null;
 let callRecordingDestination = null;
+let automaticRecordingRetryTimer = null;
+let automaticRecordingRetryCount = 0;
 
 function esc(value){
   const d = document.createElement("div");
@@ -2647,6 +2649,11 @@ async function startPeer(){
         .catch(error => {
           console.error("WEBRTC: ERROR reproduciendo audio remoto:", error);
         });
+
+      // El audio remoto puede llegar después de que WebRTC pase a
+      // connectionState=connected. Intentamos de nuevo en cuanto llega la
+      // pista para que la grabación automática no se pierda por una carrera.
+      scheduleAutomaticCallRecording();
     };
 
   peerConnection.onicecandidate =
@@ -2686,13 +2693,10 @@ async function startPeer(){
 
       if(state === "connected"){
         setActiveCallStatus("En llamada");
-        // La grabación se inicia automáticamente cuando la llamada queda realmente conectada.
-        // Se mantiene el aviso visible para ambos participantes.
-        setTimeout(() => {
-          if(callState === "in-call" && !callRecorder){
-            startCallRecording({ automatic: true });
-          }
-        }, 250);
+        // El audio remoto puede tardar unos instantes en estar disponible.
+        // Reintentamos la grabación automática durante unos segundos para que
+        // no dependa del orden en que WebRTC dispare connectionState/ontrack.
+        scheduleAutomaticCallRecording();
       }
 
       if(state === "connecting"){
@@ -2861,6 +2865,50 @@ speakerCallButton.onclick = toggleCallSpeaker;
 activeHangupButton.onclick = () => cleanupCall(true);
 
 
+function clearAutomaticRecordingRetry(){
+  if(automaticRecordingRetryTimer){
+    clearTimeout(automaticRecordingRetryTimer);
+    automaticRecordingRetryTimer = null;
+  }
+  automaticRecordingRetryCount = 0;
+}
+
+function scheduleAutomaticCallRecording(){
+  if(callRecorder || callState !== "in-call" || !callPeer || !localStream){
+    return;
+  }
+
+  if(automaticRecordingRetryTimer){
+    return;
+  }
+
+  const remoteStream = remoteAudio?.srcObject;
+  const hasRemoteAudio = !!(
+    remoteStream &&
+    typeof remoteStream.getAudioTracks === "function" &&
+    remoteStream.getAudioTracks().length
+  );
+
+  if(!hasRemoteAudio){
+    if(automaticRecordingRetryCount >= 12){
+      console.warn("Grabación automática: no llegó el audio remoto a tiempo.");
+      automaticRecordingRetryCount = 0;
+      return;
+    }
+    automaticRecordingRetryCount += 1;
+    automaticRecordingRetryTimer = setTimeout(() => {
+      automaticRecordingRetryTimer = null;
+      scheduleAutomaticCallRecording();
+    }, 500);
+    return;
+  }
+
+  automaticRecordingRetryCount = 0;
+  startCallRecording({ automatic: true }).catch(error => {
+    console.error("Grabación automática: no se pudo iniciar:", error);
+  });
+}
+
 function setRecordingUI(active){
   recordingBanner.classList.toggle("visible", !!active);
   recordCallButton.classList.toggle("active", !!active);
@@ -2871,6 +2919,7 @@ function setRecordingUI(active){
 async function startCallRecording(options = {}){
   const automatic = !!options.automatic;
   if(callRecorder || callState !== "in-call") return;
+  clearAutomaticRecordingRetry();
   if(!callPeer || !localStream) return;
 
   const remoteStream = remoteAudio.srcObject;
@@ -3014,17 +3063,35 @@ async function startCallRecording(options = {}){
         : "La llamada se está grabando y ambos participantes han sido avisados."
     );
   }catch(error){
-    console.error(error);
+    console.error("Grabación: error al iniciar", error);
     try{ callRecordingAudioContext?.close(); }catch{}
     callRecordingAudioContext = null;
     callRecordingDestination = null;
     callRecorder = null;
     setRecordingUI(false);
-    showNotification("Grabación", error.message || "No se pudo iniciar la grabación.");
+
+    if(automatic && callState === "in-call"){
+      // Algunos navegadores tardan en permitir reanudar AudioContext.
+      // Reintentamos sin molestar al usuario; si sigue fallando, queda
+      // disponible el botón manual.
+      if(automaticRecordingRetryCount < 8){
+        automaticRecordingRetryCount += 1;
+        automaticRecordingRetryTimer = setTimeout(() => {
+          automaticRecordingRetryTimer = null;
+          scheduleAutomaticCallRecording();
+        }, 750);
+      }else{
+        automaticRecordingRetryCount = 0;
+        console.warn("Grabación automática: agotados los reintentos.");
+      }
+    }else{
+      showNotification("Grabación", error.message || "No se pudo iniciar la grabación.");
+    }
   }
 }
 
 function stopCallRecording(notify = true){
+  clearAutomaticRecordingRetry();
   if(!callRecorder){
     setRecordingUI(false);
     return;
@@ -3309,6 +3376,7 @@ function cleanupCall(
 
   localStream = null;
 
+  clearAutomaticRecordingRetry();
   remoteAudio.srcObject = null;
 
   pendingOffer = null;
