@@ -250,6 +250,32 @@ button,input,textarea{font:inherit}
   min-height:30px;
 }
 
+.activeCallRecordTop{
+  position:absolute;
+  top:22px;
+  right:22px;
+  width:58px;
+  height:58px;
+  border:0;
+  border-radius:50%;
+  background:rgba(255,255,255,.16);
+  color:#fff;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:2px;
+  cursor:pointer;
+  box-shadow:0 6px 20px rgba(0,0,0,.18);
+  -webkit-tap-highlight-color:transparent;
+  backdrop-filter:blur(6px);
+  z-index:3;
+}
+.activeCallRecordTop:active{transform:scale(.95)}
+.activeCallRecordTop.active{background:#fff;color:#111827}
+.activeCallRecordTop .activeCallControlIcon{font-size:23px}
+.activeCallRecordTop .activeCallControlText{font-size:9px}
+
 .activeCallControls{
   display:flex;
   justify-content:center;
@@ -322,6 +348,7 @@ button,input,textarea{font:inherit}
 }
 
 @media(max-width:420px){
+  .activeCallRecordTop{top:16px;right:16px;width:54px;height:54px}
   .activeCallContent{padding:35px 18px 26px}
   .activeCallAvatar{width:104px;height:104px}
   .activeCallName{font-size:24px}
@@ -755,6 +782,11 @@ button,input,textarea{font:inherit}
 
     <div class="activeCallTopLabel">Mi Chat · llamada</div>
 
+    <button id="recordCallButton" class="activeCallRecordTop" type="button" aria-label="Grabar llamada">
+      <span id="recordCallIcon" class="activeCallControlIcon">🔴</span>
+      <span id="recordCallText" class="activeCallControlText">Grabar</span>
+    </button>
+
     <div id="activeCallAvatar" class="activeCallAvatar">
       <img id="activeCallAvatarImage" src="" alt="" style="display:none">
       <div id="activeCallAvatarLetter" class="activeCallAvatarLetter">👤</div>
@@ -771,11 +803,6 @@ button,input,textarea{font:inherit}
       <button id="muteCallButton" class="activeCallControl" type="button" aria-label="Silenciar micrófono">
         <span id="muteCallIcon" class="activeCallControlIcon">🎤</span>
         <span id="muteCallText" class="activeCallControlText">Silenciar</span>
-      </button>
-
-      <button id="recordCallButton" class="activeCallControl" type="button" aria-label="Grabar llamada">
-        <span id="recordCallIcon" class="activeCallControlIcon">🔴</span>
-        <span id="recordCallText" class="activeCallControlText">Grabar</span>
       </button>
 
       <button id="speakerCallButton" class="activeCallControl active" type="button" aria-label="Altavoz">
