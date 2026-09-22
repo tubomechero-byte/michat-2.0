@@ -1579,6 +1579,7 @@ app.get("/api/admin/users", requireAdmin, (req, res) => {
     username: user.username,
     displayName: user.displayName || user.username,
     email: normalizeEmail(user.email || ""),
+    phone: normalizePhone(user.phone || ""),
     profileImage: user.profileImage || "",
     online: onlineUsers.has(norm(user.username)),
     createdAt: user.createdAt || null,
