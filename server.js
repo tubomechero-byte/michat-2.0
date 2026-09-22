@@ -1566,6 +1566,7 @@ app.get("/api/admin/users", requireAdmin, (req, res) => {
   const result = users().map(user => ({
     username: user.username,
     displayName: user.displayName || user.username,
+    email: normalizeEmail(user.email || ""),
     profileImage: user.profileImage || "",
     online: onlineUsers.has(norm(user.username)),
     createdAt: user.createdAt || null,
@@ -1781,6 +1782,69 @@ app.post("/api/admin/users/:username/reset-password", requireAdmin, (req, res) =
   res.json({
     success: true,
     username: list[index].username
+  });
+});
+
+app.put("/api/admin/users/:username/email", requireAdmin, (req, res) => {
+  const username = norm(req.params.username);
+  const email = normalizeEmail(req.body?.email || "");
+
+  if (!username) {
+    return res.status(400).json({
+      error: "Usuario inválido."
+    });
+  }
+
+  if (email && !validEmail(email)) {
+    return res.status(400).json({
+      error: "El correo electrónico no es válido."
+    });
+  }
+
+  const list = users();
+  const index = list.findIndex(
+    u => norm(u.username) === username
+  );
+
+  if (index < 0) {
+    return res.status(404).json({
+      error: "Usuario no encontrado."
+    });
+  }
+
+  if (email && list.some((u, userIndex) =>
+    userIndex !== index && normalizeEmail(u.email || "") === email
+  )) {
+    return res.status(409).json({
+      error: "Ese correo ya está asociado a otra cuenta."
+    });
+  }
+
+  const oldEmail = normalizeEmail(list[index].email || "");
+  list[index].email = email;
+  saveUsers(list);
+
+  // Cualquier código de recuperación anterior deja de ser válido
+  // cuando un administrador cambia el correo de la cuenta.
+  const now = Date.now();
+  const resetList = passwordResets();
+  let resetChanged = false;
+  for (const entry of resetList) {
+    if (norm(entry.username) === username && !entry.usedAt && !entry.invalidatedAt) {
+      entry.invalidatedAt = now;
+      resetChanged = true;
+    }
+  }
+  if (resetChanged) savePasswordResets(resetList);
+
+  addAdminActivity(
+    `Administrador cambió el correo de @${list[index].username}${oldEmail ? ` (${oldEmail})` : ""}${email ? ` a ${email}` : " y lo dejó sin correo"}.`
+  );
+
+  res.json({
+    success: true,
+    username: list[index].username,
+    email
   });
 });
 
