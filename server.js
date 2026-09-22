@@ -2748,7 +2748,7 @@ app.post("/api/register", (req, res) => {
     `${displayName} (@${username}) se ha registrado.`
   );
 
-  const token = newSession(username);
+  const token = newSession(u.username);
 
   sendUserList();
 
@@ -2906,13 +2906,18 @@ app.post("/api/reset-password", (req, res) => {
 });
 
 app.post("/api/login", (req, res) => {
-  const username =
-    norm(req.body.username);
+  const identifier =
+    String(req.body?.username || req.body?.identifier || "").trim();
 
   const password =
     String(req.body.password || "");
 
-  const u = getUser(username);
+  const usernameLookup = norm(identifier);
+  const emailLookup = normalizeEmail(identifier);
+  const u = users().find(item =>
+    norm(item.username) === usernameLookup ||
+    normalizeEmail(item.email) === emailLookup
+  );
 
   if (
     !u ||
