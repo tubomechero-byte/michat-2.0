@@ -394,7 +394,7 @@ button,input,textarea{font:inherit}
       <div id="storiesBar" class="storiesBar"></div>
 
       <div class="search">
-        <input id="searchInput" placeholder="Buscar usuarios..." autocomplete="off">
+        <input id="searchInput" placeholder="Buscar usuarios para añadirlos..." autocomplete="off">
       </div>
 
       <div id="users"></div>
@@ -1708,37 +1708,45 @@ function renderUsers(){
 
   usersContainer.innerHTML = "";
 
-  const list =
-    allUsers.filter(user => {
+  const others = allUsers.filter(user =>
+    user &&
+    norm(user.username) !== norm(myUsername)
+  );
 
-      if(
-        !user ||
-        norm(user.username) ===
-          norm(myUsername)
-      ){
-        return false;
-      }
+  // Sin búsqueda: solo mostramos los contactos aceptados.
+  // Con búsqueda: mostramos sugerencias de usuarios existentes.
+  let list = [];
+  let mode = "contacts";
 
-      return (
-        (
-          user.displayName ||
-          user.username
-        )
-        .toLowerCase()
-        .includes(query)
-      ) ||
-      user.username
-        .toLowerCase()
-        .includes(query);
-    });
+  if(!query){
+    list = others.filter(user => isContact(user.username));
+  }else{
+    mode = "search";
+    list = others
+      .filter(user => {
+        const displayName = String(user.displayName || "").toLowerCase();
+        const username = String(user.username || "").toLowerCase();
+        return displayName.includes(query) || username.includes(query);
+      })
+      .sort((a,b) => {
+        const ac = isContact(a.username) ? 0 : 1;
+        const bc = isContact(b.username) ? 0 : 1;
+        if(ac !== bc) return ac - bc;
+        return String(a.username || "").localeCompare(String(b.username || ""));
+      })
+      .slice(0, 12);
+
+    const heading = document.createElement("div");
+    heading.style.cssText = "padding:10px 14px 6px;color:#777;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:.04em";
+    heading.textContent = "Sugerencias de usuarios";
+    usersContainer.appendChild(heading);
+  }
 
   if(!list.length){
-
-    usersContainer.innerHTML =
+    usersContainer.innerHTML +=
       `<div style="padding:20px;text-align:center;color:#777">
-        No tienes contactos añadidos.
+        ${mode === "search" ? "No se encontraron usuarios con esa búsqueda." : "No tienes contactos añadidos. Busca un usuario arriba para enviarle una solicitud."}
       </div>`;
-
     return;
   }
 
