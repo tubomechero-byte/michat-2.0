@@ -17,7 +17,7 @@ button,input,textarea{font:inherit}
 #authScreen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(135deg,#128c7e,#075e54)}
 .authBox{width:100%;max-width:420px;padding:30px;background:#fff;border-radius:20px;text-align:center;box-shadow:0 15px 40px rgba(0,0,0,.25)}
 .authInput{width:100%;padding:14px;margin:7px 0;border:1px solid #ddd;border-radius:10px;outline:none}
-.authButton{width:100%;min-height:54px;padding:16px 18px;margin-top:10px;border:0;border-radius:12px;background:#128c7e;color:#fff;font-size:18px;font-weight:bold;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.12)}
+.authButton{width:100%;min-height:68px;padding:20px 22px;margin-top:14px;border:0;border-radius:14px;background:#128c7e;color:#fff;font-size:22px;font-weight:bold;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.16);letter-spacing:.2px}.authButton:active{transform:translateY(1px) scale(.99)}
 .switchButton{border:0;background:transparent;color:#075e54;cursor:pointer;margin-top:15px}
 #authError{min-height:22px;margin-top:10px;color:#c00}
 
@@ -68,7 +68,7 @@ button,input,textarea{font:inherit}
 .chatTitle{font-weight:bold}
 .chatSubtitle{margin-top:3px;font-size:13px;color:#777}
 .chatTools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-.toolBtn{border:0;background:#f0f2f5;border-radius:8px;padding:7px 9px;cursor:pointer}
+.toolBtn{border:0;background:#f0f2f5;border-radius:8px;padding:7px 9px;cursor:pointer}.enterChatBtn{padding:11px 18px!important;min-height:46px;font-size:15px;font-weight:700;border-radius:10px!important}
 .callBtn{background:#25d366;color:#fff}
 .hangBtn{background:#b00020;color:#fff}
 
@@ -1780,7 +1780,7 @@ function renderUsers(){
     const outgoing = hasOutgoingRequest(user.username);
 
     let actionHtml = "";
-    if(contact) actionHtml = `<button class="toolBtn" data-action="open">Abrir</button><button class="toolBtn" data-action="remove" title="Eliminar contacto">🗑️ Eliminar</button>`;
+    if(contact) actionHtml = `<button class="toolBtn enterChatBtn" data-action="open">Entrar</button><button class="toolBtn" data-action="remove" title="Eliminar contacto">🗑️ Eliminar</button>`;
     else if(incoming) actionHtml = `<button class="toolBtn primary" data-action="accept">Aceptar</button>`;
     else if(outgoing) actionHtml = `<button class="toolBtn" data-action="pending">Enviada</button>`;
     else actionHtml = `<button class="toolBtn primary" data-action="request">Solicitar</button>`;
