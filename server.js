@@ -813,6 +813,18 @@ function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function normalizePhone(value) {
+  let phone = String(value || "").trim();
+  phone = phone.replace(/[^0-9]/g, "");
+  if (phone.startsWith("00")) phone = phone.slice(2);
+  return phone;
+}
+
+function validPhone(value) {
+  const phone = normalizePhone(value);
+  return /^\d{7,15}$/.test(phone);
+}
+
 function validEmail(value) {
   const email = normalizeEmail(value);
   return email.length >= 5 && email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
@@ -2676,6 +2688,7 @@ app.post("/api/register", (req, res) => {
     String(req.body.password || "");
 
   const email = normalizeEmail(req.body.email);
+  const phone = normalizePhone(req.body.phone);
 
   if (
     displayName.length < 3 ||
@@ -2708,6 +2721,12 @@ app.post("/api/register", (req, res) => {
     });
   }
 
+  if (phone && !validPhone(phone)) {
+    return res.status(400).json({
+      error: "Introduce un número de teléfono válido (7 a 15 dígitos)."
+    });
+  }
+
   const username = norm(displayName);
   const list = users();
 
@@ -2727,6 +2746,12 @@ app.post("/api/register", (req, res) => {
     });
   }
 
+  if (phone && list.some(u => normalizePhone(u.phone) === phone)) {
+    return res.status(400).json({
+      error: "Ese número de teléfono ya está vinculado a otra cuenta."
+    });
+  }
+
   const p = passwordHash(password);
 
   list.push({
@@ -2735,6 +2760,7 @@ app.post("/api/register", (req, res) => {
     salt: p.salt,
     passwordHash: p.hash,
     email: email || "",
+    phone: phone || "",
     profileImage: "",
     blockedUsers: [],
     contacts: [],
@@ -2914,9 +2940,12 @@ app.post("/api/login", (req, res) => {
 
   const usernameLookup = norm(identifier);
   const emailLookup = normalizeEmail(identifier);
+  const phoneLookup = normalizePhone(identifier);
+  const phoneIsValid = validPhone(phoneLookup);
   const u = users().find(item =>
     norm(item.username) === usernameLookup ||
-    normalizeEmail(item.email) === emailLookup
+    normalizeEmail(item.email) === emailLookup ||
+    (phoneIsValid && normalizePhone(item.phone) === phoneLookup)
   );
 
   if (
@@ -3038,6 +3067,8 @@ app.get("/api/profile", (req, res) => {
   res.json({
     username: u.username,
     displayName: u.displayName,
+    email: normalizeEmail(u.email || ""),
+    phone: normalizePhone(u.phone || ""),
     profileImage:
       u.profileImage || ""
   });
@@ -3060,6 +3091,7 @@ app.post("/api/profile", (req, res) => {
   ).trim();
 
   const email = normalizeEmail(req.body.email || u.email || "");
+  const phone = normalizePhone(req.body.phone || u.phone || "");
 
   const profileImage = String(
     req.body.profileImage || ""
@@ -3085,6 +3117,10 @@ app.post("/api/profile", (req, res) => {
     return res.status(400).json({ error: "Correo electrónico inválido." });
   }
 
+  if (phone && !validPhone(phone)) {
+    return res.status(400).json({ error: "Número de teléfono inválido (7 a 15 dígitos)." });
+  }
+
   const list = users();
 
   const idx = list.findIndex(
@@ -3103,10 +3139,15 @@ app.post("/api/profile", (req, res) => {
     return res.status(400).json({ error: "Ese correo electrónico ya está vinculado a otra cuenta." });
   }
 
+  if (phone && list.some((item, itemIndex) => itemIndex !== idx && normalizePhone(item.phone) === phone)) {
+    return res.status(400).json({ error: "Ese número de teléfono ya está vinculado a otra cuenta." });
+  }
+
   list[idx].displayName =
     displayName;
 
   list[idx].email = email;
+  list[idx].phone = phone;
 
   list[idx].profileImage =
     profileImage;
@@ -3118,6 +3159,7 @@ app.post("/api/profile", (req, res) => {
     success: true,
     displayName,
     email,
+    phone,
     profileImage
   });
 });
