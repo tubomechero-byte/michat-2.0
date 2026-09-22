@@ -346,7 +346,8 @@ button,input,textarea{font:inherit}
     <div id="authDescription">Inicia sesión para entrar.</div>
 
     <input id="authUsername" class="authInput" placeholder="Nombre de usuario" maxlength="24" autocomplete="username">
-    <input id="authEmail" class="authInput" type="email" placeholder="Correo electrónico" autocomplete="email" style="display:none">
+    <input id="authEmail" class="authInput" type="email" placeholder="Correo electrónico (opcional)" autocomplete="email" style="display:none">
+    <div id="authEmailHint" style="display:none;color:#777;font-size:13px;margin:-4px 0 10px">Puedes dejarlo vacío y añadirlo más tarde en tu perfil.</div>
     <input id="authPassword" class="authInput" type="password" placeholder="Contraseña" autocomplete="current-password">
 
     <button id="authButton" class="authButton">Iniciar sesión</button>
@@ -923,8 +924,10 @@ switchAuth.onclick = () => {
       : "Crear cuenta";
 
   authEmail.style.display = authMode === "register" ? "block" : "none";
+  const authEmailHint = $("authEmailHint");
+  if(authEmailHint) authEmailHint.style.display = authMode === "register" ? "block" : "none";
   forgotPasswordButton.style.display = authMode === "login" ? "inline-block" : "none";
-  authEmail.required = authMode === "register";
+  authEmail.required = false;
   authEmail.autocomplete = authMode === "register" ? "email" : "email";
 
   switchAuth.textContent =
@@ -1097,7 +1100,7 @@ async function authenticate(){
 
   authError.textContent = "";
 
-  if(!username || !password || (authMode === "register" && !email)){
+  if(!username || !password){
     authError.textContent =
       "Completa todos los campos.";
     return;
