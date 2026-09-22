@@ -1743,7 +1743,7 @@ function renderUsers(){
       .filter(user => {
         const displayName = String(user.displayName || "").toLowerCase();
         const username = String(user.username || "").toLowerCase();
-        return displayName.includes(query) || username.includes(query);
+        return displayName.startsWith(query) || username.startsWith(query);
       })
       .sort((a,b) => {
         const ac = isContact(a.username) ? 0 : 1;
