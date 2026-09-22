@@ -2111,9 +2111,10 @@ app.post("/api/register", (req, res) => {
     });
   }
 
-  if (!validEmail(email)) {
+  // El correo es opcional al registrarse. Si se proporciona, debe ser válido.
+  if (email && !validEmail(email)) {
     return res.status(400).json({
-      error: "Introduce un correo electrónico válido para recuperar la contraseña."
+      error: "Introduce un correo electrónico válido."
     });
   }
 
@@ -2130,7 +2131,7 @@ app.post("/api/register", (req, res) => {
     });
   }
 
-  if (list.some(u => normalizeEmail(u.email) === email)) {
+  if (email && list.some(u => normalizeEmail(u.email) === email)) {
     return res.status(400).json({
       error: "Ese correo electrónico ya está vinculado a otra cuenta."
     });
@@ -2143,7 +2144,7 @@ app.post("/api/register", (req, res) => {
     displayName,
     salt: p.salt,
     passwordHash: p.hash,
-    email,
+    email: email || "",
     profileImage: "",
     blockedUsers: [],
     contacts: [],
