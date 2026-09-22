@@ -5178,6 +5178,14 @@ window.addEventListener(
         return;
       }
 
+      if(type === "contact_request"){
+        if(typeof renderRequests === "function") renderRequests();
+        if(typeof requestsModal !== "undefined" && requestsModal){
+          requestsModal.style.display = "flex";
+        }
+        return;
+      }
+
       const contact =
         allUsers.find(
           user =>
