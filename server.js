@@ -3073,6 +3073,240 @@ app.post("/api/logout", (req, res) => {
   });
 });
 
+
+function replaceUsernameInArray(values, oldUsername, newUsername) {
+  if (!Array.isArray(values)) return false;
+  let changed = false;
+  for (let i = 0; i < values.length; i++) {
+    if (norm(values[i]) === oldUsername) {
+      values[i] = newUsername;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function migrateUsernameReferences(oldUsername, newUsername) {
+  const oldName = norm(oldUsername);
+  const newName = norm(newUsername);
+
+  // Usuarios, contactos, bloqueos y solicitudes.
+  const userList = users();
+  for (const item of userList) {
+    if (norm(item?.username) === oldName) item.username = newName;
+    ensureContactRequests(item);
+    replaceUsernameInArray(item.contacts, oldName, newName);
+    replaceUsernameInArray(item.blockedUsers, oldName, newName);
+    replaceUsernameInArray(item.contactRequests.incoming, oldName, newName);
+    replaceUsernameInArray(item.contactRequests.outgoing, oldName, newName);
+  }
+  saveUsers(userList);
+
+  // Mensajes: mantenemos las conversaciones aunque cambie el @usuario.
+  const messageList = messages();
+  let messagesChanged = false;
+  for (const item of messageList) {
+    if (norm(item?.from) === oldName) { item.from = newName; messagesChanged = true; }
+    if (norm(item?.to) === oldName) { item.to = newName; messagesChanged = true; }
+  }
+  if (messagesChanged) saveMessages(messageList);
+
+  // Sesiones antiguas.
+  const legacySessions = sessions();
+  let sessionsChanged = false;
+  for (const value of Object.values(legacySessions)) {
+    if (norm(value?.username) === oldName) {
+      value.username = newName;
+      sessionsChanged = true;
+    }
+  }
+  if (sessionsChanged) saveSessions(legacySessions);
+
+  // Push / historias / grabaciones / reportes si existen.
+  const pushList = pushSubs();
+  let pushChanged = false;
+  for (const item of pushList) {
+    if (norm(item?.username) === oldName) { item.username = newName; pushChanged = true; }
+  }
+  if (pushChanged) savePushSubs(pushList);
+
+  const storyList = allStories();
+  let storiesChanged = false;
+  for (const item of storyList) {
+    if (norm(item?.username) === oldName) { item.username = newName; storiesChanged = true; }
+  }
+  if (storiesChanged) saveStories(storyList);
+
+  const recordingList = recordings();
+  let recordingsChanged = false;
+  for (const item of recordingList) {
+    for (const field of ["username", "from", "to", "owner"]) {
+      if (norm(item?.[field]) === oldName) { item[field] = newName; recordingsChanged = true; }
+    }
+    if (Array.isArray(item?.participants)) {
+      if (replaceUsernameInArray(item.participants, oldName, newName)) recordingsChanged = true;
+    }
+  }
+  if (recordingsChanged) saveRecordings(recordingList);
+
+  const reportList = reports();
+  let reportsChanged = false;
+  for (const item of reportList) {
+    if (norm(item?.username) === oldName) { item.username = newName; reportsChanged = true; }
+  }
+  if (reportsChanged) saveReports(reportList);
+
+  const moderationList = moderationNotices();
+  let moderationChanged = false;
+  for (const item of moderationList) {
+    if (norm(item?.target) === oldName) { item.target = newName; moderationChanged = true; }
+    if (norm(item?.createdBy) === oldName) { item.createdBy = newName; moderationChanged = true; }
+  }
+  if (moderationChanged) saveModerationNotices(moderationList);
+
+  const appealList = appeals();
+  let appealsChanged = false;
+  for (const item of appealList) {
+    if (norm(item?.username) === oldName) { item.username = newName; appealsChanged = true; }
+    if (norm(item?.noticeTarget) === oldName) { item.noticeTarget = newName; appealsChanged = true; }
+  }
+  if (appealsChanged) saveAppeals(appealList);
+
+  const banList = bans();
+  let bansChanged = false;
+  for (const item of banList) {
+    for (const field of ["username", "createdBy", "revokedBy"]) {
+      if (norm(item?.[field]) === oldName) { item[field] = newName; bansChanged = true; }
+    }
+  }
+  if (bansChanged) saveBans(banList);
+
+  // Recuperaciones pendientes: las invalidamos porque el identificador de cuenta cambió.
+  const resetList = passwordResets();
+  let resetsChanged = false;
+  const now = Date.now();
+  for (const item of resetList) {
+    if (norm(item?.username) === oldName && !item.usedAt && !item.invalidatedAt) {
+      item.invalidatedAt = now;
+      resetsChanged = true;
+    }
+  }
+  if (resetsChanged) savePasswordResets(resetList);
+
+  // Permisos de consola.
+  const commandList = commandAccessRecords();
+  let commandChanged = false;
+  for (const item of commandList) {
+    if (norm(item?.username) === oldName) { item.username = newName; commandChanged = true; }
+  }
+  if (commandChanged) saveCommandAccessRecords(commandList);
+
+  // Tokens FCM: el identificador es la propia clave.
+  const tokenMap = fcmTokens();
+  if (tokenMap && typeof tokenMap === "object" && !Array.isArray(tokenMap)) {
+    if (Object.prototype.hasOwnProperty.call(tokenMap, oldName)) {
+      tokenMap[newName] = tokenMap[oldName];
+      delete tokenMap[oldName];
+      saveFcmTokens(tokenMap);
+    }
+  }
+}
+
+app.post("/api/account/username", requireUser, (req, res) => {
+  const currentPassword = String(req.body?.currentPassword || "");
+  const requested = String(req.body?.username || "").trim();
+  const newUsername = norm(requested);
+  const oldUsername = norm(req.user.username);
+
+  if (!currentPassword) {
+    return res.status(400).json({ error: "Introduce tu contraseña actual." });
+  }
+  if (!validPassword(currentPassword, req.user.salt, req.user.passwordHash)) {
+    return res.status(401).json({ error: "La contraseña actual no es correcta." });
+  }
+  if (newUsername.length < 3 || newUsername.length > 24) {
+    return res.status(400).json({ error: "El @usuario debe tener entre 3 y 24 caracteres." });
+  }
+  if (!/^[a-zA-Z0-9_]+$/.test(requested)) {
+    return res.status(400).json({ error: "El @usuario solo puede contener letras, números y _." });
+  }
+  if (newUsername === oldUsername) {
+    return res.status(400).json({ error: "El nuevo @usuario es igual al actual." });
+  }
+  if (getUser(newUsername)) {
+    return res.status(409).json({ error: "Ese @usuario ya está en uso." });
+  }
+
+  migrateUsernameReferences(oldUsername, newUsername);
+
+  for (const [sid, name] of online.entries()) {
+    if (norm(name) === oldUsername) online.set(sid, newUsername);
+  }
+
+  const token = newSession(newUsername);
+  sendUserList();
+
+  for (const [, name] of online.entries()) {
+    emitRelationshipToUser(name);
+  }
+
+  io.emit("usernameChanged", {
+    oldUsername,
+    newUsername,
+    displayName: req.user.displayName || newUsername
+  });
+
+  const sid = socketIdFor(newUsername);
+  if (sid) {
+    io.to(sid).emit("accountUpdated", {
+      username: newUsername,
+      token
+    });
+  }
+
+  addAdminActivity(`@${oldUsername} cambió su @usuario a @${newUsername}.`);
+
+  res.json({ success: true, username: newUsername, token });
+});
+
+app.post("/api/account/password", requireUser, (req, res) => {
+  const currentPassword = String(req.body?.currentPassword || "");
+  const newPassword = String(req.body?.newPassword || "");
+
+  if (!currentPassword) {
+    return res.status(400).json({ error: "Introduce tu contraseña actual." });
+  }
+  if (!validPassword(currentPassword, req.user.salt, req.user.passwordHash)) {
+    return res.status(401).json({ error: "La contraseña actual no es correcta." });
+  }
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: "La nueva contraseña debe tener al menos 6 caracteres." });
+  }
+  if (newPassword === currentPassword) {
+    return res.status(400).json({ error: "La nueva contraseña debe ser diferente." });
+  }
+
+  const list = users();
+  const idx = list.findIndex(item => norm(item.username) === norm(req.user.username));
+  if (idx < 0) return res.status(404).json({ error: "Usuario no encontrado." });
+
+  const p = passwordHash(newPassword);
+  list[idx].salt = p.salt;
+  list[idx].passwordHash = p.hash;
+  list[idx].passwordChangedAt = Date.now();
+  saveUsers(list);
+
+  const legacySessions = sessions();
+  for (const token of Object.keys(legacySessions)) {
+    if (norm(legacySessions[token]?.username) === norm(req.user.username)) delete legacySessions[token];
+  }
+  saveSessions(legacySessions);
+
+  addAdminActivity(`@${list[idx].username} cambió su contraseña desde Configuración.`);
+
+  res.json({ success: true, token: newSession(list[idx].username) });
+});
+
 app.get("/api/profile", (req, res) => {
   const u = sessionUser(
     authToken(req)
