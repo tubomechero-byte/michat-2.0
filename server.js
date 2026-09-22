@@ -2731,11 +2731,15 @@ app.post("/api/register", (req, res) => {
   const username = norm(displayName);
   const list = users();
 
-  if (
-    list.some(
-      u => norm(u.username) === username
-    )
-  ) {
+  // Comprobación de nombre robusta: ignora entradas antiguas sin username
+  // y compara siempre el valor normalizado.
+  const existingUser = list.find(
+    item => norm(item?.username) && norm(item.username) === username
+  );
+
+  console.log(`Registro solicitado: @${displayName}`);
+
+  if (existingUser) {
     return res.status(400).json({
       error: "Ese usuario ya existe."
     });
@@ -2775,7 +2779,8 @@ app.post("/api/register", (req, res) => {
     `${displayName} (@${username}) se ha registrado.`
   );
 
-  const token = newSession(u.username);
+  // La cuenta recién creada usa directamente su username normalizado.
+  const token = newSession(username);
 
   sendUserList();
 
