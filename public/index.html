@@ -346,9 +346,10 @@ button,input,textarea{font:inherit}
     <h1>💬 Mi Chat</h1>
     <div id="authDescription">Inicia sesión para entrar.</div>
 
-    <input id="authUsername" class="authInput" placeholder="Usuario o correo electrónico" maxlength="254" autocomplete="username email">
+    <input id="authUsername" class="authInput" placeholder="Usuario, correo o teléfono" maxlength="254" autocomplete="username email tel">
     <input id="authEmail" class="authInput" type="email" placeholder="Correo electrónico (opcional)" autocomplete="email" style="display:none">
-    <div id="authEmailHint" style="display:none;color:#777;font-size:13px;margin:-4px 0 10px">Puedes dejarlo vacío y añadirlo más tarde en tu perfil.</div>
+    <input id="authPhone" class="authInput" type="tel" placeholder="Teléfono (opcional)" autocomplete="tel" style="display:none">
+    <div id="authEmailHint" style="display:none;color:#777;font-size:13px;margin:-4px 0 10px">Puedes dejar el correo y el teléfono vacíos y añadirlos más tarde en tu perfil.</div>
     <input id="authPassword" class="authInput" type="password" placeholder="Contraseña" autocomplete="current-password">
 
     <button id="authButton" class="authButton">Iniciar sesión</button>
@@ -481,7 +482,7 @@ button,input,textarea{font:inherit}
     <p style="color:#777;font-size:14px">Te enviaremos un código de 6 dígitos al correo asociado a tu cuenta.</p>
 
     <div id="recoveryStep1">
-      <input id="recoveryIdentifier" class="modalInput" placeholder="Usuario o correo electrónico" autocomplete="username email">
+      <input id="recoveryIdentifier" class="modalInput" placeholder="Usuario, correo o teléfono" autocomplete="username email tel">
       <div id="recoveryMessage" class="modalError"></div>
       <div class="modalRow">
         <button id="closeRecovery" class="muted" type="button">Cancelar</button>
@@ -608,6 +609,7 @@ button,input,textarea{font:inherit}
 
     <input id="profileName" class="modalInput" placeholder="Nombre para mostrar" maxlength="24">
     <input id="profileEmail" class="modalInput" type="email" placeholder="Correo para recuperar la contraseña" autocomplete="email">
+    <input id="profilePhone" class="modalInput" type="tel" placeholder="Número de teléfono (opcional)" autocomplete="tel">
     <input id="profileFile" class="modalInput" type="file" accept="image/*">
 
     <div class="modalRow">
@@ -1051,6 +1053,8 @@ switchAuth.onclick = () => {
       : "Crear cuenta";
 
   authEmail.style.display = authMode === "register" ? "block" : "none";
+  const authPhone = $("authPhone");
+  if(authPhone) authPhone.style.display = authMode === "register" ? "block" : "none";
   const authEmailHint = $("authEmailHint");
   if(authEmailHint) authEmailHint.style.display = authMode === "register" ? "block" : "none";
   forgotPasswordButton.style.display = authMode === "login" ? "inline-block" : "none";
@@ -1229,6 +1233,7 @@ async function authenticate(){
     authPassword.value;
 
   const email = authEmail.value.trim();
+  const phone = $("authPhone") ? $("authPhone").value.trim() : "";
 
   authError.textContent = "";
 
@@ -1255,7 +1260,7 @@ async function authenticate(){
           body:JSON.stringify({
             username,
             password,
-            ...(authMode === "register" ? { email } : {})
+            ...(authMode === "register" ? { email, phone } : {})
           })
         }
       );
@@ -3699,6 +3704,9 @@ async function openProfileModal(){
     $("profileEmail").value =
       data.email || "";
 
+    $("profilePhone").value =
+      data.phone || "";
+
     $("profilePreview").innerHTML =
       data.profileImage
         ? `<img src="${esc(data.profileImage)}" alt="">`
@@ -3847,6 +3855,7 @@ $("saveProfile").onclick = async () => {
         .trim(),
 
     email: $("profileEmail").value.trim(),
+    phone: $("profilePhone").value.trim(),
 
     profileImage:
       $("profilePreview")
