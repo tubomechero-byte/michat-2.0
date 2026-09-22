@@ -10,7 +10,7 @@
 
 <style>
 *{box-sizing:border-box}
-body{margin:0;font-family:Arial,sans-serif;height:100vh;overflow:hidden;background:#f0f2f5}
+body{margin:0;font-family:Arial,sans-serif;height:100vh;height:100dvh;overflow:hidden;background:#f0f2f5}
 button,input,textarea{font:inherit}
 .hidden{display:none!important}
 
@@ -21,8 +21,8 @@ button,input,textarea{font:inherit}
 .switchButton{border:0;background:transparent;color:#075e54;cursor:pointer;margin-top:15px}
 #authError{min-height:22px;margin-top:10px;color:#c00}
 
-#app{display:none;height:100vh}
-.layout{display:flex;height:100%;max-width:1500px;margin:auto;background:#fff}
+#app{display:none;height:100vh;height:100dvh;min-height:0}
+.layout{display:flex;height:100%;min-height:0;max-width:1500px;margin:auto;background:#fff}
 
 .sidebar{width:350px;border-right:1px solid #ddd;display:flex;flex-direction:column;background:#fff}
 .sidebarHeader{padding:15px;background:#075e54;color:#fff}
@@ -62,7 +62,7 @@ button,input,textarea{font:inherit}
 .offline{color:#999}
 .badge{min-width:21px;height:21px;padding:0 6px;display:flex;align-items:center;justify-content:center;border-radius:20px;background:#25d366;color:#fff;font-size:12px;font-weight:bold}
 
-.chat{flex:1;min-width:0;display:flex;flex-direction:column}
+.chat{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .chatHeader{height:70px;padding:12px 18px;border-bottom:1px solid #ddd;display:flex;align-items:center;gap:12px}
 .chatInfo{flex:1;min-width:0}
 .chatTitle{font-weight:bold}
@@ -72,7 +72,7 @@ button,input,textarea{font:inherit}
 .callBtn{background:#25d366;color:#fff}
 .hangBtn{background:#b00020;color:#fff}
 
-#messages{flex:1;overflow-y:auto;padding:20px;background:#e5ddd5}
+#messages{flex:1;min-height:0;overflow-y:auto;padding:20px;background:#e5ddd5}
 .empty{height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:#666}
 .messageRow{display:flex;margin:7px 0}
 .mine{justify-content:flex-end}
@@ -84,7 +84,7 @@ button,input,textarea{font:inherit}
 .messageContext{display:flex;align-items:center;gap:6px;margin-top:5px}
 .deleteBtn{border:0;background:transparent;color:#b00;font-size:11px;cursor:pointer}
 
-.messageInput{display:flex;gap:8px;padding:10px;background:#f0f2f5;border-top:1px solid #ddd;align-items:center}
+.messageInput{display:flex;gap:8px;padding:10px;background:#f0f2f5;border-top:1px solid #ddd;align-items:center;flex:0 0 auto;position:relative;z-index:20;padding-bottom:max(10px,env(safe-area-inset-bottom))}
 .messageInput input{flex:1;border:0;outline:none;border-radius:25px;padding:14px 18px;min-width:0}
 .attachBtn{width:50px;height:50px;border:0;border-radius:50%;background:#fff;color:#128c7e;cursor:pointer;font-size:21px;flex-shrink:0}
 .attachBtn:disabled{opacity:.5;cursor:not-allowed}
@@ -357,11 +357,25 @@ button,input,textarea{font:inherit}
 }
 
 @media(max-width:800px){
-  .sidebar{width:100%}
-  .chat{display:none}
+  html,body{height:100%;height:100dvh}
+  #app{height:100%;height:100dvh}
+  .layout{height:100%;height:100dvh;min-height:0}
+  .sidebar{width:100%;min-height:0}
+  .chat{display:none;height:100%;min-height:0}
   .mobileChat .sidebar{display:none}
-  .mobileChat .chat{display:flex}
+  .mobileChat .chat{display:flex;min-height:0}
   .back{display:block}
+  .messageInput{padding-left:8px;padding-right:8px}
+  .messageInput input{min-height:50px;font-size:16px}
+}
+
+@media(max-width:420px){
+  .chatHeader{height:62px;padding:8px 10px;gap:8px}
+  .chatTools{gap:4px}
+  .toolBtn{padding:7px 8px}
+  #messages{padding:12px}
+  .messageInput{gap:6px;padding-top:8px}
+  .attachBtn,.send{width:46px;height:46px}
 }
 </style>
 </head>
