@@ -386,6 +386,21 @@ button,input,textarea{font:inherit}
   </div>
 </div>
 
+<!-- BIENVENIDA TRAS EL REGISTRO -->
+<div id="welcomeModal" class="modal" aria-hidden="true">
+  <div class="modalBox" style="max-width:460px;text-align:center">
+    <div style="font-size:52px;margin-bottom:8px">👋</div>
+    <h2 style="margin-bottom:10px">¡Bienvenido a Mi Chat!</h2>
+    <p style="line-height:1.55;margin:0 0 18px;color:#444">
+      Tu cuenta se ha creado correctamente.<br><br>
+      <strong>Importante:</strong> otros usuarios solo podrán hablar contigo cuando te envíen una solicitud de contacto y tú la aceptes, o cuando tú les envíes una solicitud y ellos la acepten.
+    </p>
+    <button id="closeWelcomeModal" class="primary" type="button" style="width:100%;padding:13px 16px;border:0;border-radius:10px;cursor:pointer;font-size:16px">
+      Entendido
+    </button>
+  </div>
+</div>
+
 <div id="app">
   <div id="layout" class="layout">
 
@@ -846,6 +861,8 @@ const authButton = $("authButton");
 const switchAuth = $("switchAuth");
 const authDescription = $("authDescription");
 const authError = $("authError");
+const welcomeModal = $("welcomeModal");
+const closeWelcomeModal = $("closeWelcomeModal");
 
 const usersContainer = $("users");
 const searchInput = $("searchInput");
@@ -1295,6 +1312,28 @@ async function loadIdentity(){
   }catch{}
 }
 
+function openWelcomeModal(){
+  if(!welcomeModal) return;
+  welcomeModal.classList.add("open");
+  welcomeModal.style.display = "flex";
+  welcomeModal.setAttribute("aria-hidden", "false");
+}
+
+function closeWelcome(){
+  if(!welcomeModal) return;
+  welcomeModal.classList.remove("open");
+  welcomeModal.style.display = "none";
+  welcomeModal.setAttribute("aria-hidden", "true");
+}
+
+closeWelcomeModal?.addEventListener("click", closeWelcome);
+welcomeModal?.addEventListener("click", event => {
+  if(event.target === welcomeModal) closeWelcome();
+});
+document.addEventListener("keydown", event => {
+  if(event.key === "Escape" && welcomeModal?.classList.contains("open")) closeWelcome();
+});
+
 async function authenticate(){
 
   const username =
@@ -1314,6 +1353,7 @@ async function authenticate(){
     return;
   }
 
+  const wasRegistering = authMode === "register";
   authButton.disabled = true;
 
   try{
@@ -1356,6 +1396,10 @@ async function authenticate(){
     await loadIdentity();
 
     enterApp();
+
+    if(wasRegistering){
+      setTimeout(openWelcomeModal, 80);
+    }
 
   }catch(error){
 
