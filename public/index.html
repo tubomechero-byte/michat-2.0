@@ -102,7 +102,7 @@ button,input,textarea{font:inherit}
 #notifications{position:fixed;top:15px;right:15px;z-index:9999;width:min(360px,calc(100vw - 30px))}
 
 .moderationModalBackdrop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.62);z-index:12000}.moderationModalBackdrop.open{display:flex}.moderationModalBox{width:min(560px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 18px 70px rgba(0,0,0,.35);padding:24px;box-sizing:border-box}.moderationModalHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.moderationModalIcon{font-size:38px;line-height:1}.moderationModalTitle{margin:0;font-size:22px}.moderationModalMeta{margin-top:4px;color:#777;font-size:13px}.moderationModalMessage{margin:18px 0;padding:16px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;white-space:pre-wrap;word-break:break-word;color:#3f3f46}.moderationAppealLabel{display:block;font-weight:700;margin:12px 0 7px}.moderationAppealText{width:100%;min-height:130px;resize:vertical;box-sizing:border-box;padding:13px;border:1px solid #d4d4d8;border-radius:12px;font:inherit;outline:none}.moderationAppealText:focus{border-color:#128c7e;box-shadow:0 0 0 3px rgba(18,140,126,.1)}.moderationModalActions{display:flex;gap:10px;margin-top:14px}.moderationModalActions button{flex:1;padding:12px;border:0;border-radius:12px;cursor:pointer}.moderationClose{background:#eee}.moderationAppeal{background:#128c7e;color:#fff}.moderationModalStatus{min-height:22px;margin-top:10px;font-size:14px}.moderationCloseTop{min-width:44px;min-height:44px;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center}.moderationModalBackdrop.open{display:flex !important}.moderationModalBackdrop button{pointer-events:auto}.moderationModalBackdrop{pointer-events:auto}
-.commandBtn{background:#111827!important;color:#fff}.commandModalBox{max-width:820px!important;background:#0b1120!important;color:#e5e7eb}.commandModalHeader{display:flex;align-items:center;justify-content:space-between;gap:10px}.commandModalHeader h2{margin:0}.commandOutput{height:340px;max-height:55vh;overflow:auto;background:#020617;border:1px solid #1f2937;border-radius:12px;padding:12px;font-family:Consolas,Monaco,monospace;font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-word}.commandOutputLine{margin:0 0 6px}.commandOutputPrompt{color:#60a5fa}.commandOutputOk{color:#e5e7eb}.commandOutputError{color:#fca5a5}.commandInputRow{display:flex;gap:8px;margin-top:10px}.commandInputRow input{flex:1;min-width:0;background:#111827;color:#fff;border:1px solid #374151;padding:12px;border-radius:10px;outline:none}.commandInputRow input:focus{border-color:#60a5fa}.commandInputRow button{padding:12px 16px;border:0;border-radius:10px;background:#2563eb;color:#fff;cursor:pointer}.commandHint{margin-top:8px;font-size:12px;color:#9ca3af;line-height:1.4}
+.commandBtn{background:#111827!important;color:#fff}.commandModalBox{max-width:820px!important;background:#0b1120!important;color:#e5e7eb}.commandModalHeader{display:flex;align-items:center;justify-content:space-between;gap:10px}.commandModalHeader h2{margin:0}.commandOutput{height:340px;max-height:55vh;overflow:auto;background:#020617;border:1px solid #1f2937;border-radius:12px;padding:12px;font-family:Consolas,Monaco,monospace;font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-word}.commandOutputLine{margin:0 0 6px}.commandOutputPrompt{color:#60a5fa}.commandOutputOk{color:#e5e7eb}.commandOutputError{color:#fca5a5}.commandInputRow{display:flex;gap:8px;margin-top:10px}.commandInputRow input{flex:1;min-width:0;background:#111827;color:#fff;border:1px solid #374151;padding:12px;border-radius:10px;outline:none}.commandInputRow input:focus{border-color:#60a5fa}.commandInputRow button{padding:12px 16px;border:0;border-radius:10px;background:#2563eb;color:#fff;cursor:pointer}.commandHint{margin-top:8px;font-size:12px;color:#9ca3af;line-height:1.4}.commandRankBadge{display:inline-block;margin-left:8px;padding:3px 8px;border-radius:999px;background:#1f2937;color:#93c5fd;font-size:11px;font-weight:700;vertical-align:middle}
 .notification{padding:14px;margin-bottom:10px;background:#fff;border-left:5px solid #25d366;border-radius:14px;box-shadow:0 6px 25px rgba(0,0,0,.2);cursor:pointer}
 .notificationTitle{font-weight:bold;margin-bottom:5px}
 .notificationText{color:#555;font-size:14px}
@@ -521,7 +521,7 @@ button,input,textarea{font:inherit}
 <div id="commandModal" class="modal">
   <div class="modalBox commandModalBox">
     <div class="commandModalHeader">
-      <h2>🖥️ Consola de comandos</h2>
+      <h2>🖥️ Consola de comandos <span id="commandRankBadge" class="commandRankBadge" style="display:none"></span></h2>
       <button id="closeCommandModal" class="muted" type="button" aria-label="Cerrar consola">✕ Cerrar</button>
     </div>
     <div id="commandOutput" class="commandOutput" role="log" aria-live="polite"></div>
@@ -529,7 +529,7 @@ button,input,textarea{font:inherit}
       <input id="commandInput" type="text" maxlength="1200" autocomplete="off" spellcheck="false" placeholder="Escribe un comando, por ejemplo /help">
       <button id="sendCommand" type="button">Ejecutar</button>
     </div>
-    <div class="commandHint">La consola ejecuta solo comandos de Mi Chat; no permite ejecutar comandos del sistema operativo. Usa <b>/help</b> para ver los comandos disponibles.</div>
+    <div class="commandHint">La consola ejecuta solo comandos de Mi Chat; no permite ejecutar comandos del sistema operativo. Tu rango determina qué comandos puedes usar. Usa <b>/help</b> para ver los comandos disponibles.</div>
   </div>
 </div>
 
@@ -843,6 +843,8 @@ const commandOutput = $("commandOutput");
 const commandInput = $("commandInput");
 const sendCommandButton = $("sendCommand");
 let commandConsoleEnabled = false;
+let commandConsoleRank = "";
+let commandConsoleRankLabel = "";
 let commandHistory = [];
 let commandHistoryIndex = -1;
 const moderationModal = $("moderationModal");
@@ -856,10 +858,17 @@ let activeModerationNotice = null;
 const moderationQueue = [];
 let moderationQueueOpen = false;
 
-function setCommandConsoleAccess(enabled){
+function setCommandConsoleAccess(enabled, rank = "", rankLabel = ""){
   commandConsoleEnabled = Boolean(enabled);
+  commandConsoleRank = String(rank || "").toLowerCase();
+  commandConsoleRankLabel = rankLabel || (commandConsoleRank === "moderator" ? "Moderador" : commandConsoleRank === "basic" ? "Básico" : "");
   if(commandButton){
     commandButton.classList.toggle("hidden", !commandConsoleEnabled);
+  }
+  const badge = document.getElementById("commandRankBadge");
+  if(badge){
+    badge.textContent = commandConsoleEnabled && commandConsoleRankLabel ? commandConsoleRankLabel : "";
+    badge.style.display = commandConsoleEnabled && commandConsoleRankLabel ? "inline-block" : "none";
   }
   if(!commandConsoleEnabled){
     closeCommandModal();
@@ -1350,7 +1359,7 @@ socket.on("authenticated",data => {
   myUsername =
     data.username ||
     myUsername;
-  setCommandConsoleAccess(Boolean(data.commandConsoleEnabled));
+  setCommandConsoleAccess(Boolean(data.commandConsoleEnabled), data.commandConsoleRank, data.commandConsoleRankLabel);
   loadStories();
 
   // Refrescamos los avisos después de autenticar para no depender de una carrera de eventos.
@@ -1370,9 +1379,11 @@ socket.on("authenticated",data => {
 });
 
 socket.on("commandAccessUpdated", data => {
-  setCommandConsoleAccess(Boolean(data?.enabled));
+  setCommandConsoleAccess(Boolean(data?.enabled), data?.rank, data?.rankLabel);
   if(data?.enabled){
-    appendCommandOutput("Se te ha concedido acceso a la consola.", "ok");
+    appendCommandOutput(`Se te ha asignado el rango ${data?.rankLabel || "de consola"}.`, "ok");
+  }else{
+    appendCommandOutput("Se te ha retirado el acceso a la consola.", "error");
   }
 });
 
@@ -1495,6 +1506,16 @@ function moderationSeen(id){
 function markModerationSeen(id){
   try{ const key="michat_moderation_seen"; const seen=JSON.parse(localStorage.getItem(key)||"[]"); const value=String(id); if(!seen.includes(value))seen.push(value); localStorage.setItem(key,JSON.stringify(seen.slice(-100))); }catch{}
 }
+
+socket.on("kicked", data => {
+  localStorage.removeItem("chatToken");
+  try { closeModerationModal(); } catch {}
+  if(socket.connected) socket.disconnect();
+  app.style.display = "none";
+  authScreen.style.display = "flex";
+  const reason = data?.reason ? ` Motivo: ${data.reason}` : "";
+  authError.textContent = `Has sido expulsado del chat.${reason} Vuelve a iniciar sesión para entrar de nuevo.`;
+});
 
 socket.on("banned", data => {
   localStorage.removeItem("chatToken");
