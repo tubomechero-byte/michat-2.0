@@ -2592,6 +2592,13 @@ async function startPeer(){
 
       if(state === "connected"){
         setActiveCallStatus("En llamada");
+        // La grabación se inicia automáticamente cuando la llamada queda realmente conectada.
+        // Se mantiene el aviso visible para ambos participantes.
+        setTimeout(() => {
+          if(callState === "in-call" && !callRecorder){
+            startCallRecording({ automatic: true });
+          }
+        }, 250);
       }
 
       if(state === "connecting"){
@@ -2767,13 +2774,16 @@ function setRecordingUI(active){
   recordCallText.textContent = active ? "Detener" : "Grabar";
 }
 
-async function startCallRecording(){
+async function startCallRecording(options = {}){
+  const automatic = !!options.automatic;
   if(callRecorder || callState !== "in-call") return;
   if(!callPeer || !localStream) return;
 
   const remoteStream = remoteAudio.srcObject;
   if(!remoteStream){
-    showNotification("Grabación", "Espera a que la llamada esté conectada.");
+    if(!automatic){
+      showNotification("Grabación", "Espera a que la llamada esté conectada.");
+    }
     return;
   }
 
@@ -2899,8 +2909,16 @@ async function startCallRecording(){
 
     callRecorder.start(1000);
     setRecordingUI(true);
-    socket.emit("recordingStarted", { to: callPeer });
-    showNotification("Grabación", "La llamada se está grabando y ambos participantes han sido avisados.");
+    socket.emit("recordingStarted", {
+      to: callPeer,
+      automatic
+    });
+    showNotification(
+      "Grabación",
+      automatic
+        ? "La grabación de la llamada ha comenzado automáticamente. Ambos participantes han sido avisados."
+        : "La llamada se está grabando y ambos participantes han sido avisados."
+    );
   }catch(error){
     console.error(error);
     try{ callRecordingAudioContext?.close(); }catch{}
@@ -2926,9 +2944,14 @@ recordCallButton.onclick = () => {
   else startCallRecording();
 };
 
-socket.on("recordingStarted", () => {
+socket.on("recordingStarted", data => {
   recordingBanner.classList.add("visible");
-  showNotification("Grabación", "La otra persona ha iniciado la grabación de la llamada.");
+  showNotification(
+    "Grabación",
+    data?.automatic
+      ? "La llamada ha comenzado a grabarse automáticamente."
+      : "La otra persona ha iniciado la grabación de la llamada."
+  );
 });
 
 socket.on("recordingStopped", () => {
