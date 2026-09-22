@@ -11,6 +11,8 @@ let unread = {};
 let conversations = {};
 let pendingContactUser = null;
 let relationshipData = { contacts: [], incoming: [], outgoing: [] };
+let commandConsoleRank = "";
+let commandConsoleRankLabel = "";
 
 const $ = id => document.getElementById(id);
 
@@ -108,6 +110,15 @@ function esc(value){
 
 function norm(value){
   return String(value || "").trim().toLowerCase();
+}
+
+
+function setCommandConsoleAccess(enabled, rank = "", rankLabel = "") {
+  commandConsoleRank = String(rank || "").toLowerCase();
+  commandConsoleRankLabel = rankLabel || (commandConsoleRank === "moderator" ? "Moderador" : commandConsoleRank === "basic" ? "Básico" : "");
+  const button = $("commandButton");
+  if(button) button.classList.toggle("hidden", !Boolean(enabled));
+  if(!enabled && typeof closeCommandModal === "function") closeCommandModal();
 }
 
 function avatarHtml(user){
@@ -4103,6 +4114,14 @@ window.addEventListener(
         }
 
         handleNativeCallNotification(data);
+        return;
+      }
+
+      if(type === "contact_request"){
+        if(typeof renderRequests === "function") renderRequests();
+        if(typeof requestsModal !== "undefined" && requestsModal){
+          requestsModal.style.display = "flex";
+        }
         return;
       }
 
