@@ -29,6 +29,7 @@ const APPEALS_FILE = path.join(DATA_DIR, "appeals.json");
 const BANS_FILE = path.join(DATA_DIR, "bans.json");
 const PASSWORD_RESETS_FILE = path.join(DATA_DIR, "password-resets.json");
 const COMMAND_ACCESS_FILE = path.join(DATA_DIR, "command-access.json");
+const ADMIN_ACTIVITY_FILE = path.join(DATA_DIR, "admin-activity.json");
 const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -59,7 +60,8 @@ const STATE_FILES = {
   "appeals.json": [],
   "bans.json": [],
   "password-resets.json": [],
-  "command-access.json": {}
+  "command-access.json": {},
+  "admin-activity.json": []
 };
 
 let supabaseAvailable = false;
@@ -88,6 +90,7 @@ ensure(APPEALS_FILE, []);
 ensure(BANS_FILE, []);
 ensure(PASSWORD_RESETS_FILE, []);
 ensure(COMMAND_ACCESS_FILE, []);
+ensure(ADMIN_ACTIVITY_FILE, []);
 
 function read(file, fallback) {
   try {
@@ -1421,7 +1424,15 @@ const ADMIN_SESSION_SECRET = String(
 const ADMIN_SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
 // Terminal de actividad del administrador.
-const adminActivity = [];
+// Se persiste también en Supabase mediante admin-activity.json para que
+// la consola no se vacíe al reiniciar o volver a desplegar el servicio.
+let adminActivity = [];
+
+function loadAdminActivity() {
+  const saved = read(ADMIN_ACTIVITY_FILE, []);
+  adminActivity = Array.isArray(saved) ? saved : [];
+  return adminActivity;
+}
 
 function addAdminActivity(text) {
   const line = {
@@ -1430,11 +1441,13 @@ function addAdminActivity(text) {
     text: String(text || "")
   };
 
-  adminActivity.push(line);
+  adminActivity = [...loadAdminActivity(), line];
 
-  if (adminActivity.length > 200) {
-    adminActivity.splice(0, adminActivity.length - 200);
+  if (adminActivity.length > 2000) {
+    adminActivity.splice(0, adminActivity.length - 2000);
   }
+
+  write(ADMIN_ACTIVITY_FILE, adminActivity);
 }
 
 function createAdminToken() {
@@ -2286,6 +2299,7 @@ app.patch("/api/admin/appeals/:id", requireAdmin, (req, res) => {
 });
 
 app.get("/api/admin/activity", requireAdmin, (req, res) => {
+  loadAdminActivity();
   res.json(adminActivity.slice(-100).reverse());
 });
 
