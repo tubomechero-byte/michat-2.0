@@ -455,6 +455,16 @@ function markModerationSeen(id){
   try{ const key="michat_moderation_seen"; const seen=JSON.parse(localStorage.getItem(key)||"[]"); const value=String(id); if(!seen.includes(value))seen.push(value); localStorage.setItem(key,JSON.stringify(seen.slice(-100))); }catch{}
 }
 
+socket.on("kicked", data => {
+  localStorage.removeItem("chatToken");
+  try { closeModerationModal(); } catch {}
+  if(socket.connected) socket.disconnect();
+  app.style.display = "none";
+  authScreen.style.display = "flex";
+  const reason = data?.reason ? ` Motivo: ${data.reason}` : "";
+  authError.textContent = `Has sido expulsado del chat.${reason} Vuelve a iniciar sesión para entrar de nuevo.`;
+});
+
 socket.on("banned", data => {
   localStorage.removeItem("chatToken");
   try { closeModerationModal(); } catch {}
