@@ -59,7 +59,7 @@ const STATE_FILES = {
   "appeals.json": [],
   "bans.json": [],
   "password-resets.json": [],
-  "command-access.json": []
+  "command-access.json": {}
 };
 
 let supabaseAvailable = false;
@@ -342,49 +342,146 @@ function savePasswordResets(v) {
   write(PASSWORD_RESETS_FILE, v);
 }
 
-function commandAccessUsers() {
+const COMMAND_RANKS = {
+  BASIC: "basic",
+  MODERATOR: "moderator"
+};
+
+const COMMAND_RANK_LABELS = {
+  basic: "Básico",
+  moderator: "Moderador"
+};
+
+const BASIC_COMMANDS = new Set([
+  "help",
+  "me",
+  "status",
+  "online",
+  "users",
+  "whois",
+  "time",
+  "echo",
+  "clear"
+]);
+
+const MODERATOR_COMMANDS = new Set([
+  "kick",
+  "ban",
+  "unban",
+  "aviso",
+  "warn",
+  "moderacion",
+  "moderación"
+]);
+
+function normalizeCommandRank(value) {
+  const rank = String(value || "").trim().toLowerCase();
+  return rank === COMMAND_RANKS.MODERATOR ? COMMAND_RANKS.MODERATOR
+    : rank === COMMAND_RANKS.BASIC ? COMMAND_RANKS.BASIC
+    : "";
+}
+
+function commandAccessRecords() {
   const value = read(COMMAND_ACCESS_FILE, []);
-  if (Array.isArray(value)) return value.map(norm).filter(Boolean);
+
+  // Compatibilidad con el formato anterior: ["raul", "juan"].
+  if (Array.isArray(value)) {
+    return [...new Map(
+      value.map(username => [norm(username), { username: norm(username), rank: COMMAND_RANKS.MODERATOR }])
+    ).values()].filter(item => item.username);
+  }
+
+  if (value && typeof value === "object") {
+    return Object.entries(value)
+      .map(([username, rank]) => ({
+        username: norm(username),
+        rank: normalizeCommandRank(rank)
+      }))
+      .filter(item => item.username && item.rank);
+  }
+
   return [];
 }
 
-function saveCommandAccessUsers(v) {
-  const unique = [...new Set((Array.isArray(v) ? v : []).map(norm).filter(Boolean))];
-  write(COMMAND_ACCESS_FILE, unique);
+function saveCommandAccessRecords(records) {
+  const data = {};
+  for (const item of Array.isArray(records) ? records : []) {
+    const username = norm(item?.username);
+    const rank = normalizeCommandRank(item?.rank);
+    if (username && rank) data[username] = rank;
+  }
+  write(COMMAND_ACCESS_FILE, data);
+}
+
+function commandAccessUsers() {
+  return commandAccessRecords().map(item => item.username);
+}
+
+function getCommandRank(username) {
+  const target = norm(username);
+  if (!target) return "";
+  return commandAccessRecords().find(item => item.username === target)?.rank || "";
 }
 
 function hasCommandAccess(username) {
-  const target = norm(username);
-  return !!target && commandAccessUsers().includes(target);
+  return !!getCommandRank(username);
+}
+
+function commandRankLabel(rank) {
+  return COMMAND_RANK_LABELS[normalizeCommandRank(rank)] || "Sin rango";
 }
 
 function emitCommandAccessUpdate(username) {
   const target = norm(username);
   if (!target) return;
-  const enabled = hasCommandAccess(target);
+  const rank = getCommandRank(target);
+  const enabled = !!rank;
   for (const [socketId, name] of online.entries()) {
     if (norm(name) === target) {
-      io.to(socketId).emit("commandAccessUpdated", { enabled });
+      io.to(socketId).emit("commandAccessUpdated", {
+        enabled,
+        rank: rank || null,
+        rankLabel: commandRankLabel(rank)
+      });
     }
   }
 }
 
-function commandHelpLines() {
-  return [
+function commandHelpLines(rank) {
+  const lines = [
     "/help — muestra esta ayuda",
     "/me — muestra tu usuario y nombre",
     "/status — estado general de Mi Chat",
     "/online — usuarios conectados ahora",
     "/users [límite] — lista de usuarios registrados",
     "/whois @usuario — información básica de un usuario",
-    "/kick @usuario [motivo] — desconecta a un usuario",
-    "/ban @usuario <duración> [motivo] — banea por tiempo o permanentemente",
-    "/unban @usuario — quita un baneo activo",
-    "/aviso @usuario [título] | mensaje — envía un aviso de moderación",
     "/time — fecha y hora del servidor",
     "/echo texto — repite un texto",
     "/clear — limpia esta consola"
   ];
+
+  if (normalizeCommandRank(rank) === COMMAND_RANKS.MODERATOR) {
+    lines.push(
+      "/kick @usuario [motivo] — desconecta a un usuario",
+      "/ban @usuario <duración> [motivo] — banea por tiempo o permanentemente",
+      "/unban @usuario — quita un baneo activo",
+      "/aviso @usuario [título] | mensaje — envía un aviso de moderación"
+    );
+  }
+
+  return lines;
+}
+
+function commandAllowed(rank, command) {
+  const normalizedRank = normalizeCommandRank(rank);
+  const name = String(command || "").toLowerCase();
+  if (normalizedRank === COMMAND_RANKS.MODERATOR) {
+    return BASIC_COMMANDS.has(name) || MODERATOR_COMMANDS.has(name);
+  }
+  if (normalizedRank === COMMAND_RANKS.BASIC) {
+    return BASIC_COMMANDS.has(name);
+  }
+  return false;
 }
 
 function commandKick(username, args) {
@@ -581,6 +678,10 @@ function commandModerationNotice(username, args) {
 
 function executeCommand(username, rawInput) {
   const input = String(rawInput || "").trim();
+  const rank = getCommandRank(username);
+  if (!rank) {
+    return { ok: false, output: ["No tienes acceso a la consola de comandos."] };
+  }
   if (!input) {
     return { ok: false, output: ["Escribe un comando. Usa /help para ver los comandos disponibles."] };
   }
@@ -593,9 +694,16 @@ function executeCommand(username, rawInput) {
   const command = match[1].toLowerCase();
   const args = String(match[2] || "").trim();
 
+  if (!commandAllowed(rank, command)) {
+    return {
+      ok: false,
+      output: [`El rango ${commandRankLabel(rank)} no puede usar /${command}.`, `Usa /help para ver los comandos de tu rango.`]
+    };
+  }
+
   switch (command) {
     case "help":
-      return { ok: true, output: commandHelpLines() };
+      return { ok: true, output: commandHelpLines(rank) };
 
     case "me": {
       const user = getUser(username);
@@ -1606,8 +1714,8 @@ app.delete("/api/admin/users/:username", requireAdmin, (req, res) => {
     saveFcmTokens(fcmData);
   }
 
-  const commandAccess = commandAccessUsers().filter(name => norm(name) !== username);
-  saveCommandAccessUsers(commandAccess);
+  const commandAccess = commandAccessRecords().filter(item => norm(item.username) !== username);
+  saveCommandAccessRecords(commandAccess);
 
   // Desconectar cualquier sesión Socket.IO activa.
   for (const [socketId, name] of online.entries()) {
@@ -1777,14 +1885,19 @@ app.get("/api/admin/bans", requireAdmin, (req, res) => {
 
 app.get("/api/admin/command-access", requireAdmin, (req, res) => {
   const onlineUsers = new Set([...online.values()].map(name => norm(name)));
-  const result = commandAccessUsers()
-    .map(username => getUser(username))
+  const result = commandAccessRecords()
+    .map(record => {
+      const user = getUser(record.username);
+      if (!user) return null;
+      return {
+        username: user.username,
+        displayName: user.displayName || user.username,
+        online: onlineUsers.has(norm(user.username)),
+        rank: record.rank,
+        rankLabel: commandRankLabel(record.rank)
+      };
+    })
     .filter(Boolean)
-    .map(user => ({
-      username: user.username,
-      displayName: user.displayName || user.username,
-      online: onlineUsers.has(norm(user.username))
-    }))
     .sort((a, b) => String(a.username).localeCompare(String(b.username)));
 
   res.json(result);
@@ -1795,15 +1908,18 @@ app.put("/api/admin/command-access/:username", requireAdmin, (req, res) => {
   const user = getUser(username);
   if (!user) return res.status(404).json({ error: "Usuario no encontrado." });
 
-  const list = commandAccessUsers();
-  if (!list.includes(username)) {
-    list.push(username);
-    saveCommandAccessUsers(list);
+  const rank = normalizeCommandRank(req.body?.rank || COMMAND_RANKS.BASIC);
+  if (!rank) {
+    return res.status(400).json({ error: "Rango no válido. Usa basic o moderator." });
   }
 
+  const records = commandAccessRecords().filter(item => item.username !== username);
+  records.push({ username, rank });
+  saveCommandAccessRecords(records);
+
   emitCommandAccessUpdate(username);
-  addAdminActivity(`Administrador dio acceso a la consola a @${user.username}.`);
-  res.json({ success: true, username: user.username, enabled: true });
+  addAdminActivity(`Administrador asignó el rango ${commandRankLabel(rank)} a @${user.username} para la consola.`);
+  res.json({ success: true, username: user.username, enabled: true, rank, rankLabel: commandRankLabel(rank) });
 });
 
 app.delete("/api/admin/command-access/:username", requireAdmin, (req, res) => {
@@ -1811,13 +1927,13 @@ app.delete("/api/admin/command-access/:username", requireAdmin, (req, res) => {
   const user = getUser(username);
   if (!user) return res.status(404).json({ error: "Usuario no encontrado." });
 
-  const before = commandAccessUsers();
-  const after = before.filter(name => name !== username);
-  saveCommandAccessUsers(after);
+  const before = commandAccessRecords();
+  const after = before.filter(item => item.username !== username);
+  saveCommandAccessRecords(after);
 
   emitCommandAccessUpdate(username);
   addAdminActivity(`Administrador quitó el acceso a la consola a @${user.username}.`);
-  res.json({ success: true, username: user.username, enabled: false, changed: before.length !== after.length });
+  res.json({ success: true, username: user.username, enabled: false, rank: null, changed: before.length !== after.length });
 });
 
 app.get("/api/admin/moderation", requireAdmin, (req, res) => {
@@ -3609,7 +3725,9 @@ io.on("connection", socket => {
           u.displayName,
         profileImage:
           u.profileImage || "",
-        commandConsoleEnabled: hasCommandAccess(u.username)
+        commandConsoleEnabled: hasCommandAccess(u.username),
+        commandConsoleRank: getCommandRank(u.username),
+        commandConsoleRankLabel: commandRankLabel(getCommandRank(u.username))
       }
     );
 
@@ -3680,13 +3798,21 @@ io.on("connection", socket => {
       return socket.emit("commandResult", { ok: false, output: ["No estás autenticado."] });
     }
 
-    if (!hasCommandAccess(username)) {
+    const rank = getCommandRank(username);
+    if (!rank) {
       return socket.emit("commandResult", { ok: false, output: ["No tienes acceso a la consola de comandos."] });
     }
 
+    const commandLabel = String(rawInput || "").trim().split(/\s+/)[0].replace(/^\//, "").toLowerCase().slice(0, 80) || "(vacío)";
+    if (!commandAllowed(rank, commandLabel)) {
+      return socket.emit("commandResult", {
+        ok: false,
+        output: [`El rango ${commandRankLabel(rank)} no puede usar /${commandLabel}.`, `Usa /help para ver los comandos de tu rango.`]
+      });
+    }
+
     const result = executeCommand(username, rawInput);
-    const commandLabel = String(rawInput || "").trim().split(/\s+/)[0].slice(0, 80) || "(vacío)";
-    addAdminActivity(`@${username} ejecutó ${commandLabel} en la consola.`);
+    addAdminActivity(`@${username} (${commandRankLabel(rank)}) ejecutó /${commandLabel} en la consola.`);
     socket.emit("commandResult", result);
   });
 
