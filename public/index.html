@@ -548,6 +548,13 @@ button,input,textarea{font:inherit}
         </div>
       </button>
 
+      <button id="settingsAccount" class="settingsItem">
+        <div class="settingsItemTitle">🔐 Cuenta</div>
+        <div class="settingsItemSub">
+          Cambiar tu @usuario y tu contraseña.
+        </div>
+      </button>
+
       <button id="settingsBlocked" class="settingsItem">
         <div class="settingsItemTitle">🚫 Usuarios bloqueados</div>
         <div class="settingsItemSub">
@@ -618,6 +625,32 @@ button,input,textarea{font:inherit}
     </div>
 
     <div id="profileError" class="modalError"></div>
+  </div>
+</div>
+
+<!-- CUENTA -->
+<div id="accountModal" class="modal">
+  <div class="modalBox">
+    <h2>🔐 Cuenta</h2>
+
+    <div style="font-weight:bold;margin:4px 0 8px">Cambiar @usuario</div>
+    <input id="accountUsername" class="modalInput" placeholder="Nuevo @usuario" maxlength="24" autocomplete="off">
+    <input id="accountUsernamePassword" class="modalInput" type="password" placeholder="Contraseña actual" autocomplete="current-password">
+    <button id="saveAccountUsername" class="primary" type="button" style="width:100%;margin-top:4px">Cambiar @usuario</button>
+
+    <div style="height:18px"></div>
+
+    <div style="font-weight:bold;margin:4px 0 8px">Cambiar contraseña</div>
+    <input id="accountCurrentPassword" class="modalInput" type="password" placeholder="Contraseña actual" autocomplete="current-password">
+    <input id="accountNewPassword" class="modalInput" type="password" placeholder="Nueva contraseña" autocomplete="new-password">
+    <input id="accountNewPassword2" class="modalInput" type="password" placeholder="Repite la nueva contraseña" autocomplete="new-password">
+    <button id="saveAccountPassword" class="primary" type="button" style="width:100%;margin-top:4px">Cambiar contraseña</button>
+
+    <div id="accountError" class="modalError"></div>
+
+    <div class="modalRow">
+      <button id="closeAccount" class="muted" type="button">Cerrar</button>
+    </div>
   </div>
 </div>
 
@@ -1395,6 +1428,40 @@ socket.on("authenticated",data => {
       handleNativeCallNotification(pending);
     }, 150);
   }
+});
+
+socket.on("accountUpdated", data => {
+  if(data?.token){
+    localStorage.setItem("chatToken", data.token);
+  }
+  if(data?.username){
+    myUsername = data.username;
+  }
+});
+
+socket.on("usernameChanged", data => {
+  const oldName = norm(data?.oldUsername || "");
+  const newName = norm(data?.newUsername || "");
+  if(!oldName || !newName) return;
+
+  if(norm(myUsername) === oldName){
+    myUsername = newName;
+  }
+  if(norm(selectedUser) === oldName){
+    selectedUser = newName;
+    chatTitle.textContent = data?.displayName || newName;
+    socket.emit("getConversation", newName);
+  }
+
+  if(conversations[oldName]){
+    conversations[newName] = conversations[oldName];
+    delete conversations[oldName];
+  }
+  if(Object.prototype.hasOwnProperty.call(unread, oldName)){
+    unread[newName] = unread[oldName];
+    delete unread[oldName];
+  }
+  renderUsers();
 });
 
 socket.on("commandAccessUpdated", data => {
@@ -3793,6 +3860,99 @@ $("settingsProfile").onclick = () => {
 
   openProfileModal();
 };
+$("settingsAccount").onclick = async () => {
+  $("settingsModal").style.display = "none";
+  $("accountError").textContent = "";
+  $("accountUsername").value = myUsername || "";
+  $("accountUsernamePassword").value = "";
+  $("accountCurrentPassword").value = "";
+  $("accountNewPassword").value = "";
+  $("accountNewPassword2").value = "";
+  $("accountModal").style.display = "flex";
+};
+
+$("closeAccount").onclick = () => {
+  $("accountModal").style.display = "none";
+};
+
+$("saveAccountUsername").onclick = async () => {
+  $("accountError").textContent = "";
+  const currentPassword = $("accountUsernamePassword").value;
+  const username = $("accountUsername").value.trim().replace(/^@+/, "");
+  if(!currentPassword){
+    $("accountError").textContent = "Introduce tu contraseña actual.";
+    return;
+  }
+  if(!username){
+    $("accountError").textContent = "Introduce el nuevo @usuario.";
+    return;
+  }
+  try{
+    const response = await fetch("/api/account/username", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + (localStorage.getItem("chatToken") || "")
+      },
+      body: JSON.stringify({ username, currentPassword })
+    });
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.error || "No se pudo cambiar el @usuario.");
+
+    localStorage.setItem("chatToken", data.token);
+    myUsername = data.username || username.toLowerCase();
+    $("accountUsernamePassword").value = "";
+    $("accountError").style.color = "#087f23";
+    $("accountError").textContent = "@usuario cambiado correctamente.";
+    setTimeout(() => {
+      $("accountError").style.color = "";
+    }, 1800);
+  }catch(error){
+    $("accountError").style.color = "#c00";
+    $("accountError").textContent = error.message;
+  }
+};
+
+$("saveAccountPassword").onclick = async () => {
+  $("accountError").textContent = "";
+  const currentPassword = $("accountCurrentPassword").value;
+  const newPassword = $("accountNewPassword").value;
+  const repeat = $("accountNewPassword2").value;
+  if(!currentPassword || !newPassword || !repeat){
+    $("accountError").textContent = "Completa los tres campos de contraseña.";
+    return;
+  }
+  if(newPassword !== repeat){
+    $("accountError").textContent = "Las nuevas contraseñas no coinciden.";
+    return;
+  }
+  try{
+    const response = await fetch("/api/account/password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + (localStorage.getItem("chatToken") || "")
+      },
+      body: JSON.stringify({ currentPassword, newPassword })
+    });
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.error || "No se pudo cambiar la contraseña.");
+
+    localStorage.setItem("chatToken", data.token);
+    $("accountCurrentPassword").value = "";
+    $("accountNewPassword").value = "";
+    $("accountNewPassword2").value = "";
+    $("accountError").style.color = "#087f23";
+    $("accountError").textContent = "Contraseña cambiada correctamente.";
+    setTimeout(() => {
+      $("accountError").style.color = "";
+    }, 1800);
+  }catch(error){
+    $("accountError").style.color = "#c00";
+    $("accountError").textContent = error.message;
+  }
+};
+
 
 $("cancelProfile").onclick = () => {
   $("profileModal").style.display = "none";
