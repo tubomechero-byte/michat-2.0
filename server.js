@@ -3230,6 +3230,16 @@ app.post("/api/contacts/add", (req, res) => {
     });
   }
 
+  sendPushToUser(target, {
+    type: "contact_request",
+    title: "📥 Nueva solicitud de contacto",
+    from: list[meIdx].displayName || list[meIdx].username,
+    sender: norm(u.username),
+    username: norm(u.username),
+    body: `@${list[meIdx].username} te ha enviado una solicitud de contacto.`,
+    message: `@${list[meIdx].username} te ha enviado una solicitud de contacto.`
+  });
+
   res.json({ success: true, status: "outgoing" });
 });
 
@@ -3993,6 +4003,16 @@ io.on("connection", socket => {
           online: true
         });
       }
+
+      sendPushToUser(target, {
+        type: "contact_request",
+        title: "📥 Nueva solicitud de contacto",
+        from: list[meIdx].displayName || list[meIdx].username,
+        sender: norm(me),
+        username: norm(me),
+        body: `@${list[meIdx].username} te ha enviado una solicitud de contacto.`,
+        message: `@${list[meIdx].username} te ha enviado una solicitud de contacto.`
+      });
 
       socket.emit("contactRequestSent", {
         username: target,
