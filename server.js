@@ -377,10 +377,206 @@ function commandHelpLines() {
     "/online — usuarios conectados ahora",
     "/users [límite] — lista de usuarios registrados",
     "/whois @usuario — información básica de un usuario",
+    "/kick @usuario [motivo] — desconecta a un usuario",
+    "/ban @usuario <duración> [motivo] — banea por tiempo o permanentemente",
+    "/unban @usuario — quita un baneo activo",
+    "/aviso @usuario [título] | mensaje — envía un aviso de moderación",
     "/time — fecha y hora del servidor",
     "/echo texto — repite un texto",
     "/clear — limpia esta consola"
   ];
+}
+
+function commandKick(username, args) {
+  const parts = String(args || "").trim().split(/\s+/).filter(Boolean);
+  const target = norm((parts.shift() || "").replace(/^@+/, ""));
+  const reason = parts.join(" ").slice(0, 500);
+
+  if (!target) return { ok: false, output: ["Uso: /kick @usuario [motivo]"] };
+  if (target === norm(username)) return { ok: false, output: ["No puedes expulsarte a ti mismo."] };
+
+  const user = getUser(target);
+  if (!user) return { ok: false, output: [`No existe @${target}.`] };
+
+  let disconnected = false;
+  for (const [socketId, name] of online.entries()) {
+    if (norm(name) !== target) continue;
+    const targetSocket = io.sockets.sockets.get(socketId);
+    if (targetSocket) {
+      targetSocket.emit("kicked", { reason, kickedBy: username, createdAt: Date.now() });
+      targetSocket.disconnect(true);
+      disconnected = true;
+    }
+  }
+
+  addAdminActivity(`@${username} expulsó a @${user.username} desde la consola${reason ? `: ${reason}` : "."}`);
+  return {
+    ok: true,
+    output: [disconnected ? `@${user.username} ha sido expulsado.` : `@${user.username} está desconectado; no había una sesión activa para expulsar.`, ...(reason ? [`Motivo: ${reason}`] : [])]
+  };
+}
+
+function commandBan(username, args) {
+  const parts = String(args || "").trim().split(/\s+/).filter(Boolean);
+  const target = norm((parts.shift() || "").replace(/^@+/, ""));
+  const durationInput = parts.shift() || "";
+  const reason = parts.join(" ").slice(0, 500);
+
+  if (!target || !durationInput) return { ok: false, output: ["Uso: /ban @usuario <duración> [motivo]", "Ejemplos: /ban @juan 30m spam · /ban @juan 7d insultos · /ban @juan 0 permanente"] };
+  if (target === norm(username)) return { ok: false, output: ["No puedes banearte a ti mismo."] };
+
+  const user = getUser(target);
+  if (!user) return { ok: false, output: [`No existe @${target}.`] };
+
+  const duration = parseBanDuration(durationInput);
+  if (!duration) return { ok: false, output: ["Duración inválida. Usa 30m, 2h, 7d, 1w o 0/permanente."] };
+
+  const now = Date.now();
+  const list = bans();
+  const existing = activeBanFor(target);
+  if (existing) {
+    existing.revokedAt = now;
+    existing.revokedBy = username;
+    existing.status = "revoked";
+  }
+
+  const ban = {
+    id: now + "-" + crypto.randomBytes(5).toString("hex"),
+    username: norm(user.username),
+    displayName: user.displayName || user.username,
+    reason,
+    createdAt: now,
+    expiresAt: duration.expiresAt,
+    createdBy: username,
+    status: "active"
+  };
+
+  list.push(ban);
+  if (list.length > 2000) list.splice(0, list.length - 2000);
+  saveBans(list);
+
+  let disconnected = false;
+  for (const [socketId, name] of online.entries()) {
+    if (norm(name) !== target) continue;
+    const targetSocket = io.sockets.sockets.get(socketId);
+    if (targetSocket) {
+      online.delete(socketId);
+      targetSocket.emit("banned", {
+        reason: ban.reason,
+        expiresAt: ban.expiresAt,
+        createdAt: ban.createdAt
+      });
+      targetSocket.disconnect(true);
+      disconnected = true;
+    }
+  }
+
+  sendUserList();
+  addAdminActivity(`@${username} baneó a @${user.username} desde la consola${duration.label === "Permanente" ? " permanentemente" : ` durante ${duration.minutes} minutos`}${reason ? `: ${reason}` : "."}`);
+
+  const until = duration.expiresAt ? ` hasta ${new Date(duration.expiresAt).toLocaleString("es-ES")}` : " permanentemente";
+  return {
+    ok: true,
+    output: [
+      `@${user.username} ha sido baneado${until}.`,
+      ...(reason ? [`Motivo: ${reason}`] : []),
+      ...(disconnected ? ["La sesión activa fue desconectada."] : ["El baneo se aplicará al próximo intento de conexión."])
+    ]
+  };
+}
+
+function commandUnban(username, args) {
+  const target = norm(String(args || "").trim().replace(/^@+/, ""));
+  if (!target) return { ok: false, output: ["Uso: /unban @usuario"] };
+
+  const user = getUser(target);
+  if (!user) return { ok: false, output: [`No existe @${target}.`] };
+
+  const list = bans();
+  const now = Date.now();
+  let changed = false;
+  for (const item of list) {
+    if (norm(item.username) === target && !item.revokedAt && (!item.expiresAt || Number(item.expiresAt) > now)) {
+      item.revokedAt = now;
+      item.revokedBy = username;
+      item.status = "revoked";
+      changed = true;
+    }
+  }
+  if (changed) saveBans(list);
+
+  addAdminActivity(`@${username} quitó el baneo de @${user.username} desde la consola.`);
+  return { ok: true, output: [changed ? `Baneo de @${user.username} retirado.` : `@${user.username} no tiene un baneo activo.`] };
+}
+
+function commandModerationNotice(username, args) {
+  const raw = String(args || "").trim();
+  const targetMatch = raw.match(/^(\*|@?[a-zA-Z0-9_.-]+)/);
+  if (!targetMatch) return { ok: false, output: ["Uso: /aviso @usuario [título] | mensaje", "Usa /aviso * [título] | mensaje para enviarlo a todos."] };
+
+  const targetToken = targetMatch[1];
+  const target = targetToken === "*" ? "*" : norm(targetToken.replace(/^@+/, ""));
+  let remainder = raw.slice(targetMatch[0].length).trim();
+  let title = "Aviso de moderación";
+  let message = remainder;
+
+  if (remainder.includes("|")) {
+    const parts = remainder.split("|");
+    title = String(parts.shift() || "Aviso de moderación").trim() || "Aviso de moderación";
+    message = parts.join("|").trim();
+  }
+
+  if (!message) return { ok: false, output: ["Escribe el mensaje del aviso.", "Ejemplo: /aviso @juan Reglas | Recuerda respetar las normas."] };
+  if (title.length > 120) return { ok: false, output: ["El título no puede superar 120 caracteres."] };
+  if (message.length > 2000) return { ok: false, output: ["El aviso no puede superar 2000 caracteres."] };
+
+  let recipients = [];
+  if (target === "*") {
+    recipients = users().map(u => norm(u.username)).filter(Boolean);
+  } else {
+    const user = getUser(target);
+    if (!user) return { ok: false, output: [`No existe @${target}.`] };
+    recipients = [norm(user.username)];
+  }
+
+  const notice = {
+    id: Date.now() + "-" + crypto.randomBytes(5).toString("hex"),
+    title,
+    message,
+    target: target === "*" ? "*" : recipients[0],
+    createdAt: Date.now(),
+    createdBy: username
+  };
+
+  const list = moderationNotices();
+  list.push(notice);
+  if (list.length > 1000) list.splice(0, list.length - 1000);
+  saveModerationNotices(list);
+
+  const payload = {
+    type: "moderation",
+    title: notice.title,
+    from: "Moderación",
+    body: notice.message,
+    message: notice.message,
+    username: ""
+  };
+
+  for (const recipient of recipients) {
+    const sid = socketIdFor(recipient);
+    if (sid) {
+      io.to(sid).emit("moderationNotice", {
+        id: notice.id,
+        title: notice.title,
+        message: notice.message,
+        createdAt: notice.createdAt
+      });
+    }
+    sendPushToUser(recipient, payload);
+  }
+
+  addAdminActivity(`@${username} envió un aviso de moderación desde la consola${target === "*" ? " a todos los usuarios" : " a @" + recipients[0]}.`);
+  return { ok: true, output: [`Aviso enviado a ${recipients.length} usuario${recipients.length === 1 ? "" : "s"}.`, `Título: ${title}`] };
 }
 
 function executeCommand(username, rawInput) {
@@ -475,6 +671,21 @@ function executeCommand(username, rawInput) {
         ]
       };
     }
+
+    case "kick":
+      return commandKick(username, args);
+
+    case "ban":
+      return commandBan(username, args);
+
+    case "unban":
+      return commandUnban(username, args);
+
+    case "aviso":
+    case "warn":
+    case "moderacion":
+    case "moderación":
+      return commandModerationNotice(username, args);
 
     case "time":
       return { ok: true, output: [new Date().toLocaleString("es-ES", { dateStyle: "full", timeStyle: "medium" })] };
