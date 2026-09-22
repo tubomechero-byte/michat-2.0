@@ -346,7 +346,7 @@ button,input,textarea{font:inherit}
     <h1>💬 Mi Chat</h1>
     <div id="authDescription">Inicia sesión para entrar.</div>
 
-    <input id="authUsername" class="authInput" placeholder="Usuario, correo o teléfono" maxlength="254" autocomplete="username email tel">
+    <input id="authUsername" class="authInput" placeholder="Usuario, correo o teléfono" maxlength="254" autocomplete="username">
     <input id="authEmail" class="authInput" type="email" placeholder="Correo electrónico (opcional)" autocomplete="email" style="display:none">
     <input id="authPhone" class="authInput" type="tel" placeholder="Teléfono (opcional)" autocomplete="tel" style="display:none">
     <div id="authEmailHint" style="display:none;color:#777;font-size:13px;margin:-4px 0 10px">Puedes dejar el correo y el teléfono vacíos y añadirlos más tarde en tu perfil.</div>
@@ -1065,6 +1065,15 @@ switchAuth.onclick = () => {
   authUsername.maxLength = authMode === "login" ? 254 : 24;
   authUsername.autocomplete = authMode === "login" ? "username email" : "username";
   authEmail.autocomplete = "email";
+
+  if (authMode === "register") {
+    authPassword.autocomplete = "new-password";
+    authEmail.value = "";
+    const authPhone = $("authPhone");
+    if (authPhone) authPhone.value = "";
+  } else {
+    authPassword.autocomplete = "current-password";
+  }
 
   switchAuth.textContent =
     authMode === "login"
