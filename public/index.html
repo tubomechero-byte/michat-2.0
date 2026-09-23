@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -532,6 +531,7 @@ button,input,textarea{font:inherit}
       <button id="createGroupButton" class="primary" type="button">Crear grupo</button>
     </div>
   </div>
+</div>
 <div id="groupAddModal" class="modal">
   <div class="modalBox" style="max-width:520px">
     <h2>👥 Añadir personas</h2>
@@ -1819,6 +1819,8 @@ socket.on("groupUpdated", group => {
     headerAvatar.classList.toggle("canEdit", canEdit);
     headerAvatar.title = canEdit ? "Cambiar foto del grupo" : "";
     headerAvatar.onclick = canEdit ? () => groupAvatarInput?.click() : null;
+    chatTitle.textContent = group.name || "Grupo";
+    chatSubtitle.textContent = `👥 ${Number(group.memberCount || (group.members || []).length)} miembros`;
   }
   refreshGroupAddButton();
 });
@@ -1975,10 +1977,14 @@ function refreshGroupAddButton(){
   const group=allGroups.find(g=>String(g.id)===String(selectedGroupId));
   const isAdmin=!!group && Array.isArray(group.admins) && group.admins.some(name=>norm(name)===norm(myUsername));
   const canAdd=isAdmin && Number(group.memberCount||(group.members||[]).length)<50;
-  groupAddMembersButton?.classList.toggle('visible',canAdd);
-  groupAddMembersButton?.classList.toggle('hidden',!canAdd);
-  groupRenameButton?.classList.toggle('visible',isAdmin);
-  groupRenameButton?.classList.toggle('hidden',!isAdmin);
+  if(groupAddMembersButton){
+    groupAddMembersButton.classList.toggle('visible',canAdd);
+    groupAddMembersButton.classList.toggle('hidden',!canAdd);
+  }
+  if(groupRenameButton){
+    groupRenameButton.classList.toggle('visible',isAdmin);
+    groupRenameButton.classList.toggle('hidden',!isAdmin);
+  }
 }
 function openGroupChat(group){
   if(!group?.id) return;
