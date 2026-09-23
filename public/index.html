@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -480,7 +481,7 @@ button,input,textarea{font:inherit}
         <div class="chatTools">
           <button id="callButton" class="toolBtn callBtn hidden">📞 Llamar</button>
           <button id="hangupButton" class="toolBtn hangBtn hidden">📵 Colgar</button>
-          <button id="groupRenameButton" class="toolBtn groupAddBtn hidden" type="button">✏️ Nombre</button><button id="groupAddMembersButton" class="toolBtn groupAddBtn hidden" type="button">👥 Añadir</button><button id="blockCurrentButton" class="toolBtn hidden">🚫 Bloquear</button>
+          <button id="groupRenameButton" class="toolBtn groupAddBtn hidden" type="button">✏️ Nombre</button><button id="groupAddMembersButton" class="toolBtn groupAddBtn hidden" type="button">👥 Añadir</button><button id="blockCurrentButton" class="toolBtn hidden" type="button">🚫 Bloquear</button>
         </div>
 
       </header>
@@ -938,6 +939,7 @@ const chatTitle = $("chatTitle");
 const chatSubtitle = $("chatSubtitle");
 const headerAvatar = $("headerAvatar");
 const blockCurrentButton = $("blockCurrentButton");
+let blockedUsersClient = new Set();
 const callButton = $("callButton");
 const hangupButton = $("hangupButton");
 
@@ -1828,6 +1830,8 @@ socket.on("groupRemoved", data => { const id=String(data?.id||""); allGroups=all
 socket.on("groupError", message => { if(groupError) groupError.textContent=message||"No se pudo crear el grupo."; });
 socket.on("groupAvatarError", message => { showNotification("Foto del grupo", message || "No se pudo cambiar la foto."); });
 
+socket.emit("getBlockedUsers");
+
 socket.on("relationshipData", data => {
   relationshipData = {
     contacts: Array.isArray(data?.contacts) ? data.contacts.map(norm) : [],
@@ -1985,6 +1989,16 @@ function refreshGroupAddButton(){
     groupRenameButton.classList.toggle('visible',isAdmin);
     groupRenameButton.classList.toggle('hidden',!isAdmin);
   }
+}
+function hideGroupTools(){
+  if(groupAddMembersButton){ groupAddMembersButton.classList.add('hidden'); groupAddMembersButton.classList.remove('visible'); }
+  if(groupRenameButton){ groupRenameButton.classList.add('hidden'); groupRenameButton.classList.remove('visible'); }
+}
+function refreshBlockButton(){
+  if(!blockCurrentButton) return;
+  if(!selectedUser || selectedGroupId){ blockCurrentButton.classList.add('hidden'); return; }
+  blockCurrentButton.classList.remove('hidden');
+  blockCurrentButton.textContent = blockedUsersClient.has(norm(selectedUser)) ? '✅ Desbloquear' : '🚫 Bloquear';
 }
 function openGroupChat(group){
   if(!group?.id) return;
@@ -2312,6 +2326,7 @@ function openChat(
 ){
 
   selectedGroupId = "";
+  hideGroupTools();
   headerAvatar.className = "avatar";
   headerAvatar.onclick = null;
   headerAvatar.title = "";
@@ -2351,8 +2366,7 @@ function openChat(
             .toUpperCase()
         );
 
-  blockCurrentButton.classList.remove("hidden");
-  blockCurrentButton.textContent = "🚫 Bloquear";
+  refreshBlockButton();
 
   callButton.classList.remove("hidden");
   hangupButton.classList.add("hidden");
@@ -4027,44 +4041,44 @@ socket.on(
    BLOQUEOS
 ===================================================== */
 
-blockCurrentButton.onclick = () => {
+if(blockCurrentButton){
+  blockCurrentButton.onclick = () => {
+    const target = norm(selectedUser || "");
+    if(!target || selectedGroupId){
+      showNotification("Bloqueo", "Selecciona un contacto para bloquearlo.");
+      return;
+    }
+    if(blockedUsersClient.has(target)) socket.emit("unblockUser", target);
+    else socket.emit("blockUser", target);
+  };
+}
 
-  if(!selectedUser){
-    return;
-  }
+socket.on("blockedUsers", data => {
+  blockedUsersClient = new Set(Array.isArray(data) ? data.map(norm) : []);
+  refreshBlockButton();
+});
 
-  socket.emit(
-    "blockUser",
-    selectedUser
-  );
-};
-
-socket.on(
-  "blockUpdated",
-  data => {
-
-    if(
-      data.blocked &&
-      selectedUser ===
-        data.username
-    ){
-
-      messagesContainer.innerHTML =
-        `<div class="empty">
-          Has bloqueado a este usuario.
-        </div>`;
-
-      messageInput.disabled =
-        true;
-
-      sendButton.disabled =
-        true;
-
-      blockCurrentButton.textContent =
-        "🚫 Bloqueado";
+socket.on("blockUpdated", data => {
+  const target = norm(data?.username || "");
+  if(!target) return;
+  if(data?.blocked) blockedUsersClient.add(target);
+  else blockedUsersClient.delete(target);
+  if(selectedUser && norm(selectedUser) === target){
+    if(data?.blocked){
+      messagesContainer.innerHTML = `<div class="empty">Has bloqueado a este usuario.</div>`;
+      messageInput.disabled = true;
+      sendButton.disabled = true;
+      attachButton.disabled = true;
+      showNotification("Usuario bloqueado", `@${target} ha sido bloqueado.`);
+    } else {
+      messageInput.disabled = false;
+      sendButton.disabled = false;
+      attachButton.disabled = false;
+      showNotification("Usuario desbloqueado", `@${target} ha sido desbloqueado.`);
     }
   }
-);
+  refreshBlockButton();
+});
 
 /* =====================================================
    CONFIGURACIÓN
