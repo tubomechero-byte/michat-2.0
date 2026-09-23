@@ -276,6 +276,54 @@ function saveMessages(v) {
   write(MESSAGES_FILE, v);
 }
 
+// Filtro básico de moderación automática para mensajes de texto.
+// Se aplica en servidor para que el mensaje no llegue ni se persista
+// aunque el cliente intente saltarse el filtro.
+const AUTO_MODERATION_TERMS = [
+  "puto", "puta", "putas", "putos", "mierda", "joder", "jodete",
+  "cabron", "cabrona", "cabrones", "gilipollas", "imbecil", "idiota",
+  "coño", "cono", "follar", "follando", "follame", "follarte",
+  "polla", "pollas", "pene", "vagina", "tetas", "tetitas", "culo",
+  "porno", "porn", "xxx", "nudes", "desnudos", "desnuda", "masturbar",
+  "masturbacion", "masturbación", "blowjob", "dick", "fuck", "bitch",
+  "nigger", "nigga", "whore"
+];
+
+function moderationNormalize(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[0@]/g, "o")
+    .replace(/[1!|]/g, "i")
+    .replace(/[3]/g, "e")
+    .replace(/[4@]/g, "a")
+    .replace(/[5$]/g, "s")
+    .replace(/[7]/g, "t")
+    .replace(/[\s._\-]+/g, " ")
+    .replace(/[^a-z0-9áéíóúüñ ]+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function findInappropriateTerm(value) {
+  const text = moderationNormalize(value);
+  if (!text) return null;
+
+  for (const term of AUTO_MODERATION_TERMS) {
+    const needle = moderationNormalize(term);
+    if (!needle) continue;
+    const pattern = new RegExp(`(?:^|\\s)${needle.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}(?=\\s|$)`, "i");
+    if (pattern.test(text)) return term;
+  }
+
+  return null;
+}
+
+function isInappropriateMessage(text, fileName = "") {
+  return findInappropriateTerm(text) || findInappropriateTerm(fileName);
+}
+
 function sessions() {
   return read(SESSIONS_FILE, {});
 }
@@ -4957,6 +5005,15 @@ io.on("connection", socket => {
       return socket.emit("messageError", "El archivo no es válido, no está permitido o supera el límite de 7 MB.");
     }
 
+    const blockedTerm = isInappropriateMessage(text, hasMedia ? mediaName : "");
+    if (blockedTerm) {
+      addAdminActivity(`Mensaje bloqueado automáticamente por moderación: @${me} -> grupo «${group.name}».`);
+      return socket.emit(
+        "messageError",
+        "Mensaje eliminado por moderación automática. Revisa el contenido e inténtalo de nuevo."
+      );
+    }
+
     const message = {
       id: Date.now() + "-" + crypto.randomBytes(5).toString("hex"),
       from: norm(me),
@@ -5278,6 +5335,15 @@ io.on("connection", socket => {
         return socket.emit(
           "messageError",
           "El archivo no es válido, no está permitido o supera el límite de 7 MB."
+        );
+      }
+
+      const blockedTerm = isInappropriateMessage(text, hasMedia ? mediaName : "");
+      if (blockedTerm) {
+        addAdminActivity(`Mensaje bloqueado automáticamente por moderación: @${me} -> @${to}.`);
+        return socket.emit(
+          "messageError",
+          "Mensaje eliminado por moderación automática. Revisa el contenido e inténtalo de nuevo."
         );
       }
 
