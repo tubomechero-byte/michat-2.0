@@ -2208,8 +2208,7 @@ app.delete("/api/admin/stories/:id", requireAdmin, (req, res) => {
   const removed = list.splice(index, 1)[0];
   saveStories(list);
 
-  io.emit("storyDeleted", { id: removed.id });
-  io.emit("storiesUpdated", list);
+  broadcastStoryDeleted(removed);
 
   console.log(
     "Administrador eliminó el estado " +
@@ -2579,16 +2578,30 @@ function sendPushToUser(username, payload) {
 // =====================================================
 
 function sendUserList() {
-  const list = users().map(u => ({
-    username: u.username,
-    displayName: u.displayName || u.username,
-    profileImage: u.profileImage || "",
-    online: [...online.values()].some(
-      x => norm(x) === norm(u.username)
-    )
-  }));
+  const all = users();
+  const onlineUsers = new Set(
+    [...online.values()].map(name => norm(name))
+  );
 
-  io.emit("userList", list);
+  // Cada usuario recibe una lista personalizada: el estado de presencia
+  // solo se revela para contactos aceptados. Para los demás, el estado
+  // queda en null y nunca se envía como online/offline.
+  for (const [socketId, viewerName] of online.entries()) {
+    const socket = io.sockets.sockets.get(socketId);
+    if (!socket) continue;
+
+    const viewer = getUser(viewerName);
+    const list = all.map(u => ({
+      username: u.username,
+      displayName: u.displayName || u.username,
+      profileImage: u.profileImage || "",
+      online: areContacts(viewerName, u.username)
+        ? onlineUsers.has(norm(u.username))
+        : null
+    }));
+
+    socket.emit("userList", list);
+  }
 }
 
 function getContactList(username) {
@@ -2619,6 +2632,53 @@ function getContactList(username) {
         x => norm(x) === norm(u.username)
       )
     }));
+}
+
+function canViewStory(viewerUsername, storyOwnerUsername) {
+  const viewer = norm(viewerUsername);
+  const owner = norm(storyOwnerUsername);
+
+  if (!viewer || !owner) return false;
+  if (viewer === owner) return true;
+
+  return areContacts(viewer, owner);
+}
+
+function visibleStoriesFor(username) {
+  return cleanExpiredStories().filter(
+    story => canViewStory(username, story.username)
+  );
+}
+
+function emitStoriesToSocket(socketId, username) {
+  io.to(socketId).emit(
+    "storiesUpdated",
+    visibleStoriesFor(username)
+  );
+}
+
+function broadcastVisibleStories() {
+  for (const [socketId, username] of online.entries()) {
+    emitStoriesToSocket(socketId, username);
+  }
+}
+
+function broadcastStoryCreated(story) {
+  for (const [socketId, username] of online.entries()) {
+    if (canViewStory(username, story.username)) {
+      io.to(socketId).emit("storyCreated", story);
+      emitStoriesToSocket(socketId, username);
+    }
+  }
+}
+
+function broadcastStoryDeleted(story) {
+  for (const [socketId, username] of online.entries()) {
+    if (canViewStory(username, story.username)) {
+      io.to(socketId).emit("storyDeleted", { id: story.id });
+      emitStoriesToSocket(socketId, username);
+    }
+  }
 }
 
 function ensureContactRequests(user) {
@@ -2682,7 +2742,10 @@ function emitRelationshipToUser(username) {
   const sid = socketIdFor(username);
   if (!sid) return;
   const targetSocket = io.sockets.sockets.get(sid);
-  if (targetSocket) emitRelationshipData(targetSocket, username);
+  if (targetSocket) {
+    emitRelationshipData(targetSocket, username);
+    emitStoriesToSocket(sid, username);
+  }
 }
 
 function socketIdFor(username) {
@@ -3678,7 +3741,7 @@ app.get("/api/stories", (req, res) => {
   }
 
   const list =
-    cleanExpiredStories()
+    visibleStoriesFor(u.username)
       .map(story => ({
         ...story,
         views:
@@ -3806,15 +3869,7 @@ app.post("/api/stories", (req, res) => {
 
   saveStories(list);
 
-  io.emit(
-    "storyCreated",
-    story
-  );
-
-  io.emit(
-    "storiesUpdated",
-    list
-  );
+  broadcastStoryCreated(story);
 
   res.json({
     success: true,
@@ -3854,6 +3909,13 @@ app.post("/api/stories/:id/view", (req, res) => {
   }
 
   const story = list[idx];
+
+  if (!canViewStory(u.username, list[idx].username)) {
+    return res.status(403).json({
+      error:
+        "No puedes ver esta historia."
+    });
+  }
 
   if (!Array.isArray(story.views)) {
     story.views = [];
@@ -4021,17 +4083,7 @@ app.delete("/api/stories/:id", (req, res) => {
 
   saveStories(list);
 
-  io.emit(
-    "storyDeleted",
-    {
-      id: removed.id
-    }
-  );
-
-  io.emit(
-    "storiesUpdated",
-    list
-  );
+  broadcastStoryDeleted(removed);
 
   res.json({
     success: true
@@ -4115,7 +4167,7 @@ io.on("connection", socket => {
 
     socket.emit(
       "storiesData",
-      cleanExpiredStories()
+      visibleStoriesFor(u.username)
     );
 
     socket.emit(
@@ -4424,7 +4476,7 @@ io.on("connection", socket => {
 
       socket.emit(
         "storiesData",
-        cleanExpiredStories()
+        visibleStoriesFor(me)
       );
     }
   );
@@ -5460,10 +5512,7 @@ setInterval(() => {
   if (
     before !== after.length
   ) {
-    io.emit(
-      "storiesUpdated",
-      after
-    );
+    broadcastVisibleStories();
   }
 }, 60 * 1000);
 
