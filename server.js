@@ -4633,6 +4633,62 @@ io.on("connection", socket => {
     emitGroupUnread(socket, me);
   });
 
+  socket.on("addGroupMembers", data => {
+    const me = norm(online.get(socket.id) || "");
+    const groupId = String(data?.groupId || "").trim();
+    const requested = Array.isArray(data?.members) ? data.members.map(norm).filter(Boolean) : [];
+    if (!me || !groupId || !requested.length) return;
+
+    const list = groups();
+    const index = list.findIndex(item => String(item.id) === groupId);
+    if (index < 0) return socket.emit("groupAddMembersError", "No existe ese grupo.");
+    const group = list[index];
+    if (!isGroupMember(group, me)) return socket.emit("groupAddMembersError", "No perteneces a este grupo.");
+    if (!Array.isArray(group.admins) || !group.admins.some(name => norm(name) === me)) {
+      return socket.emit("groupAddMembersError", "Solo un administrador puede añadir personas al grupo.");
+    }
+
+    const current = new Set((group.members || []).map(norm));
+    const additions = Array.from(new Set(requested)).filter(username => username !== me && !current.has(username));
+    if (!additions.length) return socket.emit("groupAddMembersError", "No has seleccionado nuevos contactos.");
+    if ((group.members?.length || 0) + additions.length > 50) {
+      return socket.emit("groupAddMembersError", `El grupo admite como máximo 50 personas. Ahora tiene ${group.members?.length || 0}.`);
+    }
+
+    for (const member of additions) {
+      if (!getUser(member)) return socket.emit("groupAddMembersError", `No existe el usuario @${member}.`);
+      if (!areContacts(me, member)) return socket.emit("groupAddMembersError", `Solo puedes añadir a tus contactos: @${member}.`);
+      if (isEitherBlocked(me, member)) return socket.emit("groupAddMembersError", `No puedes añadir a @${member}.`);
+    }
+
+    group.members = Array.from(new Set([...(group.members || []).map(norm), ...additions]));
+    list[index] = group;
+    saveGroups(list);
+    addAdminActivity(`@${me} añadió ${additions.length} persona${additions.length === 1 ? "" : "s"} al grupo «${group.name}».`);
+
+    const summary = groupSummary(group);
+    for (const username of group.members || []) {
+      const sid = socketIdFor(username);
+      if (sid) {
+        if (additions.some(name => norm(name) === norm(username))) io.to(sid).emit("groupCreated", summary);
+        else io.to(sid).emit("groupUpdated", summary);
+      }
+    }
+    for (const username of additions) {
+      sendPushToUser(username, {
+        type: "group_invite",
+        title: `👥 Te han añadido a ${group.name}`,
+        body: `@${me} te ha añadido al grupo.`,
+        groupId: group.id,
+        groupName: group.name,
+        username: me,
+        message: `@${me} te ha añadido al grupo ${group.name}.`
+      });
+    }
+    emitGroupsData(socket, me);
+    emitGroupUnreadToMembers(group);
+  });
+
   socket.on("getGroupConversation", groupId => {
     const me = online.get(socket.id);
     const group = getGroup(groupId);
