@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -47,6 +48,7 @@ button,input,textarea{font:inherit}
 
 
 .search{padding:10px;border-bottom:1px solid #ddd}
+.groupsSection{padding:8px 10px 2px;border-bottom:1px solid #eee}.groupsSectionTitle{display:flex;justify-content:space-between;padding:4px 4px 8px;font-size:12px;color:#777;font-weight:bold;text-transform:uppercase}.groupList{display:flex;flex-direction:column;gap:4px;padding-bottom:6px}.groupRow{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;cursor:pointer}.groupRow:hover{background:#f3f4f6}.groupAvatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#dbeafe;flex:0 0 auto}.groupInfo{min-width:0;flex:1}.groupName{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupSub{font-size:12px;color:#777;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupUnread{min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#2563eb;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center}.groupCreateList{display:grid;gap:8px;max-height:320px;overflow:auto;padding:6px 0}.groupMemberOption{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid #e5e7eb;border-radius:10px}.groupMemberOption input{width:18px;height:18px}
 .search input{width:100%;border:0;outline:none;padding:12px 14px;border-radius:20px;background:#f0f2f5}
 #users{flex:1;overflow-y:auto}
 
@@ -438,12 +440,20 @@ button,input,textarea{font:inherit}
         <button class="actionBtn" id="newChatButton">
           ➕ Enviar solicitud
         </button>
+        <button class="actionBtn" id="newGroupButton">
+          👥 Crear grupo
+        </button>
         <button class="actionBtn requestBtn" id="requestsButton">
           📥 Solicitudes <span id="requestsBadge" class="requestBadge hidden">0</span>
         </button>
         <button class="actionBtn commandBtn hidden" id="commandButton" type="button">
           🖥️ Consola de comandos
         </button>
+      </div>
+
+      <div id="groupsSection" class="groupsSection">
+        <div class="groupsSectionTitle"><span>Grupos</span><span id="groupsCount">0</span></div>
+        <div id="groupList" class="groupList"></div>
       </div>
 
       <div id="storiesBar" class="storiesBar"></div>
@@ -510,6 +520,21 @@ button,input,textarea{font:inherit}
     <textarea id="moderationAppealText" class="moderationAppealText" maxlength="3000" placeholder="Explica por qué consideras que el aviso debería revisarse..."></textarea>
     <div id="moderationModalStatus" class="moderationModalStatus"></div>
     <div class="moderationModalActions"><button id="closeModerationModalBottom" class="moderationClose" type="button" aria-label="Cerrar aviso de moderación">Cerrar</button><button id="sendModerationAppeal" class="moderationAppeal" type="button">Enviar apelación</button></div>
+  </div>
+</div>
+
+<!-- NUEVO GRUPO -->
+<div id="groupModal" class="modal">
+  <div class="modalBox" style="max-width:520px">
+    <h2>👥 Crear grupo</h2>
+    <p>Elige un nombre y añade a tus contactos aceptados.</p>
+    <input id="groupNameInput" class="modalInput" maxlength="50" placeholder="Nombre del grupo">
+    <div id="groupMemberOptions" class="groupCreateList"></div>
+    <div id="groupError" class="modalError"></div>
+    <div class="modalRow">
+      <button id="cancelGroup" class="muted" type="button">Cancelar</button>
+      <button id="createGroupButton" class="primary" type="button">Crear grupo</button>
+    </div>
   </div>
 </div>
 
@@ -855,7 +880,10 @@ const socket = io({autoConnect:false});
 
 let myUsername = "";
 let selectedUser = "";
+let selectedGroupId = "";
 let allUsers = [];
+let allGroups = [];
+let groupUnread = {};
 let authMode = "login";
 let unread = {};
 let conversations = {};
@@ -878,6 +906,13 @@ const welcomeModal = $("welcomeModal");
 const closeWelcomeModal = $("closeWelcomeModal");
 
 const usersContainer = $("users");
+const groupList = $("groupList");
+const groupsCount = $("groupsCount");
+const newGroupButton = $("newGroupButton");
+const groupModal = $("groupModal");
+const groupNameInput = $("groupNameInput");
+const groupMemberOptions = $("groupMemberOptions");
+const groupError = $("groupError");
 const searchInput = $("searchInput");
 const messagesContainer = $("messages");
 const messageInput = $("messageInput");
@@ -1499,6 +1534,7 @@ socket.on("authenticated",data => {
     myUsername;
   setCommandConsoleAccess(Boolean(data.commandConsoleEnabled), data.commandConsoleRank, data.commandConsoleRankLabel);
   loadStories();
+  socket.emit("getGroups");
 
   // Refrescamos los avisos después de autenticar para no depender de una carrera de eventos.
   setTimeout(() => {
@@ -1755,6 +1791,14 @@ function renderRequests(){
   });
 }
 
+
+socket.on("groupsData", data => { allGroups = Array.isArray(data) ? data : []; renderGroups(); });
+socket.on("groupUnreadCounts", data => { groupUnread = data && typeof data === "object" ? data : {}; renderGroups(); });
+socket.on("groupCreated", group => { if(group?.id && !allGroups.some(g=>String(g.id)===String(group.id))) allGroups.unshift(group); renderGroups(); showNotification("Grupo creado", `Has creado «${group?.name || "Grupo"}».`); });
+socket.on("groupUpdated", group => { if(!group?.id) return; allGroups = allGroups.map(g=>String(g.id)===String(group.id)?group:g); renderGroups(); });
+socket.on("groupRemoved", data => { const id=String(data?.id||""); allGroups=allGroups.filter(g=>String(g.id)!==id); delete groupUnread[id]; if(String(selectedGroupId)===id){selectedGroupId=""; selectedUser=""; messageInput.disabled=true; sendButton.disabled=true; attachButton.disabled=true; messagesContainer.innerHTML='<div class="empty">Has salido del grupo.</div>'; chatTitle.textContent="Selecciona una conversación"; chatSubtitle.textContent="Usa «Nuevo chat» o «Crear grupo» para empezar.";} renderGroups(); });
+socket.on("groupError", message => { if(groupError) groupError.textContent=message||"No se pudo crear el grupo."; });
+
 socket.on("relationshipData", data => {
   relationshipData = {
     contacts: Array.isArray(data?.contacts) ? data.contacts.map(norm) : [],
@@ -1869,6 +1913,34 @@ socket.on("userList",users => {
   renderUsers();
 });
 
+
+function renderGroups(){
+  if(!groupList) return;
+  groupList.innerHTML="";
+  groupsCount.textContent=String(allGroups.length);
+  if(!allGroups.length){groupList.innerHTML='<div style="padding:2px 4px 8px;color:#999;font-size:12px">Todavía no tienes grupos.</div>';return;}
+  allGroups.forEach(group=>{
+    const row=document.createElement("div"); row.className="groupRow";
+    const count=groupUnread[group.id]||0;
+    row.innerHTML=`<div class="groupAvatar">👥</div><div class="groupInfo"><div class="groupName">${esc(group.name||"Grupo")}</div><div class="groupSub">${Number(group.memberCount||(group.members||[]).length)} miembros</div></div>${count?`<div class="groupUnread">${count>99?"99+":count}</div>`:""}`;
+    row.onclick=()=>openGroupChat(group); groupList.appendChild(row);
+  });
+}
+function renderGroupContactOptions(){
+  if(!groupMemberOptions) return;
+  const contacts=allUsers.filter(u=>u&&isContact(u.username));
+  if(!contacts.length){groupMemberOptions.innerHTML='<div style="padding:14px;color:#777;text-align:center">Necesitas tener al menos un contacto aceptado para crear un grupo.</div>';return;}
+  groupMemberOptions.innerHTML=contacts.map(user=>`<label class="groupMemberOption"><input type="checkbox" value="${esc(user.username)}" data-group-member><div class="avatar" style="width:34px;height:34px">${avatarHtml(user)}</div><div style="min-width:0"><div class="userName">${esc(user.displayName||user.username)}</div><div class="userSub">@${esc(user.username)}</div></div></label>`).join("");
+}
+function openGroupChat(group){
+  if(!group?.id) return;
+  selectedGroupId=String(group.id); selectedUser=""; groupUnread[selectedGroupId]=0; renderGroups();
+  chatTitle.textContent=group.name||"Grupo"; chatSubtitle.textContent=`👥 ${Number(group.memberCount||(group.members||[]).length)} miembros`; headerAvatar.innerHTML="👥";
+  blockCurrentButton.classList.add("hidden"); callButton.classList.add("hidden"); hangupButton.classList.add("hidden"); layout.classList.add("mobileChat");
+  messageInput.disabled=false; sendButton.disabled=false; attachButton.disabled=false; messagesContainer.innerHTML='<div class="empty">Cargando grupo...</div>';
+  socket.emit("getGroupConversation",group.id); socket.emit("markGroupRead",group.id);
+}
+
 function renderUsers(){
 
   const query =
@@ -1944,7 +2016,9 @@ function renderUsers(){
         <div class="userName">${esc(user.displayName || user.username)}</div>
         <div class="userSub">@${esc(user.username)}</div>
         <div class="statusRow">
-          <div class="${user.online ? "online" : "offline"}">${user.online ? "● En línea" : "○ Desconectado"}</div>
+          ${contact
+            ? `<div class="${user.online ? "online" : "offline"}">${user.online ? "● En línea" : "○ Desconectado"}</div>`
+            : `<div style="height:1.2em"></div>`}
           <div style="display:flex;align-items:center;gap:6px">
             ${actionHtml}
             ${count ? `<div class="badge">${count > 99 ? "99+" : count}</div>` : ""}
@@ -1988,6 +2062,22 @@ searchInput.oninput = renderUsers;
 /* =====================================================
    CONTACTOS
 ===================================================== */
+
+
+newGroupButton.onclick = () => {
+  groupError.textContent=""; groupNameInput.value=""; renderGroupContactOptions(); groupModal.style.display="flex"; setTimeout(()=>groupNameInput.focus(),50);
+};
+$("cancelGroup").onclick = () => { groupModal.style.display="none"; };
+$("createGroupButton").onclick = () => {
+  const name=groupNameInput.value.trim();
+  const selected=Array.from(groupMemberOptions.querySelectorAll("input[data-group-member]:checked")).map(el=>el.value);
+  groupError.textContent="";
+  if(name.length<2){groupError.textContent="Pon un nombre para el grupo.";return;}
+  if(!selected.length){groupError.textContent="Selecciona al menos un contacto.";return;}
+  socket.emit("createGroup",{name,members:selected});
+  groupModal.style.display="none";
+};
+if(groupModal) groupModal.addEventListener("click",event=>{if(event.target===groupModal)groupModal.style.display="none";});
 
 $("newChatButton").onclick = () => {
 
@@ -2077,6 +2167,8 @@ function openChat(
   profileImage = ""
 ){
 
+  selectedGroupId = "";
+
   if(!isContact(username)) {
     selectedUser = "";
     messageInput.disabled = true;
@@ -2139,6 +2231,27 @@ function openChat(
     "markConversationRead",
     username
   );
+}
+
+
+socket.on("groupConversationBlocked", message => { messagesContainer.innerHTML = `<div class="empty">${esc(message || "No puedes acceder a este grupo.")}</div>`; messageInput.disabled=true; sendButton.disabled=true; attachButton.disabled=true; });
+
+socket.on("groupConversationHistory", data => {
+  const group=data?.group; if(!group?.id) return;
+  const id=String(group.id); if(String(selectedGroupId)!==id) return;
+  conversations[`group:${id}`]=Array.isArray(data.messages)?data.messages:[];
+  chatTitle.textContent=group.name||"Grupo";
+  chatSubtitle.textContent=`👥 ${Number(group.memberCount||(group.members||[]).length)} miembros`;
+  renderConversation(`group:${id}`);
+});
+socket.on("groupMessageSent", message => handleIncomingGroupMessage(message, false));
+socket.on("groupMessageReceived", message => handleIncomingGroupMessage(message, true));
+function handleIncomingGroupMessage(message, incoming){
+  const id=String(message?.groupId||""); if(!id) return;
+  const key=`group:${id}`; if(!conversations[key]) conversations[key]=[];
+  if(!conversations[key].some(item=>item.id===message.id)) conversations[key].push(message);
+  if(String(selectedGroupId)===id){ addMessage(message); messagesContainer.scrollTop=messagesContainer.scrollHeight; if(incoming) socket.emit("markGroupRead",id); }
+  else if(incoming){ groupUnread[id]=(groupUnread[id]||0)+1; renderGroups(); const group=allGroups.find(g=>String(g.id)===id); showNotification(group?.name||"Grupo",message.message||(message.fileName?"📎 Archivo":"Nuevo mensaje")); }
 }
 
 socket.on("conversationHistory",data => {
@@ -2311,6 +2424,8 @@ socket.on("messageDeleted",data => {
 
   if(selectedUser){
     renderConversation(selectedUser);
+  }else if(selectedGroupId){
+    renderConversation(`group:${selectedGroupId}`);
   }
 });
 
@@ -2404,14 +2519,13 @@ function sendMessage(){
     return;
   }
 
-  socket.emit(
-    "privateMessage",
-    {
-      to:selectedUser,
-      message:text,
-      media:pendingMedia
-    }
-  );
+  if(selectedGroupId){
+    socket.emit("groupMessage",{groupId:selectedGroupId,message:text,media:pendingMedia});
+  }else if(selectedUser){
+    socket.emit("privateMessage",{to:selectedUser,message:text,media:pendingMedia});
+  }else{
+    return;
+  }
 
   messageInput.value = "";
   clearPendingMedia();
