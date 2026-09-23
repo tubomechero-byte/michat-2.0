@@ -451,11 +451,6 @@ button,input,textarea{font:inherit}
         </button>
       </div>
 
-      <div id="groupsSection" class="groupsSection">
-        <div class="groupsSectionTitle"><span>Grupos</span><span id="groupsCount">0</span></div>
-        <div id="groupList" class="groupList"></div>
-      </div>
-
       <div id="storiesBar" class="storiesBar"></div>
 
       <div class="search">
@@ -1794,13 +1789,13 @@ function renderRequests(){
 }
 
 
-socket.on("groupsData", data => { allGroups = Array.isArray(data) ? data : []; renderGroups(); });
-socket.on("groupUnreadCounts", data => { groupUnread = data && typeof data === "object" ? data : {}; renderGroups(); });
-socket.on("groupCreated", group => { if(group?.id && !allGroups.some(g=>String(g.id)===String(group.id))) allGroups.unshift(group); renderGroups(); showNotification("Grupo creado", `Has creado «${group?.name || "Grupo"}».`); });
+socket.on("groupsData", data => { allGroups = Array.isArray(data) ? data : []; renderUsers(); });
+socket.on("groupUnreadCounts", data => { groupUnread = data && typeof data === "object" ? data : {}; renderUsers(); });
+socket.on("groupCreated", group => { if(group?.id && !allGroups.some(g=>String(g.id)===String(group.id))) allGroups.unshift(group); renderUsers(); showNotification("Grupo creado", `Has creado «${group?.name || "Grupo"}».`); });
 socket.on("groupUpdated", group => {
   if(!group?.id) return;
   allGroups = allGroups.map(g=>String(g.id)===String(group.id)?group:g);
-  renderGroups();
+  renderUsers();
   if(String(selectedGroupId)===String(group.id)){
     headerAvatar.className="avatar groupHeaderAvatar";
     headerAvatar.innerHTML = group.avatar ? `<img src="${esc(group.avatar)}" alt="">` : "👥";
@@ -1810,7 +1805,7 @@ socket.on("groupUpdated", group => {
     headerAvatar.onclick = canEdit ? () => groupAvatarInput?.click() : null;
   }
 });
-socket.on("groupRemoved", data => { const id=String(data?.id||""); allGroups=allGroups.filter(g=>String(g.id)!==id); delete groupUnread[id]; if(String(selectedGroupId)===id){selectedGroupId=""; selectedUser=""; messageInput.disabled=true; sendButton.disabled=true; attachButton.disabled=true; messagesContainer.innerHTML='<div class="empty">Has salido del grupo.</div>'; chatTitle.textContent="Selecciona una conversación"; chatSubtitle.textContent="Usa «Nuevo chat» o «Crear grupo» para empezar.";} renderGroups(); });
+socket.on("groupRemoved", data => { const id=String(data?.id||""); allGroups=allGroups.filter(g=>String(g.id)!==id); delete groupUnread[id]; if(String(selectedGroupId)===id){selectedGroupId=""; selectedUser=""; messageInput.disabled=true; sendButton.disabled=true; attachButton.disabled=true; messagesContainer.innerHTML='<div class="empty">Has salido del grupo.</div>'; chatTitle.textContent="Selecciona una conversación"; chatSubtitle.textContent="Usa «Nuevo chat» o «Crear grupo» para empezar.";} renderUsers(); });
 socket.on("groupError", message => { if(groupError) groupError.textContent=message||"No se pudo crear el grupo."; });
 socket.on("groupAvatarError", message => { showNotification("Foto del grupo", message || "No se pudo cambiar la foto."); });
 
@@ -1971,6 +1966,35 @@ function renderUsers(){
       .toLowerCase();
 
   usersContainer.innerHTML = "";
+
+  // Sin búsqueda mostramos una única lista combinada de chats: contactos + grupos.
+  if(!query && allGroups.length){
+    allGroups.forEach(group => {
+      const row = document.createElement("div");
+      row.className = "user";
+      const count = groupUnread[group.id] || 0;
+      const avatar = group.avatar ? `<img src="${esc(group.avatar)}" alt="">` : "👥";
+      row.innerHTML = `
+        <div class="avatar">${avatar}</div>
+        <div class="userInfo">
+          <div class="userName">${esc(group.name || "Grupo")}</div>
+          <div class="userSub">👥 ${Number(group.memberCount || (group.members || []).length)} miembros</div>
+          <div class="statusRow">
+            <div style="height:1.2em"></div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <button class="toolBtn enterChatBtn" data-group-open="1">Entrar</button>
+              ${count ? `<div class="badge">${count > 99 ? "99+" : count}</div>` : ""}
+            </div>
+          </div>
+        </div>`;
+      row.querySelector('[data-group-open]')?.addEventListener("click", event => {
+        event.stopPropagation();
+        openGroupChat(group);
+      });
+      row.addEventListener("click", () => openGroupChat(group));
+      usersContainer.appendChild(row);
+    });
+  }
 
   const others = allUsers.filter(user =>
     user &&
@@ -2560,7 +2584,7 @@ function sendMessage(){
   const text =
     messageInput.value.trim();
 
-  if((!text && !pendingMedia) || !selectedUser){
+  if((!text && !pendingMedia) || (!selectedUser && !selectedGroupId)){
     return;
   }
 
