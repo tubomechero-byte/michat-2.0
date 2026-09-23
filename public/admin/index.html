@@ -20,7 +20,7 @@ body{font-family:Arial,sans-serif;margin:0;background:#f4f6f8;color:#222}header{
 </section>
 <section id="panel" class="hidden">
 <div class="card"><h2>Resumen</h2><div class="stats" id="stats"></div></div>
-<div class="card terminal-card"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><h2 style="margin:0">Terminal de actividad</h2><button id="latestActivity" type="button" class="secondary">↑ Ver registros más recientes</button></div><div class="small" style="color:#9ca3af;margin:8px 0 10px">Se actualiza automáticamente sin quitarte la posición del scroll.</div><div id="terminal" class="terminal"><div class="terminal-line">Mi Chat Admin iniciado. Esperando actividad...</div></div></div>
+<div class="card terminal-card"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><h2 style="margin:0">Terminal de actividad</h2><button id="latestActivity" type="button" class="secondary">↑ Ver registros más recientes</button></div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 10px"><label for="activityFilter" class="small" style="color:#d1d5db">Filtrar:</label><select id="activityFilter" style="min-width:190px;padding:9px;border-radius:8px;border:1px solid #4b5563;background:#111827;color:#f9fafb"><option value="all">Todos</option><option value="message">Mensajes</option><option value="register">Registros</option><option value="login">Inicios de sesión</option><option value="connect">Conexiones</option><option value="disconnect">Desconexiones</option><option value="moderation">Moderación</option><option value="ban">Baneos</option><option value="appeal">Apelaciones</option><option value="report">Reportes</option><option value="command">Comandos</option><option value="account">Cuenta</option><option value="recording">Grabaciones</option><option value="story">Estados</option><option value="other">Otros</option></select><span id="activityCount" class="small" style="color:#9ca3af"></span></div><div class="small" style="color:#9ca3af;margin:0 0 10px">Se actualiza automáticamente sin quitarte la posición del scroll.</div><div id="terminal" class="terminal"><div class="terminal-line">Mi Chat Admin iniciado. Esperando actividad...</div></div></div>
 <div class="card"><h2>🖥️ Rangos de consola de comandos</h2><div class="command-access-help">Asigna un rango a cada usuario. <b>Básico</b> permite consultar información de Mi Chat y usar comandos generales. <b>Moderador</b> incluye además kick, ban, unban y avisos de moderación. Los permisos se comprueban también en el servidor.</div><div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:12px"><div style="flex:1;min-width:240px"><label for="commandAccessUser">Usuario</label><select id="commandAccessUser" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:8px"><option value="">Selecciona un usuario</option></select></div><div style="min-width:180px"><label for="commandAccessRank">Rango</label><select id="commandAccessRank" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:8px"><option value="basic">Básico</option><option value="moderator">Moderador</option></select></div><div class="command-access-actions"><button id="grantCommandAccess" type="button">Asignar rango</button><button id="revokeCommandAccess" type="button" class="secondary">Quitar acceso</button><button id="refreshCommandAccess" type="button" class="secondary">Actualizar</button></div></div><div id="commandAccessMsg" class="msg"></div><h3>Usuarios con rango</h3><div id="commandAccessList" class="command-access-list"></div></div>
 <div class="card"><h2>⚠️ Avisos de moderación</h2><div class="moderation-form"><div><label>Destinatario</label><select id="moderationUser" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:8px"><option value="">Selecciona un usuario</option><option value="*">Todos los usuarios</option></select></div><div><label>Título</label><input id="moderationTitle" maxlength="120" value="Aviso de moderación"></div><div class="full"><label>Mensaje</label><textarea id="moderationMessage" maxlength="2000" placeholder="Escribe el aviso que recibirá el usuario..."></textarea></div><div class="full"><button id="sendModeration">Enviar aviso</button></div></div><div id="moderationMsg" class="msg"></div><h3>Últimos avisos</h3><div id="moderationHistory" class="stories-grid"></div></div>
 <div class="card"><h2>📨 Apelaciones de moderación</h2><button id="refreshAppeals" type="button">Actualizar apelaciones</button><div id="appealsMsg" class="msg"></div><div id="appeals" class="stories-grid"></div></div>
@@ -79,30 +79,56 @@ async function login(){
 }
 let activityTimer=null;
 let activityIds=new Set();
+let activityCache=[];
+
+function activityCategory(item){
+  const text=String(item?.text||'').toLowerCase();
+  if(/mensaje|mensaj(e|es)|envió un mensaje|envio un mensaje|escribió|escribio/.test(text)) return 'message';
+  if(/registr/.test(text)) return 'register';
+  if(/inició sesión|inicio de sesión|inició sesion|inicio de sesion|ha iniciado sesión|ha iniciado sesion/.test(text)) return 'login';
+  if(/se ha conectado|se conectó|se conecto|conectado al servidor/.test(text)) return 'connect';
+  if(/se ha desconectado|se desconectó|se desconecto|desconectado/.test(text)) return 'disconnect';
+  if(/apelación|apelacion/.test(text)) return 'appeal';
+  if(/reporte|reportó|reporto/.test(text)) return 'report';
+  if(/baneo|baneó|baneó|desbaneo|quitó el baneo|quito el baneo|banear/.test(text)) return 'ban';
+  if(/aviso de moderación|moderación|moderacion|kick|expulsó|expulso/.test(text)) return 'moderation';
+  if(/ejecutó \/|ejecuto \/|consola/.test(text)) return 'command';
+  if(/grabación|grabacion/.test(text)) return 'recording';
+  if(/estado|historia/.test(text)) return 'story';
+  if(/contraseña|contrasena|@usuario|correo|teléfono|telefono|cambió su/.test(text)) return 'account';
+  return 'other';
+}
 
 function renderActivity(list){
   const terminal=$('terminal');
   if(!terminal)return;
+  activityCache = Array.isArray(list) ? list : [];
+  const filter=$('activityFilter')?.value || 'all';
+  const filtered = filter==='all' ? activityCache : activityCache.filter(item=>activityCategory(item)===filter);
+  const count=$('activityCount');
+  if(count) count.textContent = `${filtered.length} registro${filtered.length===1?'':'s'}`;
   const wasInitialized = terminal.dataset.initialized === '1';
   const oldScrollTop = terminal.scrollTop;
   const oldScrollHeight = terminal.scrollHeight;
   const wasAtTop = oldScrollTop <= 8;
-  if(!list.length){
-    terminal.innerHTML='<div class="terminal-line">Mi Chat Admin iniciado. Esperando actividad...</div>';
+  if(!filtered.length){
+    terminal.innerHTML=filter==='all'
+      ? '<div class="terminal-line">Mi Chat Admin iniciado. Esperando actividad...</div>'
+      : '<div class="terminal-line">No hay registros para este filtro.</div>';
     terminal.dataset.initialized='1';
     terminal.scrollTop=0;
     return;
   }
-  terminal.innerHTML=list.map(item=>{
+  terminal.innerHTML=filtered.map(item=>{
     const d=new Date(item.time);
     const time=Number.isNaN(d.getTime())?'--:--:--':d.toLocaleTimeString('es-ES');
-    return `<div class="terminal-line"><span class="terminal-time">[${esc(time)}]</span><span class="terminal-text">${esc(item.text)}</span></div>`;
+    const label = activityCategory(item);
+    return `<div class="terminal-line" data-category="${escAttr(label)}"><span class="terminal-time">[${esc(time)}]</span><span class="terminal-text">${esc(item.text)}</span></div>`;
   }).join('');
   terminal.dataset.initialized='1';
   if(!wasInitialized || wasAtTop){
     terminal.scrollTop=0;
   }else{
-    // Al entrar actividad nueva por arriba, conserva exactamente el contenido que estaba viendo el admin.
     const delta=terminal.scrollHeight-oldScrollHeight;
     terminal.scrollTop=Math.max(0, oldScrollTop+Math.max(0,delta));
   }
@@ -211,7 +237,7 @@ async function changeEmail(username,currentEmail=''){const initial=prompt('Corre
 async function resetPassword(username){const p=prompt('Nueva contraseña para '+username+' (mínimo 6 caracteres):');if(p===null)return;if(p.length<6){alert('La contraseña debe tener al menos 6 caracteres.');return}if(!confirm('¿Restablecer la contraseña de '+username+'?'))return;try{await api('/api/admin/users/'+encodeURIComponent(username)+'/reset-password',{method:'POST',body:JSON.stringify({password:p})});$('actionMsg').className='ok';$('actionMsg').textContent='Contraseña restablecida para '+username+'.'}catch(e){$('actionMsg').className='error';$('actionMsg').textContent=e.message}}
 async function deleteUser(username){if(!confirm('¿Eliminar DEFINITIVAMENTE la cuenta de '+username+'? También se eliminarán sus mensajes, estados, sesiones y tokens de notificaciones.'))return;if(!confirm('Esta acción no se puede deshacer. ¿Continuar?'))return;try{await api('/api/admin/users/'+encodeURIComponent(username),{method:'DELETE'});$('actionMsg').className='ok';$('actionMsg').textContent='Cuenta eliminada: '+username;await loadAll();await loadCommandAccess()}catch(e){$('actionMsg').className='error';$('actionMsg').textContent=e.message}}
 async function check(){const t=localStorage.getItem(tokenKey);if(!t)return;if(t)try{await api('/api/admin/me');showPanel();startActivity()}catch{localStorage.removeItem(tokenKey)}}
-$('loginBtn').onclick=login;$('latestActivity').onclick=()=>{const t=$('terminal');if(t)t.scrollTop=0};$('refreshCommandAccess').onclick=loadCommandAccess;$('grantCommandAccess').onclick=grantCommandAccess;$('commandAccessUser').onchange=updateSelectedRankFromUser;$('revokeCommandAccess').onclick=revokeSelectedCommandAccess;$('refresh').onclick=loadAll;$('sendModeration').onclick=sendModeration;$('refreshAppeals').onclick=loadAppeals;$('refreshBans').onclick=loadBans;$('refreshReports').onclick=loadReports;$('refreshStories').onclick=loadStories;$('refreshRecordings').onclick=loadRecordings;$('logout').onclick=()=>{localStorage.removeItem(tokenKey);location.reload()};$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});check();
+$('loginBtn').onclick=login;$('latestActivity').onclick=()=>{const t=$('terminal');if(t)t.scrollTop=0};$('activityFilter').onchange=()=>renderActivity(activityCache);$('refreshCommandAccess').onclick=loadCommandAccess;$('grantCommandAccess').onclick=grantCommandAccess;$('commandAccessUser').onchange=updateSelectedRankFromUser;$('revokeCommandAccess').onclick=revokeSelectedCommandAccess;$('refresh').onclick=loadAll;$('sendModeration').onclick=sendModeration;$('refreshAppeals').onclick=loadAppeals;$('refreshBans').onclick=loadBans;$('refreshReports').onclick=loadReports;$('refreshStories').onclick=loadStories;$('refreshRecordings').onclick=loadRecordings;$('logout').onclick=()=>{localStorage.removeItem(tokenKey);location.reload()};$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});check();
 </script>
 </body>
 </html>
