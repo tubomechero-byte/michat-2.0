@@ -48,7 +48,7 @@ button,input,textarea{font:inherit}
 
 
 .search{padding:10px;border-bottom:1px solid #ddd}
-.groupsSection{padding:8px 10px 2px;border-bottom:1px solid #eee}.groupsSectionTitle{display:flex;justify-content:space-between;padding:4px 4px 8px;font-size:12px;color:#777;font-weight:bold;text-transform:uppercase}.groupList{display:flex;flex-direction:column;gap:4px;padding-bottom:6px}.groupRow{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;cursor:pointer}.groupRow:hover{background:#f3f4f6}.groupAvatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#dbeafe;flex:0 0 auto}.groupInfo{min-width:0;flex:1}.groupName{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupSub{font-size:12px;color:#777;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupUnread{min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#2563eb;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center}.groupCreateList{display:grid;gap:8px;max-height:320px;overflow:auto;padding:6px 0}.groupMemberOption{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid #e5e7eb;border-radius:10px}.groupMemberOption input{width:18px;height:18px}
+.groupsSection{padding:8px 10px 2px;border-bottom:1px solid #eee}.groupsSectionTitle{display:flex;justify-content:space-between;padding:4px 4px 8px;font-size:12px;color:#777;font-weight:bold;text-transform:uppercase}.groupList{display:flex;flex-direction:column;gap:4px;padding-bottom:6px}.groupRow{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;cursor:pointer}.groupRow:hover{background:#f3f4f6}.groupAvatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#dbeafe;flex:0 0 auto}.groupInfo{min-width:0;flex:1}.groupName{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupSub{font-size:12px;color:#777;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupUnread{min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#2563eb;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center}.groupCreateList{display:grid;gap:8px;max-height:320px;overflow:auto;padding:6px 0}.groupMemberOption{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid #e5e7eb;border-radius:10px}.groupMemberOption input{width:18px;height:18px}.groupHeaderAvatar{position:relative;cursor:default}.groupHeaderAvatar.canEdit{cursor:pointer}.groupHeaderAvatar.canEdit::after{content:"📷";position:absolute;right:-2px;bottom:-2px;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #ddd;font-size:12px}
 .search input{width:100%;border:0;outline:none;padding:12px 14px;border-radius:20px;background:#f0f2f5}
 #users{flex:1;overflow-y:auto}
 
@@ -524,6 +524,7 @@ button,input,textarea{font:inherit}
 </div>
 
 <!-- NUEVO GRUPO -->
+<input id="groupAvatarInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
 <div id="groupModal" class="modal">
   <div class="modalBox" style="max-width:520px">
     <h2>👥 Crear grupo</h2>
@@ -913,6 +914,7 @@ const groupModal = $("groupModal");
 const groupNameInput = $("groupNameInput");
 const groupMemberOptions = $("groupMemberOptions");
 const groupError = $("groupError");
+const groupAvatarInput = $("groupAvatarInput");
 const searchInput = $("searchInput");
 const messagesContainer = $("messages");
 const messageInput = $("messageInput");
@@ -1795,9 +1797,22 @@ function renderRequests(){
 socket.on("groupsData", data => { allGroups = Array.isArray(data) ? data : []; renderGroups(); });
 socket.on("groupUnreadCounts", data => { groupUnread = data && typeof data === "object" ? data : {}; renderGroups(); });
 socket.on("groupCreated", group => { if(group?.id && !allGroups.some(g=>String(g.id)===String(group.id))) allGroups.unshift(group); renderGroups(); showNotification("Grupo creado", `Has creado «${group?.name || "Grupo"}».`); });
-socket.on("groupUpdated", group => { if(!group?.id) return; allGroups = allGroups.map(g=>String(g.id)===String(group.id)?group:g); renderGroups(); });
+socket.on("groupUpdated", group => {
+  if(!group?.id) return;
+  allGroups = allGroups.map(g=>String(g.id)===String(group.id)?group:g);
+  renderGroups();
+  if(String(selectedGroupId)===String(group.id)){
+    headerAvatar.className="avatar groupHeaderAvatar";
+    headerAvatar.innerHTML = group.avatar ? `<img src="${esc(group.avatar)}" alt="">` : "👥";
+    const canEdit = Array.isArray(group.admins) && group.admins.some(name=>norm(name)===norm(myUsername));
+    headerAvatar.classList.toggle("canEdit", canEdit);
+    headerAvatar.title = canEdit ? "Cambiar foto del grupo" : "";
+    headerAvatar.onclick = canEdit ? () => groupAvatarInput?.click() : null;
+  }
+});
 socket.on("groupRemoved", data => { const id=String(data?.id||""); allGroups=allGroups.filter(g=>String(g.id)!==id); delete groupUnread[id]; if(String(selectedGroupId)===id){selectedGroupId=""; selectedUser=""; messageInput.disabled=true; sendButton.disabled=true; attachButton.disabled=true; messagesContainer.innerHTML='<div class="empty">Has salido del grupo.</div>'; chatTitle.textContent="Selecciona una conversación"; chatSubtitle.textContent="Usa «Nuevo chat» o «Crear grupo» para empezar.";} renderGroups(); });
 socket.on("groupError", message => { if(groupError) groupError.textContent=message||"No se pudo crear el grupo."; });
+socket.on("groupAvatarError", message => { showNotification("Foto del grupo", message || "No se pudo cambiar la foto."); });
 
 socket.on("relationshipData", data => {
   relationshipData = {
@@ -1922,7 +1937,8 @@ function renderGroups(){
   allGroups.forEach(group=>{
     const row=document.createElement("div"); row.className="groupRow";
     const count=groupUnread[group.id]||0;
-    row.innerHTML=`<div class="groupAvatar">👥</div><div class="groupInfo"><div class="groupName">${esc(group.name||"Grupo")}</div><div class="groupSub">${Number(group.memberCount||(group.members||[]).length)} miembros</div></div>${count?`<div class="groupUnread">${count>99?"99+":count}</div>`:""}`;
+    const avatar = group.avatar ? `<img src="${esc(group.avatar)}" alt="">` : "👥";
+    row.innerHTML=`<div class="groupAvatar">${avatar}</div><div class="groupInfo"><div class="groupName">${esc(group.name||"Grupo")}</div><div class="groupSub">${Number(group.memberCount||(group.members||[]).length)} miembros</div></div>${count?`<div class="groupUnread">${count>99?"99+":count}</div>`:""}`;
     row.onclick=()=>openGroupChat(group); groupList.appendChild(row);
   });
 }
@@ -1935,7 +1951,13 @@ function renderGroupContactOptions(){
 function openGroupChat(group){
   if(!group?.id) return;
   selectedGroupId=String(group.id); selectedUser=""; groupUnread[selectedGroupId]=0; renderGroups();
-  chatTitle.textContent=group.name||"Grupo"; chatSubtitle.textContent=`👥 ${Number(group.memberCount||(group.members||[]).length)} miembros`; headerAvatar.innerHTML="👥";
+  chatTitle.textContent=group.name||"Grupo"; chatSubtitle.textContent=`👥 ${Number(group.memberCount||(group.members||[]).length)} miembros`;
+  headerAvatar.className = "avatar groupHeaderAvatar";
+  headerAvatar.innerHTML = group.avatar ? `<img src="${esc(group.avatar)}" alt="">` : "👥";
+  const canEditAvatar = Array.isArray(group.admins) && group.admins.some(name => norm(name) === norm(myUsername));
+  headerAvatar.classList.toggle("canEdit", canEditAvatar);
+  headerAvatar.title = canEditAvatar ? "Cambiar foto del grupo" : "";
+  headerAvatar.onclick = canEditAvatar ? () => groupAvatarInput?.click() : null;
   blockCurrentButton.classList.add("hidden"); callButton.classList.add("hidden"); hangupButton.classList.add("hidden"); layout.classList.add("mobileChat");
   messageInput.disabled=false; sendButton.disabled=false; attachButton.disabled=false; messagesContainer.innerHTML='<div class="empty">Cargando grupo...</div>';
   socket.emit("getGroupConversation",group.id); socket.emit("markGroupRead",group.id);
@@ -2064,6 +2086,26 @@ searchInput.oninput = renderUsers;
 ===================================================== */
 
 
+if(groupAvatarInput){
+  groupAvatarInput.onchange = async () => {
+    const file = groupAvatarInput.files?.[0];
+    groupAvatarInput.value = "";
+    if(!file || !selectedGroupId) return;
+    if(!/^image\/(jpeg|png|webp)$/i.test(file.type)) return showNotification("Foto del grupo", "Selecciona una imagen JPG, PNG o WebP.");
+    if(file.size > 8 * 1024 * 1024) return showNotification("Foto del grupo", "La imagen original no puede superar 8 MB.");
+    try {
+      const reader = new FileReader();
+      const dataUrl = await new Promise((resolve, reject) => { reader.onload=()=>resolve(reader.result); reader.onerror=()=>reject(new Error()); reader.readAsDataURL(file); });
+      const img = new Image(); img.src = dataUrl;
+      await new Promise((resolve, reject) => { img.onload=resolve; img.onerror=reject; });
+      const max = 512; const scale = Math.min(1, max / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
+      const canvas = document.createElement("canvas"); canvas.width=Math.max(1,Math.round((img.naturalWidth||img.width)*scale)); canvas.height=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
+      const ctx=canvas.getContext("2d"); ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      socket.emit("updateGroupAvatar", {groupId:selectedGroupId, avatar:canvas.toDataURL("image/webp",0.82)});
+    } catch { showNotification("Foto del grupo", "No se pudo procesar la imagen."); }
+  };
+}
+
 newGroupButton.onclick = () => {
   groupError.textContent=""; groupNameInput.value=""; renderGroupContactOptions(); groupModal.style.display="flex"; setTimeout(()=>groupNameInput.focus(),50);
 };
@@ -2168,6 +2210,9 @@ function openChat(
 ){
 
   selectedGroupId = "";
+  headerAvatar.className = "avatar";
+  headerAvatar.onclick = null;
+  headerAvatar.title = "";
 
   if(!isContact(username)) {
     selectedUser = "";
