@@ -4633,6 +4633,44 @@ io.on("connection", socket => {
     emitGroupUnread(socket, me);
   });
 
+  socket.on("updateGroupName", data => {
+    const me = norm(online.get(socket.id) || "");
+    const groupId = String(data?.groupId || "").trim();
+    const name = String(data?.name || "").trim();
+    if (!me || !groupId) return;
+
+    if (name.length < 2 || name.length > 50) {
+      return socket.emit("groupNameError", "El nombre del grupo debe tener entre 2 y 50 caracteres.");
+    }
+
+    const list = groups();
+    const index = list.findIndex(item => String(item.id) === groupId);
+    if (index < 0) return socket.emit("groupNameError", "No existe ese grupo.");
+
+    const group = list[index];
+    if (!isGroupMember(group, me)) {
+      return socket.emit("groupNameError", "No perteneces a este grupo.");
+    }
+    if (!Array.isArray(group.admins) || !group.admins.some(username => norm(username) === me)) {
+      return socket.emit("groupNameError", "Solo un administrador puede cambiar el nombre del grupo.");
+    }
+
+    const oldName = String(group.name || "Grupo");
+    if (oldName === name) return;
+
+    group.name = name;
+    list[index] = group;
+    saveGroups(list);
+    addAdminActivity(`@${me} cambió el nombre del grupo «${oldName}» a «${name}».`);
+
+    const summary = groupSummary(group);
+    for (const username of group.members || []) {
+      const sid = socketIdFor(username);
+      if (sid) io.to(sid).emit("groupUpdated", summary);
+    }
+    emitGroupsData(socket, me);
+  });
+
   socket.on("addGroupMembers", data => {
     const me = norm(online.get(socket.id) || "");
     const groupId = String(data?.groupId || "").trim();
