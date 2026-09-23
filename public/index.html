@@ -481,7 +481,7 @@ button,input,textarea{font:inherit}
         <div class="chatTools">
           <button id="callButton" class="toolBtn callBtn hidden">📞 Llamar</button>
           <button id="hangupButton" class="toolBtn hangBtn hidden">📵 Colgar</button>
-          <button id="groupAddMembersButton" class="toolBtn groupAddBtn hidden" type="button">👥 Añadir</button><button id="blockCurrentButton" class="toolBtn hidden">🚫 Bloquear</button>
+          <button id="groupRenameButton" class="toolBtn groupAddBtn hidden" type="button">✏️ Nombre</button><button id="groupAddMembersButton" class="toolBtn groupAddBtn hidden" type="button">👥 Añadir</button><button id="blockCurrentButton" class="toolBtn hidden">🚫 Bloquear</button>
         </div>
 
       </header>
@@ -921,6 +921,7 @@ const groupNameInput = $("groupNameInput");
 const groupMemberOptions = $("groupMemberOptions");
 const groupError = $("groupError");
 const groupAvatarInput = $("groupAvatarInput");
+const groupRenameButton = $("groupRenameButton");
 const groupAddMembersButton = $("groupAddMembersButton");
 const groupAddModal = $("groupAddModal");
 const groupAddMemberOptions = $("groupAddMemberOptions");
@@ -1972,9 +1973,12 @@ function renderGroupAddMemberOptions(){
 }
 function refreshGroupAddButton(){
   const group=allGroups.find(g=>String(g.id)===String(selectedGroupId));
-  const canAdd=!!group && Array.isArray(group.admins) && group.admins.some(name=>norm(name)===norm(myUsername)) && Number(group.memberCount||(group.members||[]).length)<50;
+  const isAdmin=!!group && Array.isArray(group.admins) && group.admins.some(name=>norm(name)===norm(myUsername));
+  const canAdd=isAdmin && Number(group.memberCount||(group.members||[]).length)<50;
   groupAddMembersButton?.classList.toggle('visible',canAdd);
   groupAddMembersButton?.classList.toggle('hidden',!canAdd);
+  groupRenameButton?.classList.toggle('visible',isAdmin);
+  groupRenameButton?.classList.toggle('hidden',!isAdmin);
 }
 function openGroupChat(group){
   if(!group?.id) return;
@@ -2163,6 +2167,20 @@ if(groupAvatarInput){
     } catch { showNotification("Foto del grupo", "No se pudo procesar la imagen."); }
   };
 }
+
+if(groupRenameButton){
+  groupRenameButton.onclick=()=>{
+    const group=allGroups.find(g=>String(g.id)===String(selectedGroupId));
+    if(!group) return;
+    const next=window.prompt("Nuevo nombre del grupo:", group.name || "Grupo");
+    if(next===null) return;
+    const name=next.trim();
+    if(!name) return showNotification("Nombre del grupo","Escribe un nombre para el grupo.");
+    if(name.length<2 || name.length>50) return showNotification("Nombre del grupo","El nombre debe tener entre 2 y 50 caracteres.");
+    socket.emit("updateGroupName",{groupId:selectedGroupId,name});
+  };
+}
+socket.on("groupNameError",message=>showNotification("Nombre del grupo",message||"No se pudo cambiar el nombre."));
 
 if(groupAddMembersButton){
   groupAddMembersButton.onclick=()=>{
