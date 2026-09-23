@@ -1637,6 +1637,176 @@ app.get("/api/admin/stats", requireAdmin, (req, res) => {
   });
 });
 
+app.get("/api/admin/contact-requests", requireAdmin, (req, res) => {
+  const list = users();
+  const result = [];
+
+  for (const recipient of list) {
+    ensureContactRequests(recipient);
+    for (const senderName of recipient.contactRequests.incoming) {
+      const sender = getUser(senderName);
+      if (!sender) continue;
+      result.push({
+        recipientUsername: norm(recipient.username),
+        recipientDisplayName: recipient.displayName || recipient.username,
+        senderUsername: norm(sender.username),
+        senderDisplayName: sender.displayName || sender.username
+      });
+    }
+  }
+
+  result.sort((a, b) =>
+    String(a.recipientUsername).localeCompare(String(b.recipientUsername)) ||
+    String(a.senderUsername).localeCompare(String(b.senderUsername))
+  );
+
+  res.json(result);
+});
+
+app.post("/api/admin/contact-requests/accept", requireAdmin, (req, res) => {
+  const recipient = norm(req.body?.recipientUsername);
+  const sender = norm(req.body?.senderUsername);
+
+  if (!recipient || !sender || recipient === sender) {
+    return res.status(400).json({ error: "Solicitud inválida." });
+  }
+
+  const list = users();
+  const recipientIdx = list.findIndex(u => norm(u.username) === recipient);
+  const senderIdx = list.findIndex(u => norm(u.username) === sender);
+
+  if (recipientIdx < 0 || senderIdx < 0) {
+    return res.status(404).json({ error: "Usuario no encontrado." });
+  }
+
+  ensureContactRequests(list[recipientIdx]);
+  ensureContactRequests(list[senderIdx]);
+
+  if (areContacts(recipient, sender)) {
+    return res.status(409).json({ error: "Ya sois contactos." });
+  }
+
+  if (isEitherBlocked(recipient, sender)) {
+    return res.status(400).json({ error: "No se puede aceptar la solicitud mientras exista un bloqueo entre las cuentas." });
+  }
+
+  const pending = list[recipientIdx].contactRequests.incoming.some(
+    x => norm(x) === sender
+  );
+
+  if (!pending) {
+    return res.status(404).json({ error: "La solicitud ya no está pendiente." });
+  }
+
+  list[recipientIdx].contactRequests.incoming = list[recipientIdx].contactRequests.incoming.filter(
+    x => norm(x) !== sender
+  );
+  list[senderIdx].contactRequests.outgoing = list[senderIdx].contactRequests.outgoing.filter(
+    x => norm(x) !== recipient
+  );
+
+  if (!list[recipientIdx].contacts.some(x => norm(x) === sender)) {
+    list[recipientIdx].contacts.push(sender);
+  }
+  if (!list[senderIdx].contacts.some(x => norm(x) === recipient)) {
+    list[senderIdx].contacts.push(recipient);
+  }
+
+  saveUsers(list);
+  emitRelationshipToUser(recipient);
+  emitRelationshipToUser(sender);
+
+  const recipientSid = socketIdFor(recipient);
+  const senderSid = socketIdFor(sender);
+  const recipientInfo = {
+    username: recipient,
+    displayName: list[recipientIdx].displayName || list[recipientIdx].username,
+    profileImage: list[recipientIdx].profileImage || "",
+    online: Boolean(recipientSid)
+  };
+  const senderInfo = {
+    username: sender,
+    displayName: list[senderIdx].displayName || list[senderIdx].username,
+    profileImage: list[senderIdx].profileImage || "",
+    online: Boolean(senderSid)
+  };
+
+  if (recipientSid) io.to(recipientSid).emit("contactRequestAccepted", senderInfo);
+  if (senderSid) io.to(senderSid).emit("contactRequestAccepted", recipientInfo);
+
+  sendPushToUser(sender, {
+    type: "contact_request_accepted",
+    title: "✅ Solicitud aceptada",
+    from: recipientInfo.displayName,
+    username: recipient,
+    sender: recipient,
+    body: `@${recipient} ha aceptado tu solicitud de contacto.`,
+    message: `@${recipient} ha aceptado tu solicitud de contacto.`
+  });
+
+  addAdminActivity(`Administrador aceptó la solicitud de @${sender} para @${recipient}.`);
+
+  res.json({ success: true, recipient, sender });
+});
+
+app.post("/api/admin/contact-requests/reject", requireAdmin, (req, res) => {
+  const recipient = norm(req.body?.recipientUsername);
+  const sender = norm(req.body?.senderUsername);
+
+  if (!recipient || !sender || recipient === sender) {
+    return res.status(400).json({ error: "Solicitud inválida." });
+  }
+
+  const list = users();
+  const recipientIdx = list.findIndex(u => norm(u.username) === recipient);
+  const senderIdx = list.findIndex(u => norm(u.username) === sender);
+
+  if (recipientIdx < 0 || senderIdx < 0) {
+    return res.status(404).json({ error: "Usuario no encontrado." });
+  }
+
+  ensureContactRequests(list[recipientIdx]);
+  ensureContactRequests(list[senderIdx]);
+
+  const pending = list[recipientIdx].contactRequests.incoming.some(
+    x => norm(x) === sender
+  );
+
+  if (!pending) {
+    return res.status(404).json({ error: "La solicitud ya no está pendiente." });
+  }
+
+  list[recipientIdx].contactRequests.incoming = list[recipientIdx].contactRequests.incoming.filter(
+    x => norm(x) !== sender
+  );
+  list[senderIdx].contactRequests.outgoing = list[senderIdx].contactRequests.outgoing.filter(
+    x => norm(x) !== recipient
+  );
+
+  saveUsers(list);
+  emitRelationshipToUser(recipient);
+  emitRelationshipToUser(sender);
+
+  const senderSid = socketIdFor(sender);
+  if (senderSid) {
+    io.to(senderSid).emit("contactRequestRejected", { username: recipient });
+  }
+
+  sendPushToUser(sender, {
+    type: "contact_request_rejected",
+    title: "Solicitud de contacto rechazada",
+    from: recipient,
+    username: recipient,
+    sender: recipient,
+    body: `@${recipient} ha rechazado tu solicitud de contacto.`,
+    message: `@${recipient} ha rechazado tu solicitud de contacto.`
+  });
+
+  addAdminActivity(`Administrador rechazó la solicitud de @${sender} para @${recipient}.`);
+
+  res.json({ success: true, recipient, sender });
+});
+
 app.get("/api/admin/users", requireAdmin, (req, res) => {
   const onlineUsers = new Set(
     [...online.values()].map(name => norm(name))
