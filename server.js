@@ -30,6 +30,7 @@ const BANS_FILE = path.join(DATA_DIR, "bans.json");
 const PASSWORD_RESETS_FILE = path.join(DATA_DIR, "password-resets.json");
 const COMMAND_ACCESS_FILE = path.join(DATA_DIR, "command-access.json");
 const ADMIN_ACTIVITY_FILE = path.join(DATA_DIR, "admin-activity.json");
+const GROUPS_FILE = path.join(DATA_DIR, "groups.json");
 const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -61,7 +62,8 @@ const STATE_FILES = {
   "bans.json": [],
   "password-resets.json": [],
   "command-access.json": {},
-  "admin-activity.json": []
+  "admin-activity.json": [],
+  "groups.json": []
 };
 
 let supabaseAvailable = false;
@@ -91,6 +93,7 @@ ensure(BANS_FILE, []);
 ensure(PASSWORD_RESETS_FILE, []);
 ensure(COMMAND_ACCESS_FILE, []);
 ensure(ADMIN_ACTIVITY_FILE, []);
+ensure(GROUPS_FILE, []);
 
 function read(file, fallback) {
   try {
@@ -1432,6 +1435,57 @@ function loadAdminActivity() {
   const saved = read(ADMIN_ACTIVITY_FILE, []);
   adminActivity = Array.isArray(saved) ? saved : [];
   return adminActivity;
+}
+
+
+function groups() { return read(GROUPS_FILE, []); }
+function saveGroups(v) { write(GROUPS_FILE, v); }
+function getGroup(groupId) {
+  const id = String(groupId || "").trim();
+  return groups().find(group => String(group.id) === id) || null;
+}
+function isGroupMember(group, username) {
+  return !!group && Array.isArray(group.members) && group.members.some(name => norm(name) === norm(username));
+}
+function groupSummary(group) {
+  return {
+    id: String(group.id),
+    name: String(group.name || "Grupo"),
+    createdBy: norm(group.createdBy || ""),
+    createdAt: group.createdAt || null,
+    members: Array.isArray(group.members) ? group.members.map(norm) : [],
+    admins: Array.isArray(group.admins) ? group.admins.map(norm) : [],
+    memberCount: Array.isArray(group.members) ? group.members.length : 0,
+    avatar: group.avatar || ""
+  };
+}
+function groupsForUser(username) {
+  return groups().filter(group => isGroupMember(group, username)).map(groupSummary);
+}
+function emitGroupsData(socket, username) {
+  socket.emit("groupsData", groupsForUser(username));
+}
+function groupUnreadCountsFor(username) {
+  const counts = {};
+  const me = norm(username);
+  for (const message of messages()) {
+    const groupId = String(message.groupId || "");
+    if (!groupId || norm(message.from) === me || message.read) continue;
+    const group = getGroup(groupId);
+    if (!group || !isGroupMember(group, me)) continue;
+    counts[groupId] = (counts[groupId] || 0) + 1;
+  }
+  return counts;
+}
+function emitGroupUnread(socket, username) {
+  if (socket) socket.emit("groupUnreadCounts", groupUnreadCountsFor(username));
+}
+function emitGroupUnreadToMembers(group) {
+  if (!group) return;
+  for (const username of group.members || []) {
+    const sid = socketIdFor(username);
+    if (sid) emitGroupUnread(io.sockets.sockets.get(sid), username);
+  }
 }
 
 function addAdminActivity(text) {
@@ -4178,6 +4232,8 @@ io.on("connection", socket => {
     );
 
     emitRelationshipData(socket, u.username);
+    emitGroupsData(socket, u.username);
+    emitGroupUnread(socket, u.username);
 
     socket.emit(
       "moderationNotices",
@@ -4461,6 +4517,224 @@ io.on("connection", socket => {
       emitRelationshipToUser(target);
     }
   );
+
+
+  // ===================================================
+  // GRUPOS
+  // ===================================================
+
+  socket.on("getGroups", () => {
+    const me = online.get(socket.id);
+    if (!me) return;
+    emitGroupsData(socket, me);
+    emitGroupUnread(socket, me);
+  });
+
+  socket.on("createGroup", data => {
+    const me = online.get(socket.id);
+    if (!me) return;
+
+    const name = String(data?.name || "").trim().replace(/\s+/g, " ");
+    const requested = Array.isArray(data?.members) ? data.members.map(norm) : [];
+
+    if (name.length < 2 || name.length > 50) {
+      return socket.emit("groupError", "El nombre del grupo debe tener entre 2 y 50 caracteres.");
+    }
+
+    const members = Array.from(new Set(requested.filter(Boolean))).filter(username => username !== norm(me));
+    if (!members.length) {
+      return socket.emit("groupError", "Selecciona al menos un contacto para crear el grupo.");
+    }
+    if (members.length > 49) {
+      return socket.emit("groupError", "Un grupo puede tener como máximo 50 personas.");
+    }
+
+    for (const member of members) {
+      if (!getUser(member)) {
+        return socket.emit("groupError", `No existe el usuario @${member}.`);
+      }
+      if (!areContacts(me, member)) {
+        return socket.emit("groupError", `Solo puedes añadir a tus contactos: @${member}.`);
+      }
+      if (isEitherBlocked(me, member)) {
+        return socket.emit("groupError", `No puedes añadir a @${member}.`);
+      }
+    }
+
+    const group = {
+      id: `g_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`,
+      name,
+      createdBy: norm(me),
+      createdAt: new Date().toISOString(),
+      admins: [norm(me)],
+      members: Array.from(new Set([norm(me), ...members])),
+      avatar: ""
+    };
+
+    const list = groups();
+    list.push(group);
+    saveGroups(list);
+    addAdminActivity(`@${me} creó el grupo «${name}» con ${group.members.length} miembros.`);
+
+    for (const username of group.members) {
+      const sid = socketIdFor(username);
+      if (sid) io.to(sid).emit("groupCreated", groupSummary(group));
+      if (norm(username) !== norm(me)) {
+        sendPushToUser(username, {
+          type: "group_invite",
+          title: `👥 Te han añadido a ${name}`,
+          body: `@${me} te ha añadido al grupo.`,
+          groupId: group.id,
+          groupName: name,
+          username: norm(me),
+          message: `@${me} te ha añadido al grupo ${name}.`
+        });
+      }
+    }
+
+    emitGroupsData(socket, me);
+    emitGroupUnread(socket, me);
+  });
+
+  socket.on("getGroupConversation", groupId => {
+    const me = online.get(socket.id);
+    const group = getGroup(groupId);
+    if (!me || !group || !isGroupMember(group, me)) {
+      return socket.emit("groupConversationBlocked", "No perteneces a este grupo.");
+    }
+
+    const list = messages()
+      .filter(message => String(message.groupId || "") === String(group.id))
+      .filter(message => !(message.deletedFor || []).includes(norm(me)));
+
+    socket.emit("groupConversationHistory", {
+      group: groupSummary(group),
+      messages: list
+    });
+  });
+
+  socket.on("markGroupRead", groupId => {
+    const me = online.get(socket.id);
+    const group = getGroup(groupId);
+    if (!me || !group || !isGroupMember(group, me)) return;
+
+    const list = messages();
+    for (const message of list) {
+      if (String(message.groupId || "") === String(group.id) && norm(message.from) !== norm(me)) {
+        message.read = true;
+      }
+    }
+    saveMessages(list);
+    emitGroupUnread(socket, me);
+  });
+
+  socket.on("groupMessage", data => {
+    const me = online.get(socket.id);
+    const group = getGroup(data?.groupId);
+    const text = String(data?.message || "").trim();
+
+    const media = data?.media && typeof data.media === "object" ? data.media : null;
+    const mediaData = media ? String(media.data || "") : "";
+    const mediaMime = media ? String(media.mimeType || "").slice(0, 120) : "";
+    const mediaName = media ? String(media.fileName || "archivo").slice(0, 180) : "";
+    const mediaType = media ? String(media.type || "file").slice(0, 30) : "";
+    const allowedMedia = !mediaMime || mediaMime.startsWith("image/") || mediaMime.startsWith("video/") || mediaMime.startsWith("audio/") || [
+      "application/pdf",
+      "text/plain",
+      "application/zip",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    ].includes(mediaMime);
+    const hasMedia = Boolean(mediaData && mediaData.startsWith("data:") && mediaData.length <= 10 * 1024 * 1024 && allowedMedia);
+
+    if (!me || !group || !isGroupMember(group, me) || (!text && !hasMedia) || text.length > 5000) return;
+    if (media && !hasMedia) {
+      return socket.emit("messageError", "El archivo no es válido, no está permitido o supera el límite de 7 MB.");
+    }
+
+    const message = {
+      id: Date.now() + "-" + crypto.randomBytes(5).toString("hex"),
+      from: norm(me),
+      fromDisplay: getUser(me)?.displayName || me,
+      to: "",
+      toDisplay: group.name,
+      groupId: group.id,
+      groupName: group.name,
+      message: text,
+      type: hasMedia ? (mediaType || "file") : "text",
+      media: hasMedia ? mediaData : "",
+      fileName: hasMedia ? mediaName : "",
+      mimeType: hasMedia ? mediaMime : "",
+      time: new Date().toISOString(),
+      read: false,
+      deletedFor: []
+    };
+
+    const list = messages();
+    list.push(message);
+    if (list.length > 50000) list.splice(0, list.length - 50000);
+    saveMessages(list);
+
+    addAdminActivity(`${message.fromDisplay} ha enviado un mensaje al grupo «${group.name}»: ${message.message || (message.fileName ? "📎 " + message.fileName : "Archivo multimedia")}`);
+
+    for (const username of group.members || []) {
+      const sid = socketIdFor(username);
+      if (sid) {
+        if (norm(username) === norm(me)) io.to(sid).emit("groupMessageSent", message);
+        else io.to(sid).emit("groupMessageReceived", message);
+      }
+
+      if (norm(username) !== norm(me)) {
+        sendPushToUser(username, {
+          type: "group_message",
+          title: `💬 ${group.name}`,
+          from: message.fromDisplay,
+          body: message.message || (message.fileName ? "📎 " + message.fileName : "Archivo multimedia"),
+          message: message.message || (message.fileName ? "📎 " + message.fileName : "Archivo multimedia"),
+          groupId: group.id,
+          groupName: group.name,
+          username: norm(me)
+        });
+      }
+    }
+
+    emitGroupUnreadToMembers(group);
+  });
+
+  socket.on("leaveGroup", groupId => {
+    const me = online.get(socket.id);
+    const group = getGroup(groupId);
+    if (!me || !group || !isGroupMember(group, me)) return;
+
+    const list = groups();
+    const index = list.findIndex(item => String(item.id) === String(group.id));
+    if (index < 0) return;
+
+    const target = list[index];
+    target.members = (target.members || []).filter(name => norm(name) !== norm(me));
+    target.admins = (target.admins || []).filter(name => norm(name) !== norm(me));
+
+    if (!target.members.length) {
+      list.splice(index, 1);
+      saveGroups(list);
+      socket.emit("groupRemoved", { id: group.id });
+      return;
+    }
+
+    if (!target.admins.length) target.admins = [norm(target.members[0])];
+    saveGroups(list);
+
+    for (const username of target.members) {
+      const sid = socketIdFor(username);
+      if (sid) io.to(sid).emit("groupUpdated", groupSummary(target));
+    }
+
+    socket.emit("groupRemoved", { id: group.id });
+  });
 
   // ===================================================
   // HISTORIAS
@@ -4917,28 +5191,20 @@ io.on("connection", socket => {
 
       saveMessages(list);
 
-      const target =
-        list[idx].to;
-
-      for (
-        const [sid, name]
-        of online.entries()
-      ) {
-        if (
-          norm(name) ===
-            target ||
-          norm(name) ===
-            norm(me)
-        ) {
-          io.to(sid).emit(
-            "messageDeleted",
-            {
-              id:
-                list[idx].id,
-              message:
-                list[idx].message
-            }
-          );
+      if (list[idx].groupId) {
+        const group = getGroup(list[idx].groupId);
+        if (group) {
+          for (const member of group.members || []) {
+            const sid = socketIdFor(member);
+            if (sid) io.to(sid).emit("messageDeleted", { id: list[idx].id, message: list[idx].message, groupId: group.id });
+          }
+        }
+      } else {
+        const target = list[idx].to;
+        for (const [sid, name] of online.entries()) {
+          if (norm(name) === target || norm(name) === norm(me)) {
+            io.to(sid).emit("messageDeleted", { id: list[idx].id, message: list[idx].message });
+          }
         }
       }
     }
