@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -480,7 +481,7 @@ button,input,textarea{font:inherit}
         <div class="chatTools">
           <button id="callButton" class="toolBtn callBtn hidden">📞 Llamar</button>
           <button id="hangupButton" class="toolBtn hangBtn hidden">📵 Colgar</button>
-          <button id="groupRenameButton" class="toolBtn groupAddBtn hidden" type="button">✏️ Nombre</button><button id="groupAddMembersButton" class="toolBtn groupAddBtn hidden" type="button">👥 Añadir</button><button id="blockCurrentButton" class="toolBtn hidden" type="button">🚫 Bloquear</button>
+          <button id="groupRenameButton" class="toolBtn groupAddBtn hidden" type="button">✏️ Nombre</button><button id="groupAddMembersButton" class="toolBtn groupAddBtn hidden" type="button">👥 Añadir</button><button id="groupDeleteButton" class="toolBtn groupAddBtn hidden" type="button">🗑️ Borrar</button><button id="blockCurrentButton" class="toolBtn hidden" type="button">🚫 Bloquear</button>
         </div>
 
       </header>
@@ -923,6 +924,7 @@ const groupError = $("groupError");
 const groupAvatarInput = $("groupAvatarInput");
 const groupRenameButton = $("groupRenameButton");
 const groupAddMembersButton = $("groupAddMembersButton");
+const groupDeleteButton = $("groupDeleteButton");
 const groupAddModal = $("groupAddModal");
 const groupAddMemberOptions = $("groupAddMemberOptions");
 const groupAddError = $("groupAddError");
@@ -1726,7 +1728,17 @@ function moderationSeen(id){
   try{ const seen = JSON.parse(localStorage.getItem("michat_moderation_seen") || "[]"); return seen.includes(String(id)); }catch{return false}
 }
 function markModerationSeen(id){
-  try{ const key="michat_moderation_seen"; const seen=JSON.parse(localStorage.getItem(key)||"[]"); const value=String(id); if(!seen.includes(value))seen.push(value); localStorage.setItem(key,JSON.stringify(seen.slice(-100))); }catch{}
+  const value = String(id || "");
+  if(!value) return;
+  try{
+    const key="michat_moderation_seen";
+    const seen=JSON.parse(localStorage.getItem(key)||"[]");
+    if(!seen.includes(value)) seen.push(value);
+    localStorage.setItem(key,JSON.stringify(seen.slice(-100)));
+  }catch{}
+  try{
+    if(socket?.connected) socket.emit("moderationNoticeSeen", value);
+  }catch{}
 }
 
 socket.on("kicked", data => {
@@ -1988,10 +2000,15 @@ function refreshGroupAddButton(){
     groupRenameButton.classList.toggle('visible',isAdmin);
     groupRenameButton.classList.toggle('hidden',!isAdmin);
   }
+  if(groupDeleteButton){
+    groupDeleteButton.classList.toggle('visible',isAdmin);
+    groupDeleteButton.classList.toggle('hidden',!isAdmin);
+  }
 }
 function hideGroupTools(){
   if(groupAddMembersButton){ groupAddMembersButton.classList.add('hidden'); groupAddMembersButton.classList.remove('visible'); }
   if(groupRenameButton){ groupRenameButton.classList.add('hidden'); groupRenameButton.classList.remove('visible'); }
+  if(groupDeleteButton){ groupDeleteButton.classList.add('hidden'); groupDeleteButton.classList.remove('visible'); }
 }
 function refreshBlockButton(){
   if(!blockCurrentButton) return;
@@ -2210,6 +2227,33 @@ if(groupAddMembersButton){
     groupAddModal.style.display='flex';
   };
 }
+if(groupDeleteButton){
+  groupDeleteButton.onclick=()=>{
+    const group=allGroups.find(g=>String(g.id)===String(selectedGroupId));
+    if(!group) return;
+    if(!window.confirm(`¿Seguro que quieres borrar el grupo «${group.name || "Grupo"}»? Se eliminará para todos sus miembros y se borrarán sus mensajes.`)) return;
+    socket.emit('deleteGroup',{groupId:selectedGroupId});
+  };
+}
+socket.on('groupDeleteError',message=>showNotification('Borrar grupo',message||'No se pudo borrar el grupo.'));
+socket.on('groupDeleted',data=>{
+  const id=String(data?.id||'');
+  if(!id) return;
+  allGroups=allGroups.filter(g=>String(g.id)!==id);
+  delete groupUnread[id];
+  if(String(selectedGroupId)===id){
+    selectedGroupId='';
+    selectedUser='';
+    hideGroupTools();
+    messageInput.disabled=true;
+    sendButton.disabled=true;
+    attachButton.disabled=true;
+    messagesContainer.innerHTML='<div class="empty">Grupo eliminado.</div>';
+    chatTitle.textContent='Selecciona una conversación';
+    chatSubtitle.textContent='Usa «Nuevo chat» o «Crear grupo» para empezar.';
+  }
+  renderUsers();
+});
 if($('cancelGroupAdd')) $('cancelGroupAdd').onclick=()=>{groupAddModal.style.display='none';};
 if($('confirmGroupAdd')) $('confirmGroupAdd').onclick=()=>{
   const selected=Array.from(groupAddMemberOptions.querySelectorAll('input[data-group-add-member]:checked')).map(el=>el.value);
@@ -5881,3 +5925,4 @@ checkSession();
 </body>
 </html>
 ```
+
