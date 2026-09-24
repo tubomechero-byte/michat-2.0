@@ -1,5 +1,5 @@
 
-const CACHE_VERSION = "michat-v33";
+const CACHE_VERSION = "michat-v38";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", event => event.waitUntil(self.clients.claim()));
