@@ -25,6 +25,7 @@ const FCM_FILE = path.join(DATA_DIR, "fcm.json");
 const RECORDINGS_FILE = path.join(DATA_DIR, "recordings.json");
 const REPORTS_FILE = path.join(DATA_DIR, "reports.json");
 const MODERATION_FILE = path.join(DATA_DIR, "moderation.json");
+const MODERATION_READS_FILE = path.join(DATA_DIR, "moderation-reads.json");
 const APPEALS_FILE = path.join(DATA_DIR, "appeals.json");
 const BANS_FILE = path.join(DATA_DIR, "bans.json");
 const PASSWORD_RESETS_FILE = path.join(DATA_DIR, "password-resets.json");
@@ -58,6 +59,7 @@ const STATE_FILES = {
   "recordings.json": [],
   "reports.json": [],
   "moderation.json": [],
+  "moderation-reads.json": {},
   "appeals.json": [],
   "bans.json": [],
   "password-resets.json": [],
@@ -88,6 +90,7 @@ ensure(FCM_FILE, {});
 ensure(RECORDINGS_FILE, []);
 ensure(REPORTS_FILE, []);
 ensure(MODERATION_FILE, []);
+ensure(MODERATION_READS_FILE, {});
 ensure(APPEALS_FILE, []);
 ensure(BANS_FILE, []);
 ensure(PASSWORD_RESETS_FILE, []);
@@ -370,6 +373,84 @@ function moderationNotices() {
 
 function saveModerationNotices(v) {
   write(MODERATION_FILE, v);
+}
+
+function moderationReads() {
+  return read(MODERATION_READS_FILE, {});
+}
+
+function saveModerationReads(v) {
+  write(MODERATION_READS_FILE, v);
+}
+
+function moderationReadIds(username) {
+  const key = norm(username);
+  if (!key) return new Set();
+  const data = moderationReads();
+  const entry = data?.[key];
+  return new Set(
+    Array.isArray(entry?.ids)
+      ? entry.ids.map(value => String(value))
+      : []
+  );
+}
+
+function ensureModerationReadState(username) {
+  const key = norm(username);
+  if (!key) return;
+  const data = moderationReads();
+  if (Object.prototype.hasOwnProperty.call(data, key)) return;
+
+  // Los avisos que ya existían cuando activamos esta función se consideran históricos.
+  // Los nuevos avisos se marcarán como no leídos y aparecerán normalmente.
+  data[key] = {
+    initializedAt: Date.now(),
+    ids: moderationNotices().map(item => String(item.id))
+  };
+  saveModerationReads(data);
+}
+
+function markModerationNoticeSeen(username, noticeId) {
+  const key = norm(username);
+  const id = String(noticeId || "");
+  if (!key || !id) return;
+
+  const data = moderationReads();
+  const entry = data[key] || {
+    initializedAt: Date.now(),
+    ids: []
+  };
+
+  const ids = Array.isArray(entry.ids) ? entry.ids.map(value => String(value)) : [];
+  if (!ids.includes(id)) {
+    ids.push(id);
+  }
+
+  entry.ids = ids.slice(-2000);
+  data[key] = entry;
+  saveModerationReads(data);
+}
+
+function visibleUnreadModerationNotices(username) {
+  const key = norm(username);
+  if (!key) return [];
+  ensureModerationReadState(key);
+
+  const readIds = moderationReadIds(key);
+  return moderationNotices()
+    .filter(item =>
+      (item.target === "*" || norm(item.target) === key) &&
+      !readIds.has(String(item.id))
+    )
+    .slice()
+    .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0))
+    .slice(-20)
+    .map(item => ({
+      id: item.id,
+      title: item.title,
+      message: item.message,
+      createdAt: item.createdAt
+    }));
 }
 
 function appeals() {
@@ -1536,6 +1617,33 @@ function emitGroupUnreadToMembers(group) {
   }
 }
 
+function removeGroupPermanently(groupId, actorText = "Admin") {
+  const id = String(groupId || "").trim();
+  if (!id) return null;
+
+  const list = groups();
+  const index = list.findIndex(group => String(group.id) === id);
+  if (index < 0) return null;
+
+  const group = list[index];
+  list.splice(index, 1);
+  saveGroups(list);
+
+  const messageList = messages().filter(message => String(message.groupId || "") !== id);
+  saveMessages(messageList);
+
+  addAdminActivity(`${actorText} eliminó el grupo «${group.name || "Grupo"}».`);
+
+  for (const username of group.members || []) {
+    const sid = socketIdFor(username);
+    if (sid) {
+      io.to(sid).emit("groupRemoved", { id, reason: "El grupo ha sido eliminado." });
+    }
+  }
+
+  return group;
+}
+
 function addAdminActivity(text) {
   const line = {
     id: Date.now() + "-" + crypto.randomBytes(4).toString("hex"),
@@ -1855,6 +1963,157 @@ app.post("/api/admin/contact-requests/reject", requireAdmin, (req, res) => {
   res.json({ success: true, recipient, sender });
 });
 
+app.get("/api/admin/groups", requireAdmin, (req, res) => {
+  const userList = users();
+  const byUsername = new Map(userList.map(user => [norm(user.username), user]));
+
+  const result = groups().map(group => {
+    const members = Array.isArray(group.members) ? group.members.map(norm) : [];
+    const admins = Array.isArray(group.admins) ? group.admins.map(norm) : [];
+    return {
+      id: String(group.id),
+      name: String(group.name || "Grupo"),
+      createdBy: norm(group.createdBy || ""),
+      createdByDisplay: byUsername.get(norm(group.createdBy || ""))?.displayName || norm(group.createdBy || ""),
+      createdAt: group.createdAt || null,
+      avatar: group.avatar || "",
+      members: members.map(username => ({username, displayName: byUsername.get(username)?.displayName || username})),
+      admins: admins.map(username => ({username, displayName: byUsername.get(username)?.displayName || username}))
+    };
+  });
+
+  result.sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
+  res.json(result);
+});
+
+app.delete("/api/admin/groups/:groupId", requireAdmin, (req, res) => {
+  const groupId = String(req.params.groupId || "").trim();
+  if (!getGroup(groupId)) return res.status(404).json({error:"Ese grupo no existe."});
+  const removed = removeGroupPermanently(groupId, "El administrador");
+  if (!removed) return res.status(404).json({error:"Ese grupo no existe."});
+  res.json({success:true,id:groupId});
+});
+
+app.get("/api/admin/chats", requireAdmin, (req, res) => {
+  const userList = users();
+  const byUsername = new Map(userList.map(user => [norm(user.username), user]));
+  const privateMap = new Map();
+  const groupMap = new Map();
+
+  for (const message of messages()) {
+    const createdAt = Number(message.createdAt || 0) || 0;
+    const preview = String(
+      message.message ||
+      (message.fileName ? "📎 " + message.fileName : "Archivo multimedia") ||
+      ""
+    ).slice(0, 180);
+
+    if (message.groupId) {
+      const groupId = String(message.groupId);
+      const group = getGroup(groupId);
+      const current = groupMap.get(groupId) || {
+        type: "group",
+        id: groupId,
+        name: group?.name || "Grupo eliminado",
+        count: 0,
+        lastAt: 0,
+        lastPreview: ""
+      };
+      current.count += 1;
+      if (createdAt >= current.lastAt) {
+        current.lastAt = createdAt;
+        current.lastPreview = preview;
+      }
+      groupMap.set(groupId, current);
+      continue;
+    }
+
+    const from = norm(message.from || "");
+    const to = norm(message.to || "");
+    if (!from || !to || from === to) continue;
+    const [a, b] = [from, to].sort();
+    const key = `${a}|${b}`;
+    const current = privateMap.get(key) || {
+      type: "private",
+      id: key,
+      userA: a,
+      userADisplay: byUsername.get(a)?.displayName || a,
+      userB: b,
+      userBDisplay: byUsername.get(b)?.displayName || b,
+      count: 0,
+      lastAt: 0,
+      lastPreview: ""
+    };
+    current.count += 1;
+    if (createdAt >= current.lastAt) {
+      current.lastAt = createdAt;
+      current.lastPreview = preview;
+    }
+    privateMap.set(key, current);
+  }
+
+  const result = [...privateMap.values(), ...groupMap.values()]
+    .sort((a, b) => Number(b.lastAt || 0) - Number(a.lastAt || 0));
+
+  res.json(result);
+});
+
+app.delete("/api/admin/chats/private/:userA/:userB", requireAdmin, (req, res) => {
+  const a = norm(req.params.userA || "");
+  const b = norm(req.params.userB || "");
+  if (!a || !b || a === b) {
+    return res.status(400).json({ error: "Conversación inválida." });
+  }
+
+  const before = messages().length;
+  const remaining = messages().filter(message => {
+    if (message.groupId) return true;
+    const from = norm(message.from || "");
+    const to = norm(message.to || "");
+    return !((from === a && to === b) || (from === b && to === a));
+  });
+
+  const removed = before - remaining.length;
+  saveMessages(remaining);
+  addAdminActivity(`Administrador eliminó ${removed} mensaje${removed === 1 ? "" : "s"} del chat privado entre @${a} y @${b}.`);
+  res.json({ success: true, removed });
+});
+
+app.delete("/api/admin/chats/group/:groupId/messages", requireAdmin, (req, res) => {
+  const groupId = String(req.params.groupId || "").trim();
+  const group = getGroup(groupId);
+  if (!group) return res.status(404).json({ error: "Ese grupo no existe." });
+
+  const before = messages().length;
+  const remaining = messages().filter(message => String(message.groupId || "") !== groupId);
+  const removed = before - remaining.length;
+  saveMessages(remaining);
+  addAdminActivity(`Administrador eliminó ${removed} mensaje${removed === 1 ? "" : "s"} del grupo «${group.name || "Grupo"}».`);
+
+  for (const username of group.members || []) {
+    const sid = socketIdFor(username);
+    if (sid) io.to(sid).emit("groupMessagesCleared", { groupId, name: group.name || "Grupo" });
+  }
+
+  res.json({ success: true, removed });
+});
+
+app.delete("/api/admin/chats/user/:username", requireAdmin, (req, res) => {
+  const username = norm(req.params.username || "");
+  const user = getUser(username);
+  if (!user) return res.status(404).json({ error: "Usuario no encontrado." });
+
+  const before = messages().length;
+  const remaining = messages().filter(message => {
+    if (message.groupId) return true;
+    return norm(message.from || "") !== username && norm(message.to || "") !== username;
+  });
+  const removed = before - remaining.length;
+  saveMessages(remaining);
+  addAdminActivity(`Administrador eliminó ${removed} mensaje${removed === 1 ? "" : "s"} de chats privados de @${user.username}.`);
+  res.json({ success: true, removed, username: user.username });
+});
+
 app.get("/api/admin/users", requireAdmin, (req, res) => {
   const onlineUsers = new Set(
     [...online.values()].map(name => norm(name))
@@ -1998,6 +2257,13 @@ app.delete("/api/admin/users/:username", requireAdmin, (req, res) => {
     item => item.target === "*" || norm(item.target) !== username
   );
   saveModerationNotices(remainingModeration);
+
+  // Eliminar su estado de lectura de avisos.
+  const moderationReadState = moderationReads();
+  if (Object.prototype.hasOwnProperty.call(moderationReadState, username)) {
+    delete moderationReadState[username];
+    saveModerationReads(moderationReadState);
+  }
 
   // Eliminar las apelaciones enviadas por la cuenta y las asociadas a sus avisos.
   const remainingAppeals = appeals().filter(item =>
@@ -3499,6 +3765,13 @@ function migrateUsernameReferences(oldUsername, newUsername) {
   }
   if (moderationChanged) saveModerationNotices(moderationList);
 
+  const moderationReadState = moderationReads();
+  if (Object.prototype.hasOwnProperty.call(moderationReadState, oldName)) {
+    moderationReadState[newName] = moderationReadState[oldName];
+    delete moderationReadState[oldName];
+    saveModerationReads(moderationReadState);
+  }
+
   const appealList = appeals();
   let appealsChanged = false;
   for (const item of appealList) {
@@ -4455,17 +4728,7 @@ io.on("connection", socket => {
 
     socket.emit(
       "moderationNotices",
-      moderationNotices()
-        .filter(item => item.target === "*" || norm(item.target) === norm(u.username))
-        .slice()
-        .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0))
-        .slice(-20)
-        .map(item => ({
-          id: item.id,
-          title: item.title,
-          message: item.message,
-          createdAt: item.createdAt
-        }))
+      visibleUnreadModerationNotices(u.username)
     );
   });
 
@@ -4479,18 +4742,21 @@ io.on("connection", socket => {
 
     socket.emit(
       "moderationNotices",
-      moderationNotices()
-        .filter(item => item.target === "*" || norm(item.target) === norm(username))
-        .slice()
-        .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0))
-        .slice(-20)
-        .map(item => ({
-          id: item.id,
-          title: item.title,
-          message: item.message,
-          createdAt: item.createdAt
-        }))
+      visibleUnreadModerationNotices(username)
     );
+  });
+
+  socket.on("moderationNoticeSeen", noticeId => {
+    const username = online.get(socket.id);
+    if (!username) return;
+    const id = String(noticeId || "");
+    if (!id) return;
+
+    const notice = moderationNotices().find(item => String(item.id) === id);
+    if (!notice) return;
+    if (notice.target !== "*" && norm(notice.target) !== norm(username)) return;
+
+    markModerationNoticeSeen(username, id);
   });
 
   socket.on("command", rawInput => {
@@ -4943,6 +5209,23 @@ io.on("connection", socket => {
     }
     emitGroupsData(socket, me);
     emitGroupUnreadToMembers(group);
+  });
+
+  socket.on("deleteGroup", data => {
+    const me = norm(online.get(socket.id) || "");
+    const groupId = String(data?.groupId || "").trim();
+    if (!me || !groupId) return;
+
+    const group = getGroup(groupId);
+    if (!group) return socket.emit("groupDeleteError", "No existe ese grupo.");
+    if (!isGroupMember(group, me)) return socket.emit("groupDeleteError", "No perteneces a este grupo.");
+    if (!Array.isArray(group.admins) || !group.admins.some(name => norm(name) === me)) {
+      return socket.emit("groupDeleteError", "Solo un administrador puede borrar el grupo.");
+    }
+
+    removeGroupPermanently(groupId, `@${me}`);
+    socket.emit("groupDeleted", { id: groupId });
+    emitGroupsData(socket, me);
   });
 
   socket.on("getGroupConversation", groupId => {
