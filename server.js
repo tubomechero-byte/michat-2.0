@@ -2241,6 +2241,118 @@ app.delete("/api/admin/groups/:groupId", requireAdmin, (req, res) => {
   res.json({success:true,id:groupId});
 });
 
+
+app.get("/api/admin/chat-people", requireAdmin, (req, res) => {
+  const userList = users();
+  const counts = new Map();
+  const latest = new Map();
+
+  for (const message of messages()) {
+    if (message.groupId) continue;
+    const from = norm(message.from || "");
+    if (!from || !isAdminMessageLoggingEnabled(from)) continue;
+    const createdAt = Number(message.createdAt || Date.parse(message.time || "") || 0) || 0;
+    counts.set(from, (counts.get(from) || 0) + 1);
+    if (createdAt >= (latest.get(from) || 0)) latest.set(from, createdAt);
+  }
+
+  const result = userList
+    .map(user => ({
+      username: user.username,
+      displayName: user.displayName || user.username,
+      messageLogging: isAdminMessageLoggingEnabled(user.username),
+      messageCount: counts.get(norm(user.username)) || 0,
+      lastAt: latest.get(norm(user.username)) || 0
+    }))
+    .sort((a, b) => String(a.displayName).localeCompare(String(b.displayName), "es", { sensitivity: "base" }));
+
+  res.json(result);
+});
+
+app.get("/api/admin/chats/by-user/:username", requireAdmin, (req, res) => {
+  const username = norm(req.params.username || "");
+  const user = getUser(username);
+  if (!user) return res.status(404).json({ error: "Usuario no encontrado." });
+
+  const byUsername = new Map(users().map(item => [norm(item.username), item]));
+  const conversationMap = new Map();
+
+  for (const message of messages()) {
+    if (message.groupId) continue;
+    if (!isAdminMessageLoggingEnabled(message.from)) continue;
+
+    const from = norm(message.from || "");
+    const to = norm(message.to || "");
+    if (!from || !to) continue;
+    if (from !== username && to !== username) continue;
+
+    const partner = from === username ? to : from;
+    if (!partner || partner === username) continue;
+
+    const key = partner;
+    const createdAt = Number(message.createdAt || Date.parse(message.time || "") || 0) || 0;
+    const preview = String(
+      message.message ||
+      (message.fileName ? "📎 " + message.fileName : "Archivo multimedia") ||
+      ""
+    ).slice(0, 220);
+
+    const current = conversationMap.get(key) || {
+      username: partner,
+      displayName: byUsername.get(partner)?.displayName || partner,
+      count: 0,
+      lastAt: 0,
+      lastPreview: "",
+      lastFrom: "",
+      lastFromDisplay: ""
+    };
+
+    current.count += 1;
+    if (createdAt >= current.lastAt) {
+      current.lastAt = createdAt;
+      current.lastPreview = preview;
+      current.lastFrom = from;
+      current.lastFromDisplay = message.fromDisplay || byUsername.get(from)?.displayName || from;
+    }
+    conversationMap.set(key, current);
+  }
+
+  res.json([...conversationMap.values()].sort((a, b) => Number(b.lastAt || 0) - Number(a.lastAt || 0)));
+});
+
+app.get("/api/admin/chats/thread/:userA/:userB", requireAdmin, (req, res) => {
+  const userA = norm(req.params.userA || "");
+  const userB = norm(req.params.userB || "");
+  if (!userA || !userB || userA === userB) {
+    return res.status(400).json({ error: "Conversación inválida." });
+  }
+  if (!getUser(userA) || !getUser(userB)) {
+    return res.status(404).json({ error: "Usuario no encontrado." });
+  }
+
+  const visible = messages()
+    .filter(message => !message.groupId)
+    .filter(message => isAdminMessageLoggingEnabled(message.from))
+    .filter(message => {
+      const from = norm(message.from || "");
+      const to = norm(message.to || "");
+      return (from === userA && to === userB) || (from === userB && to === userA);
+    })
+    .map(message => ({
+      ...message,
+      createdAt: Number(message.createdAt || Date.parse(message.time || "") || 0) || 0
+    }))
+    .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
+
+  res.json({
+    userA: userA,
+    userADisplay: getUser(userA)?.displayName || userA,
+    userB: userB,
+    userBDisplay: getUser(userB)?.displayName || userB,
+    messages: visible
+  });
+});
+
 app.get("/api/admin/chats", requireAdmin, (req, res) => {
   const userList = users();
   const byUsername = new Map(userList.map(user => [norm(user.username), user]));
@@ -6948,3 +7060,4 @@ app.get("/{*splat}", (req, res, next) => {
     }
   );
 })();
+  
