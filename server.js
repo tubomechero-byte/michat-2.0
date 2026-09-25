@@ -32,6 +32,7 @@ const PASSWORD_RESETS_FILE = path.join(DATA_DIR, "password-resets.json");
 const COMMAND_ACCESS_FILE = path.join(DATA_DIR, "command-access.json");
 const MESSAGE_LOGGING_FILE = path.join(DATA_DIR, "message-logging.json");
 const ACCESS_BLOCKS_FILE = path.join(DATA_DIR, "access-blocks.json");
+const GLOBAL_ACCESS_FILE = path.join(DATA_DIR, "global-access.json");
 const ADMIN_ACTIVITY_FILE = path.join(DATA_DIR, "admin-activity.json");
 const GROUPS_FILE = path.join(DATA_DIR, "groups.json");
 const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
@@ -68,6 +69,7 @@ const STATE_FILES = {
   "command-access.json": {},
   "message-logging.json": {},
   "access-blocks.json": {},
+  "global-access.json": { enabled: false, ownerUsername: "", salt: "", passwordHash: "", updatedAt: 0 },
   "admin-activity.json": [],
   "groups.json": []
 };
@@ -101,6 +103,7 @@ ensure(PASSWORD_RESETS_FILE, []);
 ensure(COMMAND_ACCESS_FILE, []);
 ensure(MESSAGE_LOGGING_FILE, {});
 ensure(ACCESS_BLOCKS_FILE, {});
+ensure(GLOBAL_ACCESS_FILE, { enabled: false, ownerUsername: "", salt: "", passwordHash: "", updatedAt: 0 });
 ensure(ADMIN_ACTIVITY_FILE, []);
 ensure(GROUPS_FILE, []);
 
@@ -504,6 +507,45 @@ function activeAccessBlockFor(username) {
   const blocks = accessBlocks();
   const item = blocks[target];
   return item && item.active !== false ? item : null;
+}
+
+function globalAccessState() {
+  const value = read(GLOBAL_ACCESS_FILE, {
+    enabled: false,
+    ownerUsername: "",
+    salt: "",
+    passwordHash: "",
+    updatedAt: 0
+  });
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : { enabled: false, ownerUsername: "", salt: "", passwordHash: "", updatedAt: 0 };
+}
+
+function saveGlobalAccessState(value) {
+  write(GLOBAL_ACCESS_FILE, value);
+}
+
+function globalAccessEnabled() {
+  return globalAccessState().enabled === true;
+}
+
+function globalOwnerUsername() {
+  return norm(globalAccessState().ownerUsername || "");
+}
+
+function globalOwnerCanAccess(username) {
+  const owner = globalOwnerUsername();
+  return !!owner && norm(username) === owner;
+}
+
+function passwordMatchesHash(password, salt, hash) {
+  if (!password || !salt || !hash) return false;
+  try {
+    return validPassword(String(password), String(salt), String(hash));
+  } catch {
+    return false;
+  }
 }
 
 function passwordResets() {
@@ -1463,6 +1505,7 @@ function sessionUser(token) {
   if (!user) return null;
   if (activeBanFor(user.username)) return null;
   if (activeAccessBlockFor(user.username)) return null;
+  if (globalAccessEnabled() && !globalOwnerCanAccess(user.username)) return null;
   return user;
 }
 
@@ -1855,6 +1898,128 @@ app.get("/api/admin/me", requireAdmin, (req, res) => {
 
 app.post("/api/admin/logout", requireAdmin, (req, res) => {
   res.json({ success: true });
+});
+
+app.get("/api/admin/global-access", requireAdmin, (req, res) => {
+  const state = globalAccessState();
+  res.json({
+    enabled: state.enabled === true,
+    ownerUsername: norm(state.ownerUsername || ""),
+    updatedAt: Number(state.updatedAt || 0) || null
+  });
+});
+
+app.put("/api/admin/global-access", requireAdmin, (req, res) => {
+  const enabled = req.body?.enabled === true;
+  const current = globalAccessState();
+
+  if (!enabled) {
+    saveGlobalAccessState({
+      ...current,
+      enabled: false,
+      updatedAt: Date.now()
+    });
+    addAdminActivity(`@${req.admin.username} desbloqueó el acceso global al chat.`);
+    return res.json({ success: true, enabled: false });
+  }
+
+  const ownerUsername = norm(req.body?.ownerUsername || "");
+  const password = String(req.body?.password || "");
+  const owner = getUser(ownerUsername);
+
+  if (!owner) {
+    return res.status(400).json({ error: "La cuenta del propietario no existe." });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ error: "La contraseña de acceso debe tener al menos 6 caracteres." });
+  }
+
+  const hash = passwordHash(password);
+  saveGlobalAccessState({
+    enabled: true,
+    ownerUsername: norm(owner.username),
+    salt: hash.salt,
+    passwordHash: hash.hash,
+    updatedAt: Date.now(),
+    updatedBy: req.admin.username
+  });
+
+  let disconnected = 0;
+  for (const [socketId, username] of online.entries()) {
+    if (norm(username) === norm(owner.username)) continue;
+    const targetSocket = io.sockets.sockets.get(socketId);
+    if (targetSocket) {
+      targetSocket.emit("globalAccessLocked", {
+        message: "No tienes acceso a este servicio."
+      });
+      targetSocket.disconnect(true);
+      disconnected += 1;
+    }
+    online.delete(socketId);
+  }
+  sendUserList();
+
+  addAdminActivity(`@${req.admin.username} activó el bloqueo global del chat; solo @${owner.username} puede acceder.`);
+
+  res.json({
+    success: true,
+    enabled: true,
+    ownerUsername: owner.username,
+    disconnected
+  });
+});
+
+app.post("/api/global-unlock", (req, res) => {
+  const state = globalAccessState();
+  if (state.enabled !== true) {
+    return res.status(400).json({ error: "El acceso global no está bloqueado." });
+  }
+
+  const password = String(req.body?.password || "");
+  if (!passwordMatchesHash(password, state.salt, state.passwordHash)) {
+    return res.status(401).json({
+      error: "Contraseña de acceso incorrecta.",
+      globalLock: true
+    });
+  }
+
+  const username = norm(state.ownerUsername || "");
+  const user = getUser(username);
+  if (!user) {
+    return res.status(500).json({ error: "La cuenta propietaria ya no existe." });
+  }
+
+  const accessBlock = activeAccessBlockFor(user.username);
+  if (accessBlock) {
+    return res.status(403).json({ error: accessBlock.reason || "Tu acceso a Mi Chat está bloqueado.", accessBlocked: true });
+  }
+
+  const ban = activeBanFor(user.username);
+  if (ban) {
+    return res.status(403).json({
+      error: ban.expiresAt
+        ? `Tu cuenta está baneada hasta ${new Date(Number(ban.expiresAt)).toLocaleString("es-ES")}.`
+        : "Tu cuenta está baneada permanentemente.",
+      banned: true
+    });
+  }
+
+  const token = newSession(user.username);
+  addAdminActivity(`@${user.username} accedió al chat mediante la contraseña de acceso global.`);
+
+  res.json({
+    success: true,
+    username: user.displayName,
+    token
+  });
+});
+
+app.get("/api/global-access/status", (req, res) => {
+  const state = globalAccessState();
+  res.json({
+    locked: state.enabled === true
+  });
 });
 
 app.get("/api/admin/stats", requireAdmin, (req, res) => {
@@ -3528,6 +3693,13 @@ function socketIdFor(username) {
 }
 
 app.post("/api/register", (req, res) => {
+  if (globalAccessEnabled()) {
+    return res.status(403).json({
+      error: "No tienes acceso a este servicio.",
+      globalLock: true
+    });
+  }
+
   const displayName =
     String(req.body.username || "").trim();
 
@@ -3814,6 +3986,13 @@ app.post("/api/login", (req, res) => {
     });
   }
 
+  if (globalAccessEnabled() && !globalOwnerCanAccess(u.username)) {
+    return res.status(403).json({
+      error: "No tienes acceso a este servicio.",
+      globalLock: true
+    });
+  }
+
   const accessBlock = activeAccessBlockFor(u.username);
   if (accessBlock) {
     return res.status(403).json({
@@ -3873,6 +4052,15 @@ app.get("/api/session", (req, res) => {
   const rawUser = sessionUserRaw(token);
   const accessBlock = rawUser ? activeAccessBlockFor(rawUser.username) : null;
   const ban = rawUser ? activeBanFor(rawUser.username) : null;
+
+  if (rawUser && globalAccessEnabled() && !globalOwnerCanAccess(rawUser.username)) {
+    deleteSession(token);
+    return res.status(403).json({
+      loggedIn: false,
+      globalLock: true,
+      error: "No tienes acceso a este servicio."
+    });
+  }
 
   if (!rawUser) {
     return res.status(401).json({
@@ -4911,6 +5099,13 @@ io.on("connection", socket => {
       return socket.emit(
         "authenticationError"
       );
+    }
+
+    if (globalAccessEnabled() && !globalOwnerCanAccess(u.username)) {
+      socket.emit("globalAccessLocked", {
+        message: "No tienes acceso a este servicio."
+      });
+      return socket.disconnect(true);
     }
 
     const accessBlock = activeAccessBlockFor(u.username);
