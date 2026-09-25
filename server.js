@@ -31,6 +31,7 @@ const BANS_FILE = path.join(DATA_DIR, "bans.json");
 const PASSWORD_RESETS_FILE = path.join(DATA_DIR, "password-resets.json");
 const COMMAND_ACCESS_FILE = path.join(DATA_DIR, "command-access.json");
 const MESSAGE_LOGGING_FILE = path.join(DATA_DIR, "message-logging.json");
+const ACCESS_BLOCKS_FILE = path.join(DATA_DIR, "access-blocks.json");
 const ADMIN_ACTIVITY_FILE = path.join(DATA_DIR, "admin-activity.json");
 const GROUPS_FILE = path.join(DATA_DIR, "groups.json");
 const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
@@ -66,6 +67,7 @@ const STATE_FILES = {
   "password-resets.json": [],
   "command-access.json": {},
   "message-logging.json": {},
+  "access-blocks.json": {},
   "admin-activity.json": [],
   "groups.json": []
 };
@@ -98,6 +100,7 @@ ensure(BANS_FILE, []);
 ensure(PASSWORD_RESETS_FILE, []);
 ensure(COMMAND_ACCESS_FILE, []);
 ensure(MESSAGE_LOGGING_FILE, {});
+ensure(ACCESS_BLOCKS_FILE, {});
 ensure(ADMIN_ACTIVITY_FILE, []);
 ensure(GROUPS_FILE, []);
 
@@ -484,6 +487,23 @@ function bans() {
 
 function saveBans(v) {
   write(BANS_FILE, v);
+}
+
+function accessBlocks() {
+  const value = read(ACCESS_BLOCKS_FILE, {});
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function saveAccessBlocks(v) {
+  write(ACCESS_BLOCKS_FILE, v);
+}
+
+function activeAccessBlockFor(username) {
+  const target = norm(username);
+  if (!target) return null;
+  const blocks = accessBlocks();
+  const item = blocks[target];
+  return item && item.active !== false ? item : null;
 }
 
 function passwordResets() {
@@ -1441,7 +1461,9 @@ function sessionUserRaw(token) {
 function sessionUser(token) {
   const user = sessionUserRaw(token);
   if (!user) return null;
-  return activeBanFor(user.username) ? null : user;
+  if (activeBanFor(user.username)) return null;
+  if (activeAccessBlockFor(user.username)) return null;
+  return user;
 }
 
 function deleteSession(token) {
@@ -2199,7 +2221,9 @@ app.get("/api/admin/users", requireAdmin, (req, res) => {
     banActive: Boolean(activeBanFor(user.username)),
     banUntil: activeBanFor(user.username)?.expiresAt || null,
     banReason: activeBanFor(user.username)?.reason || "",
-    messageLogging: isAdminMessageLoggingEnabled(user.username)
+    messageLogging: isAdminMessageLoggingEnabled(user.username),
+    accessBlocked: Boolean(activeAccessBlockFor(user.username)),
+    accessBlockReason: activeAccessBlockFor(user.username)?.reason || ""
   }));
 
   result.sort((a, b) => {
@@ -2250,6 +2274,12 @@ app.delete("/api/admin/users/:username", requireAdmin, (req, res) => {
 
   if (sessionChanged) {
     saveSessions(sessionData);
+  }
+
+  const accessBlockMap = accessBlocks();
+  if (Object.prototype.hasOwnProperty.call(accessBlockMap, username)) {
+    delete accessBlockMap[username];
+    saveAccessBlocks(accessBlockMap);
   }
 
   // Quitar al usuario de contactos y bloqueos de los demás.
@@ -2582,6 +2612,59 @@ app.get("/api/admin/bans", requireAdmin, (req, res) => {
     ...item,
     active: !item.revokedAt && (!item.expiresAt || Number(item.expiresAt) > now)
   })));
+});
+
+app.post("/api/admin/users/:username/access-block", requireAdmin, (req, res) => {
+  const username = norm(req.params.username || "");
+  const user = getUser(username);
+  if (!user) return res.status(404).json({ error: "Usuario no encontrado." });
+
+  const reason = String(req.body?.reason || "").trim().slice(0, 500);
+  const blocks = accessBlocks();
+  blocks[username] = {
+    username: user.username,
+    active: true,
+    reason,
+    createdAt: Date.now(),
+    createdBy: req.admin.username
+  };
+  saveAccessBlocks(blocks);
+
+  for (const [socketId, name] of online.entries()) {
+    if (norm(name) !== username) continue;
+    online.delete(socketId);
+    const targetSocket = io.sockets.sockets.get(socketId);
+    if (targetSocket) {
+      targetSocket.emit("accessBlocked", {
+        reason: reason || "Tu acceso a Mi Chat ha sido bloqueado por un administrador."
+      });
+      targetSocket.disconnect(true);
+    }
+  }
+
+  addAdminActivity(`Administrador bloqueó el acceso al chat de @${user.username}.`);
+  sendUserList();
+  res.json({ success: true, username: user.username, accessBlocked: true, reason });
+});
+
+app.post("/api/admin/users/:username/access-unblock", requireAdmin, (req, res) => {
+  const username = norm(req.params.username || "");
+  const user = getUser(username);
+  if (!user) return res.status(404).json({ error: "Usuario no encontrado." });
+
+  const blocks = accessBlocks();
+  if (Object.prototype.hasOwnProperty.call(blocks, username)) {
+    delete blocks[username];
+    saveAccessBlocks(blocks);
+  }
+
+  addAdminActivity(`Administrador desbloqueó el acceso al chat de @${user.username}.`);
+  sendUserList();
+  res.json({ success: true, username: user.username, accessBlocked: false });
+});
+
+app.get("/api/admin/access-blocks", requireAdmin, (req, res) => {
+  res.json(accessBlocks());
 });
 
 app.get("/api/admin/message-logging", requireAdmin, (req, res) => {
@@ -3731,6 +3814,14 @@ app.post("/api/login", (req, res) => {
     });
   }
 
+  const accessBlock = activeAccessBlockFor(u.username);
+  if (accessBlock) {
+    return res.status(403).json({
+      error: accessBlock.reason || "Tu acceso a Mi Chat está bloqueado por un administrador.",
+      accessBlocked: true
+    });
+  }
+
   const ban = activeBanFor(u.username);
   if (ban) {
     return res.status(403).json({
@@ -3780,11 +3871,20 @@ app.post("/api/login", (req, res) => {
 app.get("/api/session", (req, res) => {
   const token = authToken(req);
   const rawUser = sessionUserRaw(token);
+  const accessBlock = rawUser ? activeAccessBlockFor(rawUser.username) : null;
   const ban = rawUser ? activeBanFor(rawUser.username) : null;
 
   if (!rawUser) {
     return res.status(401).json({
       loggedIn: false
+    });
+  }
+
+  if (accessBlock) {
+    return res.status(403).json({
+      loggedIn: false,
+      accessBlocked: true,
+      error: accessBlock.reason || "Tu acceso a Mi Chat está bloqueado por un administrador."
     });
   }
 
@@ -3956,6 +4056,14 @@ function migrateUsernameReferences(oldUsername, newUsername) {
     if (norm(item?.username) === oldName) { item.username = newName; commandChanged = true; }
   }
   if (commandChanged) saveCommandAccessRecords(commandList);
+
+  const accessBlockMap = accessBlocks();
+  if (Object.prototype.hasOwnProperty.call(accessBlockMap, oldName)) {
+    accessBlockMap[newName] = accessBlockMap[oldName];
+    accessBlockMap[newName].username = newName;
+    delete accessBlockMap[oldName];
+    saveAccessBlocks(accessBlockMap);
+  }
 
   // Preferencia de registro de mensajes.
   const messageLogging = messageLoggingSettings();
@@ -4803,6 +4911,14 @@ io.on("connection", socket => {
       return socket.emit(
         "authenticationError"
       );
+    }
+
+    const accessBlock = activeAccessBlockFor(u.username);
+    if (accessBlock) {
+      socket.emit("accessBlocked", {
+        reason: accessBlock.reason || "Tu acceso a Mi Chat ha sido bloqueado por un administrador."
+      });
+      return socket.disconnect(true);
     }
 
     const ban = activeBanFor(u.username);
