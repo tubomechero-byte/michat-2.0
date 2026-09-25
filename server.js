@@ -2600,10 +2600,15 @@ app.get("/api/admin/message-logging", requireAdmin, (req, res) => {
   res.json(result);
 });
 
-app.put("/api/admin/message-logging/:username", requireAdmin, (req, res) => {
-  const username = norm(req.params.username);
-  const user = getUser(username);
-  if (!user) return res.status(404).json({ error: "Usuario no encontrado." });
+app.get("/api/account/message-logging", requireUser, (req, res) => {
+  res.json({
+    enabled: isAdminMessageLoggingEnabled(req.user.username)
+  });
+});
+
+app.put("/api/account/message-logging", requireUser, (req, res) => {
+  const username = norm(req.user.username);
+  if (!username) return res.status(400).json({ error: "Cuenta no válida." });
 
   const enabled = req.body?.enabled === true;
   const settings = messageLoggingSettings();
@@ -2612,11 +2617,13 @@ app.put("/api/admin/message-logging/:username", requireAdmin, (req, res) => {
   else delete settings[username];
 
   saveMessageLoggingSettings(settings);
-  addAdminActivity(`Administrador ${enabled ? "activó" : "desactivó"} el registro de mensajes de @${user.username}.`);
+
+  addAdminActivity(
+    `@${req.user.username} ${enabled ? "permitió" : "desactivó"} que el administrador vea sus mensajes.`
+  );
 
   res.json({
     success: true,
-    username: user.username,
     enabled
   });
 });
