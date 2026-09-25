@@ -30,6 +30,7 @@ const APPEALS_FILE = path.join(DATA_DIR, "appeals.json");
 const BANS_FILE = path.join(DATA_DIR, "bans.json");
 const PASSWORD_RESETS_FILE = path.join(DATA_DIR, "password-resets.json");
 const COMMAND_ACCESS_FILE = path.join(DATA_DIR, "command-access.json");
+const MESSAGE_LOGGING_FILE = path.join(DATA_DIR, "message-logging.json");
 const ADMIN_ACTIVITY_FILE = path.join(DATA_DIR, "admin-activity.json");
 const GROUPS_FILE = path.join(DATA_DIR, "groups.json");
 const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
@@ -64,6 +65,7 @@ const STATE_FILES = {
   "bans.json": [],
   "password-resets.json": [],
   "command-access.json": {},
+  "message-logging.json": {},
   "admin-activity.json": [],
   "groups.json": []
 };
@@ -95,6 +97,7 @@ ensure(APPEALS_FILE, []);
 ensure(BANS_FILE, []);
 ensure(PASSWORD_RESETS_FILE, []);
 ensure(COMMAND_ACCESS_FILE, []);
+ensure(MESSAGE_LOGGING_FILE, {});
 ensure(ADMIN_ACTIVITY_FILE, []);
 ensure(GROUPS_FILE, []);
 
@@ -560,6 +563,29 @@ function saveCommandAccessRecords(records) {
     if (username && rank) data[username] = rank;
   }
   write(COMMAND_ACCESS_FILE, data);
+}
+
+function messageLoggingSettings() {
+  const value = read(MESSAGE_LOGGING_FILE, {});
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value;
+}
+
+function saveMessageLoggingSettings(value) {
+  const data = {};
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    for (const [username, enabled] of Object.entries(value)) {
+      const key = norm(username);
+      if (key && enabled === true) data[key] = true;
+    }
+  }
+  write(MESSAGE_LOGGING_FILE, data);
+}
+
+function isAdminMessageLoggingEnabled(username) {
+  const key = norm(username);
+  if (!key) return false;
+  return messageLoggingSettings()[key] === true;
 }
 
 function commandAccessUsers() {
@@ -1674,6 +1700,25 @@ function addAdminActivity(text) {
   write(ADMIN_ACTIVITY_FILE, adminActivity);
 }
 
+function addAdminMessageActivity(username, text) {
+  const key = norm(username);
+  if (!key || !isAdminMessageLoggingEnabled(key)) return;
+
+  const line = {
+    id: Date.now() + "-" + crypto.randomBytes(4).toString("hex"),
+    time: new Date().toISOString(),
+    kind: "message",
+    username: key,
+    text: String(text || "")
+  };
+
+  adminActivity = [...loadAdminActivity(), line];
+  if (adminActivity.length > 2000) {
+    adminActivity.splice(0, adminActivity.length - 2000);
+  }
+  write(ADMIN_ACTIVITY_FILE, adminActivity);
+}
+
 function createAdminToken() {
   const payload = Buffer.from(JSON.stringify({
     username: ADMIN_USERNAME,
@@ -2015,6 +2060,7 @@ app.get("/api/admin/chats", requireAdmin, (req, res) => {
   const groupMap = new Map();
 
   for (const message of messages()) {
+    if (!isAdminMessageLoggingEnabled(message.from)) continue;
     const createdAt = Number(message.createdAt || 0) || 0;
     const preview = String(
       message.message ||
@@ -2082,6 +2128,7 @@ app.delete("/api/admin/chats/private/:userA/:userB", requireAdmin, (req, res) =>
   const before = messages().length;
   const remaining = messages().filter(message => {
     if (message.groupId) return true;
+    if (!isAdminMessageLoggingEnabled(message.from)) return true;
     const from = norm(message.from || "");
     const to = norm(message.to || "");
     return !((from === a && to === b) || (from === b && to === a));
@@ -2099,7 +2146,10 @@ app.delete("/api/admin/chats/group/:groupId/messages", requireAdmin, (req, res) 
   if (!group) return res.status(404).json({ error: "Ese grupo no existe." });
 
   const before = messages().length;
-  const remaining = messages().filter(message => String(message.groupId || "") !== groupId);
+  const remaining = messages().filter(message => {
+    if (String(message.groupId || "") !== groupId) return true;
+    return !isAdminMessageLoggingEnabled(message.from);
+  });
   const removed = before - remaining.length;
   saveMessages(remaining);
   addAdminActivity(`Administrador eliminó ${removed} mensaje${removed === 1 ? "" : "s"} del grupo «${group.name || "Grupo"}».`);
@@ -2120,6 +2170,7 @@ app.delete("/api/admin/chats/user/:username", requireAdmin, (req, res) => {
   const before = messages().length;
   const remaining = messages().filter(message => {
     if (message.groupId) return true;
+    if (!isAdminMessageLoggingEnabled(message.from)) return true;
     return norm(message.from || "") !== username && norm(message.to || "") !== username;
   });
   const removed = before - remaining.length;
@@ -2147,7 +2198,8 @@ app.get("/api/admin/users", requireAdmin, (req, res) => {
     ban: activeBanFor(user.username),
     banActive: Boolean(activeBanFor(user.username)),
     banUntil: activeBanFor(user.username)?.expiresAt || null,
-    banReason: activeBanFor(user.username)?.reason || ""
+    banReason: activeBanFor(user.username)?.reason || "",
+    messageLogging: isAdminMessageLoggingEnabled(user.username)
   }));
 
   result.sort((a, b) => {
@@ -2240,6 +2292,13 @@ app.delete("/api/admin/users/:username", requireAdmin, (req, res) => {
       norm(message.to) !== username
   );
   saveMessages(remainingMessages);
+
+  // Eliminar también la preferencia de registro de mensajes.
+  const messageLogging = messageLoggingSettings();
+  if (Object.prototype.hasOwnProperty.call(messageLogging, username)) {
+    delete messageLogging[username];
+    saveMessageLoggingSettings(messageLogging);
+  }
 
   // Eliminar estados de la cuenta.
   const remainingStories = allStories().filter(
@@ -2523,6 +2582,43 @@ app.get("/api/admin/bans", requireAdmin, (req, res) => {
     ...item,
     active: !item.revokedAt && (!item.expiresAt || Number(item.expiresAt) > now)
   })));
+});
+
+app.get("/api/admin/message-logging", requireAdmin, (req, res) => {
+  const onlineUsers = new Set([...online.values()].map(name => norm(name)));
+  const settings = messageLoggingSettings();
+
+  const result = users()
+    .map(user => ({
+      username: user.username,
+      displayName: user.displayName || user.username,
+      online: onlineUsers.has(norm(user.username)),
+      enabled: settings[norm(user.username)] === true
+    }))
+    .sort((a, b) => String(a.username).localeCompare(String(b.username)));
+
+  res.json(result);
+});
+
+app.put("/api/admin/message-logging/:username", requireAdmin, (req, res) => {
+  const username = norm(req.params.username);
+  const user = getUser(username);
+  if (!user) return res.status(404).json({ error: "Usuario no encontrado." });
+
+  const enabled = req.body?.enabled === true;
+  const settings = messageLoggingSettings();
+
+  if (enabled) settings[username] = true;
+  else delete settings[username];
+
+  saveMessageLoggingSettings(settings);
+  addAdminActivity(`Administrador ${enabled ? "activó" : "desactivó"} el registro de mensajes de @${user.username}.`);
+
+  res.json({
+    success: true,
+    username: user.username,
+    enabled
+  });
 });
 
 app.get("/api/admin/command-access", requireAdmin, (req, res) => {
@@ -2851,7 +2947,11 @@ app.patch("/api/admin/appeals/:id", requireAdmin, (req, res) => {
 
 app.get("/api/admin/activity", requireAdmin, (req, res) => {
   loadAdminActivity();
-  res.json(adminActivity.slice(-100).reverse());
+  const visible = adminActivity
+    .filter(item => item?.kind !== "message" || isAdminMessageLoggingEnabled(item?.username))
+    .slice(-100)
+    .reverse();
+  res.json(visible);
 });
 
 app.get("/api/admin/reports", requireAdmin, (req, res) => {
@@ -2899,7 +2999,10 @@ app.get("/api/admin/messages", requireAdmin, (req, res) => {
   limit = Math.max(1, Math.min(limit, 500));
 
   res.json(
-    messages().slice(-limit).reverse()
+    messages()
+      .filter(message => isAdminMessageLoggingEnabled(message.from))
+      .slice(-limit)
+      .reverse()
   );
 });
 
@@ -3822,6 +3925,14 @@ function migrateUsernameReferences(oldUsername, newUsername) {
     if (norm(item?.username) === oldName) { item.username = newName; commandChanged = true; }
   }
   if (commandChanged) saveCommandAccessRecords(commandList);
+
+  // Preferencia de registro de mensajes.
+  const messageLogging = messageLoggingSettings();
+  if (Object.prototype.hasOwnProperty.call(messageLogging, oldName)) {
+    messageLogging[newName] = messageLogging[oldName] === true;
+    delete messageLogging[oldName];
+    saveMessageLoggingSettings(messageLogging);
+  }
 
   // Tokens FCM: el identificador es la propia clave.
   const tokenMap = fcmTokens();
@@ -5334,7 +5445,7 @@ io.on("connection", socket => {
     if (list.length > 50000) list.splice(0, list.length - 50000);
     saveMessages(list);
 
-    addAdminActivity(`${message.fromDisplay} ha enviado un mensaje al grupo «${group.name}»: ${message.message || (message.fileName ? "📎 " + message.fileName : "Archivo multimedia")}`);
+    addAdminMessageActivity(me, `${message.fromDisplay} ha enviado un mensaje al grupo «${group.name}»: ${message.message || (message.fileName ? "📎 " + message.fileName : "Archivo multimedia")}`);
 
     for (const username of group.members || []) {
       const sid = socketIdFor(username);
@@ -5737,7 +5848,7 @@ io.on("connection", socket => {
 
       saveMessages(list);
 
-      addAdminActivity(
+      addAdminMessageActivity(me,
         `${msg.fromDisplay} ha enviado un mensaje a ${msg.toDisplay}: ${
           msg.message ||
           (msg.fileName ? "📎 " + msg.fileName : "Archivo multimedia")
