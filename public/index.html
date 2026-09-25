@@ -132,6 +132,12 @@ button,input,textarea{font:inherit}
 .settingsItem{width:100%;text-align:left;border:0;background:#f5f5f5;border-radius:12px;padding:14px;cursor:pointer}
 .settingsItemTitle{font-weight:bold}
 .settingsItemSub{font-size:12px;color:#777;margin-top:3px}
+.messageLoggingSetting{margin-top:12px;padding:14px;border:1px solid #ddd;border-radius:12px;background:#fafafa}
+.messageLoggingSetting label{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.messageLoggingSetting input{width:20px;height:20px;flex:0 0 auto;margin:1px 0 0}
+.messageLoggingSettingTitle{font-weight:700}
+.messageLoggingSettingSub{font-size:12px;color:#777;margin-top:4px;line-height:1.4}
+.messageLoggingSettingStatus{min-height:18px;margin-top:8px;font-size:13px}
 
 .storiesBar{padding:10px;border-bottom:1px solid #ddd;display:flex;gap:10px;overflow-x:auto;background:#fff}
 .storyItem{border:0;background:transparent;min-width:62px;width:62px;padding:0;cursor:pointer}
@@ -674,6 +680,17 @@ button,input,textarea{font:inherit}
         </div>
       </button>
 
+    </div>
+
+    <div class="messageLoggingSetting">
+      <label for="messageLoggingPreference">
+        <input type="checkbox" id="messageLoggingPreference">
+        <span>
+          <div class="messageLoggingSettingTitle">👁️ Permitir que el administrador vea mis mensajes</div>
+          <div class="messageLoggingSettingSub">Si activas esta opción, tus mensajes podrán aparecer en la web de administración y en la terminal de actividad. Tú decides y puedes cambiarlo cuando quieras.</div>
+        </span>
+      </label>
+      <div id="messageLoggingPreferenceStatus" class="messageLoggingSettingStatus"></div>
     </div>
 
     <div class="modalRow">
@@ -4162,8 +4179,77 @@ socket.on("blockUpdated", data => {
    CONFIGURACIÓN
 ===================================================== */
 
-$("settingsButton").onclick = () => {
+const messageLoggingPreference = $("messageLoggingPreference");
+const messageLoggingPreferenceStatus = $("messageLoggingPreferenceStatus");
+
+async function loadMessageLoggingPreference(){
+  if(!messageLoggingPreference) return;
+  messageLoggingPreference.disabled = true;
+  if(messageLoggingPreferenceStatus) messageLoggingPreferenceStatus.textContent = "Cargando…";
+  try{
+    const token = localStorage.getItem("chatToken") || "";
+    const response = await fetch("/api/account/message-logging", {
+      headers: { "Authorization": "Bearer " + token }
+    });
+    const data = await response.json().catch(() => ({}));
+    if(!response.ok) throw new Error(data.error || "No se pudo cargar la preferencia.");
+    messageLoggingPreference.checked = data.enabled === true;
+    if(messageLoggingPreferenceStatus){
+      messageLoggingPreferenceStatus.style.color = "#777";
+      messageLoggingPreferenceStatus.textContent = data.enabled === true
+        ? "Tus mensajes están permitidos para la vista del administrador."
+        : "Tus mensajes no están permitidos para la vista del administrador.";
+    }
+  }catch(error){
+    if(messageLoggingPreferenceStatus){
+      messageLoggingPreferenceStatus.style.color = "#c00";
+      messageLoggingPreferenceStatus.textContent = error.message || "No se pudo cargar la preferencia.";
+    }
+  }finally{
+    messageLoggingPreference.disabled = false;
+  }
+}
+
+messageLoggingPreference?.addEventListener("change", async () => {
+  const nextValue = messageLoggingPreference.checked;
+  messageLoggingPreference.disabled = true;
+  if(messageLoggingPreferenceStatus){
+    messageLoggingPreferenceStatus.style.color = "#777";
+    messageLoggingPreferenceStatus.textContent = nextValue ? "Activando…" : "Desactivando…";
+  }
+  try{
+    const token = localStorage.getItem("chatToken") || "";
+    const response = await fetch("/api/account/message-logging", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + token
+      },
+      body: JSON.stringify({ enabled: nextValue })
+    });
+    const data = await response.json().catch(() => ({}));
+    if(!response.ok) throw new Error(data.error || "No se pudo guardar la preferencia.");
+    messageLoggingPreference.checked = data.enabled === true;
+    if(messageLoggingPreferenceStatus){
+      messageLoggingPreferenceStatus.style.color = "#087f23";
+      messageLoggingPreferenceStatus.textContent = data.enabled === true
+        ? "Activado: el administrador puede ver tus mensajes."
+        : "Desactivado: el administrador ya no puede ver tus mensajes.";
+    }
+  }catch(error){
+    messageLoggingPreference.checked = !nextValue;
+    if(messageLoggingPreferenceStatus){
+      messageLoggingPreferenceStatus.style.color = "#c00";
+      messageLoggingPreferenceStatus.textContent = error.message || "No se pudo guardar la preferencia.";
+    }
+  }finally{
+    messageLoggingPreference.disabled = false;
+  }
+});
+
+$("settingsButton").onclick = async () => {
   $("settingsModal").style.display = "flex";
+  await loadMessageLoggingPreference();
 };
 
 $("closeSettings").onclick = () => {
