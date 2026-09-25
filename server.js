@@ -1945,9 +1945,21 @@ app.put("/api/admin/global-access", requireAdmin, (req, res) => {
     updatedBy: req.admin.username
   });
 
-  // El bloqueo global solo afecta a nuevas entradas o reconexiones.
-  // Las sesiones que ya estaban dentro permanecen conectadas.
-  const disconnected = 0;
+  // Las sesiones conservan su token. Para impedir que sigan usando el chat
+  // mientras el bloqueo está activo, cerramos únicamente la conexión Socket.IO
+  // y avisamos al cliente para mostrar el mensaje. Al desbloquear, el cliente
+  // recuperará automáticamente la sesión con el mismo token.
+  let disconnected = 0;
+  for (const [sid, username] of online.entries()) {
+    if (norm(username) === norm(owner.username)) continue;
+    const targetSocket = io.sockets.sockets.get(sid);
+    if (!targetSocket) continue;
+    targetSocket.emit("globalAccessLocked", {
+      message: "No tienes acceso a este servicio."
+    });
+    targetSocket.disconnect(true);
+    disconnected++;
+  }
 
   addAdminActivity(`@${req.admin.username} activó el bloqueo global del chat; solo @${owner.username} puede acceder.`);
 
@@ -4043,7 +4055,8 @@ app.get("/api/session", (req, res) => {
   const ban = rawUser ? activeBanFor(rawUser.username) : null;
 
   if (rawUser && globalAccessEnabled() && !globalOwnerCanAccess(rawUser.username)) {
-    deleteSession(token);
+    // El bloqueo global no destruye la sesión. El token se conserva para
+    // que el usuario pueda volver al chat automáticamente al desbloquear.
     return res.status(403).json({
       loggedIn: false,
       globalLock: true,
