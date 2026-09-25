@@ -1451,6 +1451,31 @@ document.addEventListener("keydown", event => {
   if(event.key === "Escape" && welcomeModal?.classList.contains("open")) closeWelcome();
 });
 
+let globalAccessWatchTimer = null;
+
+function startGlobalAccessWatch(){
+  if(globalAccessWatchTimer) return;
+  globalAccessWatchTimer = setInterval(async () => {
+    const token = localStorage.getItem("chatToken");
+    if(!token) return;
+    try{
+      const response = await fetch("/api/global-access/status", {cache:"no-store"});
+      const data = await response.json().catch(() => ({}));
+      if(!data.locked){
+        clearInterval(globalAccessWatchTimer);
+        globalAccessWatchTimer = null;
+        await checkSession();
+      }
+    }catch{}
+  }, 2000);
+}
+
+function stopGlobalAccessWatch(){
+  if(!globalAccessWatchTimer) return;
+  clearInterval(globalAccessWatchTimer);
+  globalAccessWatchTimer = null;
+}
+
 function showAccessBlockedModal(options = {}){
   const modal = $("accessBlockedModal");
   if(!modal) return;
@@ -1465,11 +1490,13 @@ function showAccessBlockedModal(options = {}){
   if(pass) pass.value = "";
   modal.style.display = "flex";
   modal.setAttribute("aria-hidden", "false");
+  if(globalLock) startGlobalAccessWatch();
 }
 
 function hideAccessBlockedModal(){
   const modal = $("accessBlockedModal");
   if(!modal) return;
+  stopGlobalAccessWatch();
   modal.style.display = "none";
   modal.setAttribute("aria-hidden", "true");
 }
@@ -1624,11 +1651,16 @@ async function checkSession(){
       await response.json().catch(() => ({}));
 
     if(!response.ok){
-      localStorage.removeItem("chatToken");
       if(data.globalLock){
+        // Conservamos el token: al desbloquear, la sesión se recuperará automáticamente.
+        app.style.display = "none";
+        authScreen.style.display = "flex";
         authError.textContent = "";
         showAccessBlockedModal({globalLock:true});
-      } else if(data.accessBlocked){
+        return;
+      }
+      localStorage.removeItem("chatToken");
+      if(data.accessBlocked){
         authError.textContent = "";
         showAccessBlockedModal({message:data.error});
       } else if(data.banned){
@@ -1646,6 +1678,7 @@ async function checkSession(){
 
       await loadIdentity();
 
+      hideAccessBlockedModal();
       enterApp();
     }
 
@@ -1894,7 +1927,8 @@ socket.on("banned", data => {
 });
 
 socket.on("globalAccessLocked", data => {
-  localStorage.removeItem("chatToken");
+  // No borramos el token: así la sesión puede recuperarse automáticamente
+  // cuando el administrador desactive el bloqueo global.
   try { closeModerationModal(); } catch {}
   if(socket.connected) socket.disconnect();
   app.style.display = "none";
@@ -6165,7 +6199,7 @@ window.addEventListener(
   try{
     const response = await fetch("/api/global-access/status");
     const data = await response.json().catch(() => ({}));
-    if(data.locked && !localStorage.getItem("chatToken")) showAccessBlockedModal({globalLock:true});
+    if(data.locked) showAccessBlockedModal({globalLock:true});
   }catch{}
   checkSession();
 })();
@@ -6175,3 +6209,5 @@ window.addEventListener(
 </body>
 </html>
 ```
+
+   
