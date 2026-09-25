@@ -388,6 +388,13 @@ button,input,textarea{font:inherit}
   .messageInput{gap:6px;padding-top:8px}
   .attachBtn,.send{width:46px;height:46px}
 }
+
+.accessBlockedModal{background:rgba(0,0,0,.58);z-index:200000;}
+.accessBlockedModal .accessBlockedBox{max-width:420px;text-align:center;padding:32px 26px;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,.28)}
+.accessBlockedIcon{font-size:54px;line-height:1;margin-bottom:14px}
+.accessBlockedTitle{margin:0;font-size:24px;line-height:1.25;color:#111827}
+.accessBlockedText{margin:12px 0 20px;color:#6b7280;font-size:14px;line-height:1.5}
+
 </style>
 </head>
 
@@ -408,6 +415,23 @@ button,input,textarea{font:inherit}
     <button id="forgotPasswordButton" class="switchButton" type="button">¿Has olvidado tu contraseña?</button>
     <button id="switchAuth" class="switchButton">Crear una cuenta</button>
     <div id="authError"></div>
+  </div>
+</div>
+
+
+<!-- ACCESO BLOQUEADO -->
+<div id="accessBlockedModal" class="modal accessBlockedModal" style="display:none" aria-hidden="true">
+  <div class="modalBox accessBlockedBox">
+    <div class="accessBlockedIcon">🔒</div>
+    <h2 class="accessBlockedTitle">No tienes acceso a este servicio</h2>
+    <p id="accessBlockedText" class="accessBlockedText">Tu acceso a Mi Chat ha sido bloqueado.</p>
+    <div id="globalUnlockFields" style="display:none;text-align:left">
+      <label for="globalUnlockPassword" style="display:block;font-size:13px;color:#374151;margin-bottom:6px">Contraseña de acceso</label>
+      <input id="globalUnlockPassword" type="password" autocomplete="current-password" placeholder="Contraseña de acceso" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #d1d5db;border-radius:10px;margin-bottom:10px">
+      <button id="globalUnlockButton" type="button" style="width:100%;padding:13px 16px;border:0;border-radius:10px;cursor:pointer;font-size:16px;background:#111827;color:#fff">Entrar</button>
+      <div id="globalUnlockError" style="margin-top:10px;color:#b91c1c;font-size:13px;min-height:18px"></div>
+    </div>
+    <button id="accessBlockedLogout" type="button" style="width:100%;padding:13px 16px;border:0;border-radius:10px;cursor:pointer;font-size:16px">Cerrar sesión</button>
   </div>
 </div>
 
@@ -1427,6 +1451,56 @@ document.addEventListener("keydown", event => {
   if(event.key === "Escape" && welcomeModal?.classList.contains("open")) closeWelcome();
 });
 
+function showAccessBlockedModal(options = {}){
+  const modal = $("accessBlockedModal");
+  if(!modal) return;
+  const globalLock = options.globalLock === true;
+  const text = $("accessBlockedText");
+  const fields = $("globalUnlockFields");
+  const error = $("globalUnlockError");
+  if(text) text.textContent = globalLock ? "El acceso al chat está bloqueado para todos excepto el propietario." : (options.message || "Tu acceso a Mi Chat ha sido bloqueado.");
+  if(fields) fields.style.display = globalLock ? "block" : "none";
+  if(error) error.textContent = "";
+  const pass = $("globalUnlockPassword");
+  if(pass) pass.value = "";
+  modal.style.display = "flex";
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function hideAccessBlockedModal(){
+  const modal = $("accessBlockedModal");
+  if(!modal) return;
+  modal.style.display = "none";
+  modal.setAttribute("aria-hidden", "true");
+}
+
+async function tryGlobalUnlock(){
+  const pass = String($("globalUnlockPassword")?.value || "");
+  const error = $("globalUnlockError");
+  if(!pass){ if(error) error.textContent = "Escribe la contraseña de acceso."; return; }
+  const button = $("globalUnlockButton");
+  if(button) button.disabled = true;
+  if(error) error.textContent = "";
+  try{
+    const response = await fetch("/api/global-unlock", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({password:pass})
+    });
+    const data = await response.json().catch(() => ({}));
+    if(!response.ok) throw new Error(data.error || "No se pudo acceder.");
+    localStorage.setItem("chatToken", data.token);
+    myUsername = data.username || myUsername;
+    hideAccessBlockedModal();
+    await loadIdentity();
+    enterApp();
+  }catch(errorObj){
+    if(error) error.textContent = errorObj.message || "No se pudo acceder.";
+  }finally{
+    if(button) button.disabled = false;
+  }
+}
+
 async function authenticate(){
 
   const username =
@@ -1473,6 +1547,18 @@ async function authenticate(){
       await response.json();
 
     if(!response.ok){
+      if(data.globalLock){
+        localStorage.removeItem("chatToken");
+        authError.textContent = "";
+        showAccessBlockedModal({globalLock:true});
+        return;
+      }
+      if(data.accessBlocked){
+        localStorage.removeItem("chatToken");
+        authError.textContent = "";
+        showAccessBlockedModal({message:data.error});
+        return;
+      }
       throw new Error(
         data.error || "Error"
       );
@@ -1505,6 +1591,16 @@ async function authenticate(){
   }
 }
 
+$("accessBlockedLogout")?.addEventListener("click", () => {
+  hideAccessBlockedModal();
+  localStorage.removeItem("chatToken");
+  authScreen.style.display = "flex";
+});
+$("globalUnlockButton")?.addEventListener("click", tryGlobalUnlock);
+$("globalUnlockPassword")?.addEventListener("keydown", event => {
+  if(event.key === "Enter") tryGlobalUnlock();
+});
+
 async function checkSession(){
 
   const token =
@@ -1529,7 +1625,13 @@ async function checkSession(){
 
     if(!response.ok){
       localStorage.removeItem("chatToken");
-      if(data.banned){
+      if(data.globalLock){
+        authError.textContent = "";
+        showAccessBlockedModal({globalLock:true});
+      } else if(data.accessBlocked){
+        authError.textContent = "";
+        showAccessBlockedModal({message:data.error});
+      } else if(data.banned){
         authError.textContent = data.error || "Tu cuenta está temporalmente bloqueada.";
       }
       return;
@@ -1789,6 +1891,26 @@ socket.on("banned", data => {
   const until = data?.expiresAt ? ` hasta ${new Date(Number(data.expiresAt)).toLocaleString("es-ES")}` : " permanentemente";
   const reason = data?.reason ? ` Motivo: ${data.reason}` : "";
   authError.textContent = `Tu cuenta ha sido baneada${until}.${reason}`;
+});
+
+socket.on("globalAccessLocked", data => {
+  localStorage.removeItem("chatToken");
+  try { closeModerationModal(); } catch {}
+  if(socket.connected) socket.disconnect();
+  app.style.display = "none";
+  authScreen.style.display = "flex";
+  authError.textContent = "";
+  showAccessBlockedModal({globalLock:true});
+});
+
+socket.on("accessBlocked", data => {
+  localStorage.removeItem("chatToken");
+  try { closeModerationModal(); } catch {}
+  if(socket.connected) socket.disconnect();
+  app.style.display = "none";
+  authScreen.style.display = "flex";
+  authError.textContent = "";
+  showAccessBlockedModal({message:data?.reason});
 });
 
 socket.on("authenticationError",() => {
@@ -6039,7 +6161,14 @@ window.addEventListener(
    ARRANQUE
 ===================================================== */
 
-checkSession();
+(async function checkGlobalAccessAtStartup(){
+  try{
+    const response = await fetch("/api/global-access/status");
+    const data = await response.json().catch(() => ({}));
+    if(data.locked && !localStorage.getItem("chatToken")) showAccessBlockedModal({globalLock:true});
+  }catch{}
+  checkSession();
+})();
 </script>
 
 
