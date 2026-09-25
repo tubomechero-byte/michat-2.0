@@ -3074,6 +3074,31 @@ app.get("/api/admin/moderation", requireAdmin, (req, res) => {
   res.json(list.slice(0, 100));
 });
 
+app.delete("/api/admin/moderation/:id", requireAdmin, (req, res) => {
+  const id = String(req.params.id || "").trim();
+  if (!id) return res.status(400).json({ error: "Aviso no válido." });
+
+  const list = moderationNotices();
+  const index = list.findIndex(item => String(item.id || "") === id);
+  if (index === -1) return res.status(404).json({ error: "Aviso no encontrado." });
+
+  const removed = list[index];
+  list.splice(index, 1);
+  saveModerationNotices(list);
+
+  const readState = moderationReads();
+  for (const username of Object.keys(readState)) {
+    const entry = readState[username];
+    if (entry && Array.isArray(entry.ids)) {
+      entry.ids = entry.ids.filter(noticeId => String(noticeId) !== id);
+    }
+  }
+  saveModerationReads(readState);
+
+  addAdminActivity(`Administrador eliminó el aviso de moderación «${String(removed.title || "Aviso de moderación").slice(0, 120)}».`);
+  res.json({ success: true, id });
+});
+
 app.post("/api/admin/moderation", requireAdmin, (req, res) => {
   const target = String(req.body?.username || "").trim();
   const title = String(req.body?.title || "Aviso de moderación").trim();
@@ -7060,4 +7085,3 @@ app.get("/{*splat}", (req, res, next) => {
     }
   );
 })();
-  
