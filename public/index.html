@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -23,7 +24,7 @@ button,input,textarea{font:inherit}
 #app{display:none;height:100vh;height:100dvh;min-height:0}
 .layout{display:flex;height:100%;min-height:0;max-width:1500px;margin:auto;background:#fff}
 
-.sidebar{width:350px;border-right:1px solid #ddd;display:flex;flex-direction:column;background:#fff}
+.sidebar{width:350px;border-right:1px solid #ddd;display:flex;flex-direction:column;background:#fff;position:relative}
 .sidebarHeader{padding:15px;background:#075e54;color:#fff}
 .headerTop{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .headerTop h2{margin:0}
@@ -33,6 +34,11 @@ button,input,textarea{font:inherit}
 .actions{padding:10px;border-bottom:1px solid #ddd}
 .actionBtn{width:100%;border:0;border-radius:10px;padding:11px;cursor:pointer;background:#25d366;color:#fff;font-weight:bold}
 .actions{display:grid;gap:8px}
+.quickActions{position:absolute;right:18px;bottom:18px;z-index:60}
+.quickActionsFab{width:52px;height:52px;border:0;border-radius:50%;background:#128c7e;color:#fff;font-size:30px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 14px rgba(0,0,0,.18);transition:transform .16s ease,background .16s ease}
+.quickActionsFab.open{transform:rotate(45deg);background:#075e54}
+.quickActionsMenu{position:absolute;right:12px;bottom:66px;display:grid;gap:8px;width:min(240px,calc(100vw - 36px));padding:10px;background:#fff;border:1px solid #ddd;border-radius:14px;box-shadow:0 14px 35px rgba(0,0,0,.18);z-index:50}
+.quickActionsMenu .actionBtn{width:100%;box-shadow:none}
 .requestBtn{background:#128c7e}
 .requestBadge{display:inline-flex;min-width:20px;height:20px;padding:0 6px;margin-left:4px;border-radius:20px;align-items:center;justify-content:center;background:#fff;color:#128c7e;font-size:12px}
 .requestItem{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #eee}
@@ -435,16 +441,22 @@ button,input,textarea{font:inherit}
         </div>
       </div>
 
-      <div class="actions">
-        <button class="actionBtn" id="newChatButton">
-          ➕ Enviar solicitud
-        </button>
-        <button class="actionBtn" id="newGroupButton">
-          👥 Crear grupo
-        </button>
-        <button class="actionBtn requestBtn" id="requestsButton">
-          📥 Solicitudes <span id="requestsBadge" class="requestBadge hidden">0</span>
-        </button>
+      <div class="quickActions">
+        <button id="quickActionsToggle" class="quickActionsFab" type="button" aria-label="Más acciones" aria-expanded="false">+</button>
+        <div id="quickActionsMenu" class="quickActionsMenu hidden">
+          <button class="actionBtn" id="newChatButton" type="button">
+            ➕ Enviar solicitud
+          </button>
+          <button class="actionBtn" id="newGroupButton" type="button">
+            👥 Crear grupo
+          </button>
+          <button class="actionBtn requestBtn" id="requestsButton" type="button">
+            📥 Solicitudes <span id="requestsBadge" class="requestBadge hidden">0</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="actions" id="commandActions">
         <button class="actionBtn commandBtn hidden" id="commandButton" type="button">
           🖥️ Consola de comandos
         </button>
@@ -977,6 +989,8 @@ const layout = $("layout");
 const notifications = $("notifications");
 const requestsButton = $("requestsButton");
 const requestsBadge = $("requestsBadge");
+const quickActionsToggle = $("quickActionsToggle");
+const quickActionsMenu = $("quickActionsMenu");
 const requestsModal = $("requestsModal");
 const requestsList = $("requestsList");
 const commandButton = $("commandButton");
@@ -1856,6 +1870,28 @@ function closeRequestsModal(){
   if(!requestsModal) return;
   requestsModal.style.display = "none";
 }
+function setQuickActionsOpen(open){
+  if(!quickActionsMenu || !quickActionsToggle) return;
+  quickActionsMenu.classList.toggle("hidden", !open);
+  quickActionsToggle.classList.toggle("open", open);
+  quickActionsToggle.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+quickActionsToggle?.addEventListener("click", event => {
+  event.stopPropagation();
+  const open = quickActionsMenu?.classList.contains("hidden");
+  setQuickActionsOpen(open);
+});
+
+quickActionsMenu?.addEventListener("click", event => {
+  if(event.target.closest("button")) setQuickActionsOpen(false);
+});
+
+document.addEventListener("click", event => {
+  if(!quickActionsMenu || !quickActionsToggle) return;
+  if(!quickActionsMenu.contains(event.target) && event.target !== quickActionsToggle) setQuickActionsOpen(false);
+});
+
 requestsButton.onclick = () => {
   renderRequests();
   requestsModal.style.display = "flex";
@@ -1867,6 +1903,7 @@ if(requestsModal) requestsModal.addEventListener("click", event => {
 });
 document.addEventListener("keydown", event => {
   if(event.key === "Escape" && requestsModal && requestsModal.style.display === "flex") closeRequestsModal();
+  if(event.key === "Escape") setQuickActionsOpen(false);
 }, true);
 if($("closeModerationModal")) $("closeModerationModal").onclick = closeModerationModal;
 if($("closeModerationModalBottom")) $("closeModerationModalBottom").onclick = closeModerationModal;
@@ -5924,4 +5961,3 @@ checkSession();
 </body>
 </html>
 ```
-
