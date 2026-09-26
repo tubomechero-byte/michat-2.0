@@ -727,7 +727,7 @@ function renderSupabaseStorage(data){
   [selectAll,headerCheck].forEach(el=>{if(el)el.checked=false;});
   if(del)del.disabled=true;
   msg.className='msg ok';
-  const sourceLabel=data?.source==='storage.objects'?'consultados desde storage.objects':'consultados desde Storage API';
+  const sourceLabel='consultados desde la API oficial de Supabase Storage';
   msg.textContent=`Supabase Storage: ${totalFiles.toLocaleString('es-ES')} archivo${totalFiles===1?'':'s'} listados (${sourceLabel}).`;
   if(Array.isArray(data?.errors)&&data.errors.length){
     msg.textContent += ' Aviso: '+data.errors.join(' | ');
