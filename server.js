@@ -2065,6 +2065,188 @@ app.get("/api/global-access/status", (req, res) => {
   });
 });
 
+
+async function supabaseStorageRequest(pathname, options = {}) {
+  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
+    throw new Error("Supabase no está configurado en el servidor.");
+  }
+
+  const headers = {
+    apikey: SUPABASE_SECRET_KEY,
+    Authorization: "Bearer " + SUPABASE_SECRET_KEY,
+    ...(options.body !== undefined ? { "Content-Type": "application/json" } : {}),
+    ...(options.headers || {})
+  };
+
+  const response = await fetch(
+    SUPABASE_URL + "/storage/v1/" + pathname,
+    { ...options, headers }
+  );
+
+  const text = await response.text();
+  let data = null;
+  if (text) {
+    try { data = JSON.parse(text); }
+    catch { data = text; }
+  }
+
+  if (!response.ok) {
+    const message = typeof data === "string"
+      ? data
+      : data?.message || data?.error || JSON.stringify(data);
+    throw new Error(`Supabase Storage HTTP ${response.status}: ${message}`);
+  }
+  return data;
+}
+
+async function listSupabaseStorageFiles(bucketId, maxObjects = 5000) {
+  const files = [];
+  const folders = [""];
+  const PAGE_SIZE = 1000;
+
+  while (folders.length && files.length < maxObjects) {
+    const prefix = folders.shift();
+    let offset = 0;
+
+    while (files.length < maxObjects) {
+      const batch = await supabaseStorageRequest(
+        `object/list/${encodeURIComponent(bucketId)}`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            prefix,
+            limit: PAGE_SIZE,
+            offset,
+            sortBy: { column: "name", order: "asc" }
+          })
+        }
+      );
+
+      if (!Array.isArray(batch) || batch.length === 0) break;
+
+      for (const item of batch) {
+        const name = String(item?.name || "").trim();
+        if (!name) continue;
+
+        if (item?.id == null) {
+          folders.push(prefix ? `${prefix}/${name}` : name);
+          continue;
+        }
+
+        const filePath = prefix ? `${prefix}/${name}` : name;
+        const size = Number(item?.metadata?.size ?? item?.size ?? 0);
+        files.push({
+          bucket: bucketId,
+          path: filePath,
+          size: Number.isFinite(size) && size > 0 ? size : 0,
+          updatedAt: item?.updated_at || item?.created_at || null,
+          mimeType: String(item?.metadata?.mimetype || item?.metadata?.contentType || "")
+        });
+
+        if (files.length >= maxObjects) break;
+      }
+
+      if (batch.length < PAGE_SIZE) break;
+      offset += batch.length;
+    }
+  }
+
+  return {
+    files,
+    truncated: folders.length > 0 || files.length >= maxObjects
+  };
+}
+
+app.get("/api/admin/supabase/storage", requireAdmin, async (req, res) => {
+  try {
+    const buckets = await supabaseStorageRequest("bucket");
+    const bucketList = Array.isArray(buckets) ? buckets : [];
+    const objects = [];
+    const bucketSummaries = [];
+    let truncated = false;
+
+    for (const bucket of bucketList) {
+      const id = String(bucket?.id || bucket?.name || "").trim();
+      if (!id) continue;
+
+      const listed = await listSupabaseStorageFiles(id, 5000);
+      let bytes = 0;
+      for (const file of listed.files) {
+        bytes += Number(file.size || 0);
+        objects.push({
+          ...file,
+          public: bucket?.public === true,
+          bucketName: String(bucket?.name || id)
+        });
+      }
+
+      bucketSummaries.push({
+        id,
+        name: String(bucket?.name || id),
+        public: bucket?.public === true,
+        files: listed.files.length,
+        bytes,
+        truncated: listed.truncated
+      });
+
+      if (listed.truncated) truncated = true;
+    }
+
+    objects.sort((a, b) => Number(b.size || 0) - Number(a.size || 0));
+
+    res.json({
+      configured: true,
+      buckets: bucketSummaries,
+      objects,
+      totalFiles: objects.length,
+      totalBytes: objects.reduce((sum, item) => sum + Number(item.size || 0), 0),
+      truncated
+    });
+  } catch (error) {
+    console.error("Error consultando Supabase Storage:", error.message);
+    res.status(502).json({
+      error: error.message || "No se pudo consultar Supabase Storage."
+    });
+  }
+});
+
+app.delete("/api/admin/supabase/storage/objects", requireAdmin, async (req, res) => {
+  try {
+    const input = Array.isArray(req.body?.objects) ? req.body.objects : [];
+    if (!input.length) {
+      return res.status(400).json({ error: "No has seleccionado ningún archivo." });
+    }
+    if (input.length > 1000) {
+      return res.status(400).json({ error: "Puedes borrar como máximo 1000 archivos por operación." });
+    }
+
+    const grouped = new Map();
+    for (const item of input) {
+      const bucket = String(item?.bucket || "").trim();
+      const objectPath = String(item?.path || "").replace(/^\/+/, "").trim();
+      if (!bucket || !objectPath || objectPath.length > 2000) continue;
+      if (!grouped.has(bucket)) grouped.set(bucket, new Set());
+      grouped.get(bucket).add(objectPath);
+    }
+
+    let removed = 0;
+    for (const [bucket, pathsSet] of grouped.entries()) {
+      const prefixes = [...pathsSet];
+      await supabaseStorageRequest(`object/${encodeURIComponent(bucket)}`, {
+        method: "DELETE",
+        body: JSON.stringify({ prefixes })
+      });
+      removed += prefixes.length;
+    }
+
+    addAdminActivity(`@${req.admin.username} eliminó ${removed} archivo${removed === 1 ? "" : "s"} de Supabase Storage.`);
+    res.json({ success: true, removed });
+  } catch (error) {
+    console.error("Error eliminando archivos de Supabase Storage:", error.message);
+    res.status(502).json({ error: error.message || "No se pudieron eliminar los archivos." });
+  }
+});
+
 app.get("/api/admin/stats", requireAdmin, (req, res) => {
   const userList = users();
   const messageList = messages();
