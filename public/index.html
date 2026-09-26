@@ -73,7 +73,7 @@ button,input,textarea{font:inherit}
 .profileActionBtn{border:0;border-radius:13px;padding:14px;text-align:left;background:#f0f2f5;cursor:pointer}
 .profileActionBtn strong{display:block}
 .profileActionBtn span{display:block;margin-top:3px;color:#777;font-size:12px}
-.mobileBottomNav{display:none;position:relative;flex:0 0 auto;height:76px;padding:7px 7px max(7px,env(safe-area-inset-bottom));background:#fff;border-top:1px solid #ddd;box-shadow:0 -3px 12px rgba(0,0,0,.08);z-index:100}
+.mobileBottomNav{display:none;position:relative;flex:0 0 auto;height:76px;margin-bottom:var(--android-nav-offset,0px);padding:7px 7px max(7px,env(safe-area-inset-bottom));background:#fff;border-top:1px solid #ddd;box-shadow:0 -3px 12px rgba(0,0,0,.08);z-index:100}
 .mobileBottomNav button{flex:1;border:0;background:transparent;color:#666;border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;min-width:0}
 .mobileBottomNav button .navIcon{font-size:23px;line-height:1}
 .mobileBottomNav button .navLabel{font-size:11px;font-weight:600;white-space:nowrap}
@@ -556,6 +556,14 @@ button,input,textarea{font:inherit}
   /* Deja "Tú" abajo, como el rail lateral de WhatsApp Web. */
   #mobileBottomNav button[data-main-tab="profile"]{
     margin-top:auto;
+  }
+}
+
+/* Android: deja un pequeño espacio extra sobre la navegación del sistema.
+   El valor se calcula por JS y solo se aplica en Android; en PC/iPhone queda en 0. */
+@media(max-width:900px){
+  .mobileBottomNav{
+    margin-bottom:var(--android-nav-offset,0px);
   }
 }
 
@@ -1454,6 +1462,53 @@ const $ = id => document.getElementById(id);
 const authScreen = $("authScreen");
 const app = $("app");
 const mainLayout = $("layout");
+// Ajuste de la navegación inferior para Android.
+// Los navegadores no exponen de forma fiable el modo de navegación (3 botones/gestos),
+// así que usamos una estimación conservadora del espacio inferior persistente y la limitamos a 32px.
+(function setupAndroidNavInset(){
+  const isAndroid = /Android/i.test(navigator.userAgent || "");
+  if (!isAndroid) return;
+
+  let maxViewportHeight = 0;
+  let lastOffset = -1;
+
+  function readSafeArea(){
+    const probe = document.createElement("div");
+    probe.style.cssText = "position:fixed;left:-9999px;bottom:0;width:1px;height:1px;padding-bottom:env(safe-area-inset-bottom);pointer-events:none;";
+    document.body.appendChild(probe);
+    const value = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
+    probe.remove();
+    return value;
+  }
+
+  function updateAndroidNavInset(){
+    const vv = window.visualViewport;
+    const currentHeight = Math.max(
+      window.innerHeight || 0,
+      document.documentElement.clientHeight || 0,
+      vv ? vv.height : 0
+    );
+    maxViewportHeight = Math.max(maxViewportHeight, currentHeight);
+
+    const safeArea = readSafeArea();
+    const screenGap = Math.max(0, (window.screen && window.screen.height ? window.screen.height : currentHeight) - maxViewportHeight);
+
+    // Solo dejamos un pequeño extra si parece existir una zona inferior permanente.
+    const estimatedSystemNav = screenGap >= 22 ? Math.min(32, screenGap) : 0;
+    const offset = Math.max(safeArea, estimatedSystemNav);
+
+    if (Math.abs(offset - lastOffset) < 1) return;
+    lastOffset = offset;
+    document.documentElement.style.setProperty("--android-nav-offset", offset + "px");
+  }
+
+  updateAndroidNavInset();
+  window.addEventListener("resize", updateAndroidNavInset, {passive:true});
+  window.addEventListener("orientationchange", () => setTimeout(updateAndroidNavInset, 250), {passive:true});
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", updateAndroidNavInset, {passive:true});
+  setTimeout(updateAndroidNavInset, 800);
+})();
+
 const mainTabPages = {
   chats: $("chatsPage"),
   news: $("newsPage"),
