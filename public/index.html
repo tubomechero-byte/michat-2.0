@@ -5209,15 +5209,13 @@ function sendCurrentLocation(position){
     accuracy: Number(position.coords.accuracy)
   };
 
-  if(socket.connected) socket.emit("locationUpdate", payload);
-  else {
-    const token = localStorage.getItem("chatToken") || "";
-    fetch("/api/account/location", {
-      method:"POST",
-      headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},
-      body:JSON.stringify(payload)
-    }).catch(()=>{});
-  }
+  const token = localStorage.getItem("chatToken") || "";
+  fetch("/api/account/location", {
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},
+    body:JSON.stringify(payload),
+    keepalive:true
+  }).catch(()=>{});
 }
 
 function startLocationSharingWatch(){
