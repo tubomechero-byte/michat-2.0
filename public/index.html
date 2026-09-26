@@ -422,6 +422,9 @@ button,input,textarea{font:inherit}
 
 @media(max-width:900px){
   .mobileBottomNav{display:flex}
+  /* Al entrar en una conversación, en móvil desaparece la navegación inferior
+     para dejar toda la pantalla al chat. */
+  #layout.mobileChat + #mobileBottomNav{display:none !important}
   .mainTabPage{min-height:0}
   .newsPage .storiesBar{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
   .newsPage .storyRing{width:76px;height:76px}
@@ -439,8 +442,8 @@ button,input,textarea{font:inherit}
   .layout{height:100%;height:100dvh;min-height:0}
   .sidebar{width:100%;min-height:0}
   .chat{display:none;height:100%;min-height:0}
-  .mobileChat .sidebar{display:none}
-  .mobileChat .chat{display:flex;min-height:0}
+  #layout.mobileChat .sidebar{display:none !important}
+  #layout.mobileChat .chat{display:flex !important;min-height:0}
   .back{display:block}
   .messageInput{padding-left:8px;padding-right:8px}
   .messageInput input{min-height:50px;font-size:16px}
