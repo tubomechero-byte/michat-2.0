@@ -97,7 +97,7 @@ button,input,textarea{font:inherit}
 
 
 .search{padding:10px;border-bottom:1px solid #ddd}
-.groupsSection{padding:8px 10px 2px;border-bottom:1px solid #eee}.groupAddBtn{display:none}.groupAddBtn.visible{display:inline-flex}.groupsSectionTitle{display:flex;justify-content:space-between;padding:4px 4px 8px;font-size:12px;color:#777;font-weight:bold;text-transform:uppercase}.groupList{display:flex;flex-direction:column;gap:4px;padding-bottom:6px}.groupRow{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;cursor:pointer}.groupRow:hover{background:#f3f4f6}.groupAvatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#dbeafe;flex:0 0 auto}.groupInfo{min-width:0;flex:1}.groupName{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupSub{font-size:12px;color:#777;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupUnread{min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#2563eb;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center}.groupCreateList{display:grid;gap:8px;max-height:320px;overflow:auto;padding:6px 0}.groupMemberOption{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid #e5e7eb;border-radius:10px}.groupMemberOption input{width:18px;height:18px}.groupHeaderAvatar{position:relative;cursor:default}.groupHeaderAvatar.canEdit{cursor:pointer}.groupHeaderAvatar.canEdit::after{content:"📷";position:absolute;right:-2px;bottom:-2px;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #ddd;font-size:12px}
+.groupsSection{padding:8px 10px 2px;border-bottom:1px solid #eee}.groupAddBtn{display:none}.groupAddBtn.visible{display:inline-flex}.groupsSectionTitle{display:flex;justify-content:space-between;padding:4px 4px 8px;font-size:12px;color:#777;font-weight:bold;text-transform:uppercase}.groupList{display:flex;flex-direction:column;gap:4px;padding-bottom:6px}.groupRow{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;cursor:pointer}.groupRow:hover{background:#f3f4f6}.groupAvatar{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#dbeafe;flex:0 0 56px;overflow:hidden;font-size:26px}.groupAvatar img{display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit}.groupInfo{min-width:0;flex:1}.groupName{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupSub{font-size:12px;color:#777;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupUnread{min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#2563eb;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center}.groupCreateList{display:grid;gap:8px;max-height:320px;overflow:auto;padding:6px 0}.groupMemberOption{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid #e5e7eb;border-radius:10px}.groupMemberOption input{width:18px;height:18px}.groupHeaderAvatar{position:relative;cursor:default}.groupHeaderAvatar.canEdit{cursor:pointer}.groupHeaderAvatar.canEdit::after{content:"📷";position:absolute;right:-2px;bottom:-2px;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #ddd;font-size:12px}
 .search input{width:100%;border:0;outline:none;padding:12px 14px;border-radius:20px;background:#f0f2f5}
 #users{flex:1;overflow-y:auto}
 
@@ -552,7 +552,21 @@ button,input,textarea{font:inherit}
   }
 }
 
+@media(min-width:901px){
+  .communityPage{overflow:hidden}
+  .communityList{padding:14px 18px 24px;overflow:auto}
+  .groupRow{max-width:900px;min-height:76px;padding:10px 14px;border-radius:14px}
+  .groupName{font-size:18px}
+  .groupSub{font-size:13px}
+}
+
 @media(max-width:900px){
+  .communityList{padding:8px 12px 96px;overflow:auto}
+  .groupRow{min-height:72px;padding:10px 8px;border-radius:12px}
+  .groupAvatar{width:52px;height:52px;flex-basis:52px}
+  .groupName{font-size:17px}
+  .groupSub{font-size:13px}
+
   #app{
     width:100%;
   }
