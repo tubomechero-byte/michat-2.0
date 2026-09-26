@@ -11,6 +11,7 @@ const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getMessaging } = require("firebase-admin/messaging");
 
 const app = express();
+app.set("trust proxy", 1);
 const server = http.createServer(app);
 const io = new Server(server);
 const PORT = process.env.PORT || 3000;
@@ -28,6 +29,7 @@ const MODERATION_FILE = path.join(DATA_DIR, "moderation.json");
 const MODERATION_READS_FILE = path.join(DATA_DIR, "moderation-reads.json");
 const APPEALS_FILE = path.join(DATA_DIR, "appeals.json");
 const BANS_FILE = path.join(DATA_DIR, "bans.json");
+const IP_BANS_FILE = path.join(DATA_DIR, "ip-bans.json");
 const PASSWORD_RESETS_FILE = path.join(DATA_DIR, "password-resets.json");
 const COMMAND_ACCESS_FILE = path.join(DATA_DIR, "command-access.json");
 const MESSAGE_LOGGING_FILE = path.join(DATA_DIR, "message-logging.json");
@@ -107,6 +109,7 @@ const STATE_FILES = {
   "moderation-reads.json": {},
   "appeals.json": [],
   "bans.json": [],
+  "ip-bans.json": [],
   "password-resets.json": [],
   "command-access.json": {},
   "message-logging.json": {},
@@ -141,6 +144,7 @@ ensure(MODERATION_FILE, []);
 ensure(MODERATION_READS_FILE, {});
 ensure(APPEALS_FILE, []);
 ensure(BANS_FILE, []);
+ensure(IP_BANS_FILE, []);
 ensure(PASSWORD_RESETS_FILE, []);
 ensure(COMMAND_ACCESS_FILE, []);
 ensure(MESSAGE_LOGGING_FILE, {});
@@ -1569,6 +1573,88 @@ function authToken(req) {
   return a.startsWith("Bearer ") ? a.slice(7) : "";
 }
 
+function normalizeIp(value) {
+  let ip = String(value || "").trim();
+  if (!ip) return "";
+  if (ip.includes(",")) ip = ip.split(",")[0].trim();
+  if (ip.startsWith("[")) { const end = ip.indexOf("]"); if (end > 0) ip = ip.slice(1, end); }
+  if (/^::ffff:\d{1,3}(?:\.\d{1,3}){3}$/i.test(ip)) ip = ip.slice(7);
+  return ip.toLowerCase();
+}
+function clientIp(req) { return normalizeIp(req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress || ""); }
+function socketClientIp(socket) {
+  const forwarded = socket?.handshake?.headers?.["x-forwarded-for"];
+  const headerIp = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  return normalizeIp(headerIp || socket?.handshake?.address || socket?.request?.socket?.remoteAddress || "");
+}
+function ipBans() { return read(IP_BANS_FILE, []); }
+function saveIpBans(value) { write(IP_BANS_FILE, value); }
+function createLinkedIpBanForUser(user, ban, adminUsername) {
+  const ip = normalizeIp(user?.lastIp || "");
+  if (!ip || net.isIP(ip) === 0 || ip === "::" || ip === "0.0.0.0") {
+    return null;
+  }
+
+  const now = Date.now();
+  const list = ipBans();
+  const existing = activeIpBanFor(ip);
+  if (existing) {
+    existing.revokedAt = now;
+    existing.revokedBy = adminUsername;
+    existing.status = "revoked";
+  }
+
+  const linkedBan = {
+    id: now + "-" + crypto.randomBytes(5).toString("hex"),
+    ip,
+    reason: ban.reason || "IP bloqueada por el baneo de la cuenta.",
+    createdAt: now,
+    expiresAt: ban.expiresAt || null,
+    createdBy: adminUsername,
+    status: "active",
+    linkedUsername: norm(user.username),
+    linkedBanId: ban.id,
+    automatic: true
+  };
+
+  list.push(linkedBan);
+  if (list.length > 5000) list.splice(0, list.length - 5000);
+  saveIpBans(list);
+  return linkedBan;
+}
+function revokeLinkedIpBansForUser(username, adminUsername) {
+  const target = norm(username);
+  const list = ipBans();
+  const now = Date.now();
+  let changed = false;
+  for (const item of list) {
+    if (item.automatic && norm(item.linkedUsername) === target && !item.revokedAt && (!item.expiresAt || Number(item.expiresAt) > now)) {
+      item.revokedAt = now;
+      item.revokedBy = adminUsername;
+      item.status = "revoked";
+      changed = true;
+    }
+  }
+  if (changed) saveIpBans(list);
+  return changed;
+}
+function activeIpBanFor(ip) {
+  const target = normalizeIp(ip);
+  if (!target) return null;
+  const now = Date.now();
+  return ipBans().filter(item => normalizeIp(item.ip) === target && !item.revokedAt && (!item.expiresAt || Number(item.expiresAt) > now)).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0))[0] || null;
+}
+function disconnectIpBannedSockets(ip, ban) {
+  const target = normalizeIp(ip); let disconnected = 0;
+  for (const [socketId] of online.entries()) {
+    const socket = io.sockets.sockets.get(socketId); if (!socket) continue;
+    const socketIp = normalizeIp(socket.data?.clientIp || socketClientIp(socket)); if (socketIp !== target) continue;
+    socket.emit("ipBanned", { ip: target, reason: ban?.reason || "", expiresAt: ban?.expiresAt || null, createdAt: ban?.createdAt || Date.now() });
+    socket.disconnect(true); online.delete(socketId); disconnected++;
+  }
+  return disconnected;
+}
+
 app.use(express.json({ limit: "12mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -1579,12 +1665,12 @@ const online = new Map();
 // =====================================================
 
 function requireUser(req, res, next) {
+  const ip = clientIp(req);
+  const ipBan = activeIpBanFor(ip);
+  if (ipBan) return res.status(403).json({ error: ipBan.expiresAt ? `Esta IP está bloqueada hasta ${new Date(Number(ipBan.expiresAt)).toLocaleString("es-ES")}.` : "Esta IP está bloqueada permanentemente.", ipBanned:true });
   const user = sessionUser(authToken(req));
-  if (!user) {
-    return res.status(401).json({ error: "Sesión no válida." });
-  }
-  req.user = user;
-  next();
+  if (!user) return res.status(401).json({ error: "Sesión no válida." });
+  req.user = user; req.clientIp = ip; next();
 }
 
 app.post(
@@ -2979,6 +3065,8 @@ app.get("/api/admin/users", requireAdmin, (req, res) => {
     displayName: user.displayName || user.username,
     email: normalizeEmail(user.email || ""),
     phone: normalizePhone(user.phone || ""),
+    lastIp: normalizeIp(user.lastIp || ""),
+    lastIpAt: Number(user.lastIpAt || 0) || null,
     profileImage: user.profileImage || "",
     online: onlineUsers.has(norm(user.username)),
     createdAt: user.createdAt || null,
@@ -3326,6 +3414,11 @@ app.post("/api/admin/users/:username/ban", requireAdmin, (req, res) => {
   if (list.length > 2000) list.splice(0, list.length - 2000);
   saveBans(list);
 
+  // Al banear una cuenta, bloqueamos también la última IP conocida durante
+  // el mismo periodo. Esto impide registrar una cuenta alternativa desde
+  // la misma conexión mientras el baneo siga activo.
+  const linkedIpBan = createLinkedIpBanForUser(user, ban, req.admin.username);
+
   for (const [socketId, name] of online.entries()) {
     if (norm(name) !== username) continue;
     online.delete(socketId);
@@ -3342,10 +3435,11 @@ app.post("/api/admin/users/:username/ban", requireAdmin, (req, res) => {
 
   sendUserList();
   addAdminActivity(
-    `Administrador baneó a @${user.username} ${duration.label === "Permanente" ? "permanentemente" : `durante ${duration.minutes} minutos`}.`
+    `Administrador baneó a @${user.username} ${duration.label === "Permanente" ? "permanentemente" : `durante ${duration.minutes} minutos`}.` +
+    (linkedIpBan ? ` También se bloqueó automáticamente la IP ${linkedIpBan.ip}.` : " No se pudo crear un bloqueo IP porque no había una IP válida registrada.")
   );
 
-  res.json({ success: true, ban });
+  res.json({ success: true, ban, linkedIpBan });
 });
 
 app.post("/api/admin/users/:username/unban", requireAdmin, (req, res) => {
@@ -3369,8 +3463,9 @@ app.post("/api/admin/users/:username/unban", requireAdmin, (req, res) => {
   }
 
   if (changed) saveBans(list);
+  const linkedIpChanged = revokeLinkedIpBansForUser(user.username, req.admin.username);
   addAdminActivity(`Administrador quitó el baneo de @${user.username}.`);
-  res.json({ success: true, changed });
+  res.json({ success: true, changed, linkedIpChanged });
 });
 
 app.get("/api/admin/bans", requireAdmin, (req, res) => {
@@ -3395,6 +3490,28 @@ app.delete("/api/admin/bans/:id", requireAdmin, (req, res) => {
   addAdminActivity(`Administrador eliminó el registro de baneo de @${removed.username}.`);
 
   res.json({ success: true, ban: removed });
+});
+
+app.get("/api/admin/ip-bans", requireAdmin, (req, res) => {
+  const now=Date.now(); const list=ipBans().slice().sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
+  res.json(list.slice(0,500).map(item=>({...item,active:!item.revokedAt&&(!item.expiresAt||Number(item.expiresAt)>now)})));
+});
+app.post("/api/admin/ip-bans", requireAdmin, (req, res) => {
+  const ip=normalizeIp(req.body?.ip); const reason=String(req.body?.reason||"").trim().slice(0,500); const duration=parseBanDuration(req.body?.duration);
+  if(!ip || net.isIP(ip) === 0 || ip==='::' || ip==='0.0.0.0') return res.status(400).json({error:"IP inválida."});
+  if(!duration) return res.status(400).json({error:"Duración inválida. Usa 30m, 2h, 7d o 0 para permanente."});
+  const now=Date.now(); const list=ipBans(); const existing=activeIpBanFor(ip);
+  if(existing){ existing.revokedAt=now; existing.revokedBy=req.admin.username; existing.status='revoked'; }
+  const ban={id:now+'-'+crypto.randomBytes(5).toString('hex'),ip,reason,createdAt:now,expiresAt:duration.expiresAt,createdBy:req.admin.username,status:'active'};
+  list.push(ban); if(list.length>5000) list.splice(0,list.length-5000); saveIpBans(list);
+  const disconnected=disconnectIpBannedSockets(ip,ban);
+  addAdminActivity(`Administrador bloqueó la IP ${ip}${duration.label==='Permanente'?' permanentemente':` durante ${duration.minutes} minutos`}${reason?`: ${reason}`:'.'}`);
+  res.json({success:true,ban,disconnected});
+});
+app.delete("/api/admin/ip-bans/:id", requireAdmin, (req, res) => {
+  const id=String(req.params.id||''); if(!id) return res.status(400).json({error:'Identificador de bloqueo IP inválido.'});
+  const list=ipBans(); const index=list.findIndex(item=>String(item.id)===id); if(index<0) return res.status(404).json({error:'Bloqueo de IP no encontrado.'});
+  const [removed]=list.splice(index,1); saveIpBans(list); addAdminActivity(`Administrador eliminó el bloqueo de la IP ${removed.ip}.`); res.json({success:true,ban:removed});
 });
 
 app.post("/api/admin/users/:username/access-block", requireAdmin, (req, res) => {
@@ -4352,6 +4469,8 @@ function socketIdFor(username) {
 }
 
 app.post("/api/register", (req, res) => {
+  const requestIp = clientIp(req); const ipBan = activeIpBanFor(requestIp);
+  if (ipBan) return res.status(403).json({ error: ipBan.expiresAt ? `Esta IP está bloqueada hasta ${new Date(Number(ipBan.expiresAt)).toLocaleString("es-ES")}.` : "Esta IP está bloqueada permanentemente.", ipBanned:true });
   if (globalAccessEnabled()) {
     return res.status(403).json({
       error: "No tienes acceso a este servicio.",
@@ -4446,6 +4565,8 @@ app.post("/api/register", (req, res) => {
     email: email || "",
     phone: phone || "",
     profileImage: "",
+    lastIp: requestIp,
+    lastIpAt: Date.now(),
     blockedUsers: [],
     contacts: [],
     contactRequests: { incoming: [], outgoing: [] },
@@ -4617,6 +4738,8 @@ app.post("/api/reset-password", (req, res) => {
 });
 
 app.post("/api/login", (req, res) => {
+  const requestIp = clientIp(req); const ipBan = activeIpBanFor(requestIp);
+  if (ipBan) return res.status(403).json({ error: ipBan.expiresAt ? `Esta IP está bloqueada hasta ${new Date(Number(ipBan.expiresAt)).toLocaleString("es-ES")}.` : "Esta IP está bloqueada permanentemente.", ipBanned:true });
   const identifier =
     String(req.body?.username || req.body?.identifier || "").trim();
 
@@ -4682,6 +4805,7 @@ app.post("/api/login", (req, res) => {
   );
 
   if (idx >= 0) {
+    list[idx].lastIp = requestIp; list[idx].lastIpAt = Date.now();
     if (!Array.isArray(list[idx].contacts)) {
       list[idx].contacts = [];
     }
@@ -4709,6 +4833,8 @@ app.post("/api/login", (req, res) => {
 });
 
 app.get("/api/session", (req, res) => {
+  const requestIp = clientIp(req); const ipBan = activeIpBanFor(requestIp);
+  if (ipBan) return res.status(403).json({ loggedIn:false, ipBanned:true, error: ipBan.expiresAt ? `Esta IP está bloqueada hasta ${new Date(Number(ipBan.expiresAt)).toLocaleString("es-ES")}.` : "Esta IP está bloqueada permanentemente." });
   const token = authToken(req);
   const rawUser = sessionUserRaw(token);
   const accessBlock = rawUser ? activeAccessBlockFor(rawUser.username) : null;
@@ -5754,7 +5880,10 @@ app.delete("/api/stories/:id", (req, res) => {
 // =====================================================
 
 io.on("connection", socket => {
+  socket.data.clientIp = socketClientIp(socket);
   socket.on("authenticate", token => {
+    const socketIp=normalizeIp(socket.data.clientIp||socketClientIp(socket)); const ipBan=activeIpBanFor(socketIp);
+    if(ipBan){ socket.emit("ipBanned",{ip:socketIp,reason:ipBan.reason||"",expiresAt:ipBan.expiresAt||null,createdAt:ipBan.createdAt||Date.now()}); return socket.disconnect(true); }
     const u = sessionUserRaw(token);
 
     if (!u) {
@@ -5786,6 +5915,14 @@ io.on("connection", socket => {
         createdAt: ban.createdAt || Date.now()
       });
       return socket.disconnect(true);
+    }
+
+    const userList = users();
+    const userIndex = userList.findIndex(item => norm(item.username) === norm(u.username));
+    if (userIndex >= 0 && socketIp) {
+      userList[userIndex].lastIp = socketIp;
+      userList[userIndex].lastIpAt = Date.now();
+      saveUsers(userList);
     }
 
     for (const [
@@ -7133,7 +7270,8 @@ io.on("connection", socket => {
 
   socket.on(
     "callRequest",
-    ({ to }) => {
+    ({ to, mode = "audio" }) => {
+      const callMode = mode === "video" ? "video" : "audio";
       const caller =
         online.get(socket.id);
 
@@ -7196,8 +7334,8 @@ io.on("connection", socket => {
           "incomingCall",
           {
             from: norm(caller),
-            fromDisplay:
-              callerName
+            fromDisplay: callerName,
+            mode: callMode
           }
         );
       }
@@ -7213,13 +7351,13 @@ io.on("connection", socket => {
             "Llamada entrante",
           body:
             callerName +
-            " te está llamando",
+            (callMode === "video" ? " te está haciendo una videollamada" : " te está llamando"),
           from:
             callerName,
           username:
             norm(caller),
-          message:
-            "Llamada entrante"
+          message: "Llamada entrante",
+          mode: callMode
         }
       );
 
@@ -7238,7 +7376,8 @@ io.on("connection", socket => {
 
   socket.on(
     "callAccept",
-    ({ to }) => {
+    ({ to, mode = "audio" }) => {
+      const callMode = mode === "video" ? "video" : "audio";
       const callee =
         online.get(socket.id);
 
@@ -7266,11 +7405,9 @@ io.on("connection", socket => {
       io.to(targetSid).emit(
         "callAccepted",
         {
-          from:
-            norm(callee),
-          fromDisplay:
-            getUser(callee)?.displayName ||
-            callee
+          from: norm(callee),
+          fromDisplay: getUser(callee)?.displayName || callee,
+          mode: callMode
         }
       );
     }
