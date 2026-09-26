@@ -40,7 +40,7 @@ button,input,textarea{font:inherit}
 .actions{padding:10px;border-bottom:1px solid #ddd}
 .actionBtn{width:100%;border:0;border-radius:10px;padding:11px;cursor:pointer;background:#25d366;color:#fff;font-weight:bold}
 .actions{display:grid;gap:8px}
-.quickActions{position:absolute;right:18px;bottom:8px;z-index:60}
+.quickActions{position:absolute;right:18px;bottom:18px;z-index:60}
 /* =====================================================
    NAVEGACIÓN PRINCIPAL TIPO WHATSAPP
 ===================================================== */
@@ -124,8 +124,7 @@ button,input,textarea{font:inherit}
 .chatInfo{flex:1;min-width:0}
 .chatTitle{font-weight:bold}
 .chatSubtitle{margin-top:3px;font-size:13px;color:#777}
-.chatTools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-.toolBtn{border:0;background:#f0f2f5;border-radius:8px;padding:7px 9px;cursor:pointer}.enterChatBtn{padding:11px 18px!important;min-height:46px;font-size:15px;font-weight:700;border-radius:10px!important}
+.chatTools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.groupActionsWrap{position:relative;display:none}.groupActionsWrap.visible{display:block}.groupActionsToggle{width:42px;height:42px;border:0;border-radius:10px;background:#f0f2f5;cursor:pointer;font-size:23px;line-height:1;display:flex;align-items:center;justify-content:center}.groupActionsMenu{position:absolute;top:calc(100% + 8px);right:0;display:grid;gap:6px;min-width:170px;padding:8px;background:#fff;border:1px solid #ddd;border-radius:12px;box-shadow:0 14px 32px rgba(0,0,0,.18);z-index:120}.groupActionsMenu .toolBtn{width:100%;text-align:left}.groupActionsMenu.hidden{display:none}.toolBtn{border:0;background:#f0f2f5;border-radius:8px;padding:7px 9px;cursor:pointer}.enterChatBtn{padding:11px 18px!important;min-height:46px;font-size:15px;font-weight:700;border-radius:10px!important}
 .callBtn{background:#25d366;color:#fff}
 .hangBtn{background:#b00020;color:#fff}
 
@@ -428,7 +427,7 @@ button,input,textarea{font:inherit}
   .mainTabPage{min-height:0}
   .newsPage .storiesBar{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
   .newsPage .storyRing{width:76px;height:76px}
-  .quickActions{right:16px;bottom:70px}
+  .quickActions{right:16px;bottom:84px}
   .mobileChat .mobileBottomNav{display:none}
 }
 @media(min-width:901px){
@@ -1005,7 +1004,15 @@ html.darkTheme .commandModalBox input{background:#111827!important;color:#fff!im
         <div class="chatTools">
           <button id="callButton" class="toolBtn callBtn hidden">📞 Llamar</button>
           <button id="hangupButton" class="toolBtn hangBtn hidden">📵 Colgar</button>
-          <button id="groupRenameButton" class="toolBtn groupAddBtn hidden" type="button">✏️ Nombre</button><button id="groupAddMembersButton" class="toolBtn groupAddBtn hidden" type="button">👥 Añadir</button><button id="groupDeleteButton" class="toolBtn groupAddBtn hidden" type="button">🗑️ Borrar</button><button id="blockCurrentButton" class="toolBtn hidden" type="button">🚫 Bloquear</button>
+          <div id="groupActionsWrap" class="groupActionsWrap" aria-hidden="true">
+            <button id="groupActionsToggle" class="groupActionsToggle" type="button" aria-label="Opciones del grupo" aria-expanded="false">⋮</button>
+            <div id="groupActionsMenu" class="groupActionsMenu hidden">
+              <button id="groupRenameButton" class="toolBtn groupAddBtn hidden" type="button">✏️ Cambiar nombre</button>
+              <button id="groupAddMembersButton" class="toolBtn groupAddBtn hidden" type="button">👥 Añadir personas</button>
+              <button id="groupDeleteButton" class="toolBtn groupAddBtn hidden" type="button">🗑️ Borrar grupo</button>
+            </div>
+          </div>
+          <button id="blockCurrentButton" class="toolBtn hidden" type="button">🚫 Bloquear</button>
         </div>
 
       </header>
@@ -1576,6 +1583,9 @@ const groupNameInput = $("groupNameInput");
 const groupMemberOptions = $("groupMemberOptions");
 const groupError = $("groupError");
 const groupAvatarInput = $("groupAvatarInput");
+const groupActionsWrap = $("groupActionsWrap");
+const groupActionsToggle = $("groupActionsToggle");
+const groupActionsMenu = $("groupActionsMenu");
 const groupRenameButton = $("groupRenameButton");
 const groupAddMembersButton = $("groupAddMembersButton");
 const groupDeleteButton = $("groupDeleteButton");
@@ -2873,6 +2883,10 @@ function renderGroupAddMemberOptions(){
   if(!contacts.length){groupAddMemberOptions.innerHTML='<div style="padding:14px;color:#777;text-align:center">No tienes más contactos disponibles para añadir.</div>';return;}
   groupAddMemberOptions.innerHTML=contacts.map(user=>`<label class="groupMemberOption"><input type="checkbox" value="${esc(user.username)}" data-group-add-member><div class="avatar" style="width:34px;height:34px">${avatarHtml(user)}</div><div style="min-width:0"><div class="userName">${esc(user.displayName||user.username)}</div><div class="userSub">@${esc(user.username)}</div></div></label>`).join('');
 }
+function closeGroupActionsMenu(){
+  if(groupActionsMenu) groupActionsMenu.classList.add('hidden');
+  if(groupActionsToggle) groupActionsToggle.setAttribute('aria-expanded','false');
+}
 function refreshGroupAddButton(){
   const group=allGroups.find(g=>String(g.id)===String(selectedGroupId));
   const isAdmin=!!group && Array.isArray(group.admins) && group.admins.some(name=>norm(name)===norm(myUsername));
@@ -2889,11 +2903,19 @@ function refreshGroupAddButton(){
     groupDeleteButton.classList.toggle('visible',isAdmin);
     groupDeleteButton.classList.toggle('hidden',!isAdmin);
   }
+  const showMenu = !!(isAdmin && groupActionsWrap);
+  if(groupActionsWrap){
+    groupActionsWrap.classList.toggle('visible',showMenu);
+    groupActionsWrap.setAttribute('aria-hidden',String(!showMenu));
+  }
+  if(!showMenu) closeGroupActionsMenu();
 }
 function hideGroupTools(){
   if(groupAddMembersButton){ groupAddMembersButton.classList.add('hidden'); groupAddMembersButton.classList.remove('visible'); }
   if(groupRenameButton){ groupRenameButton.classList.add('hidden'); groupRenameButton.classList.remove('visible'); }
   if(groupDeleteButton){ groupDeleteButton.classList.add('hidden'); groupDeleteButton.classList.remove('visible'); }
+  if(groupActionsWrap){ groupActionsWrap.classList.remove('visible'); groupActionsWrap.setAttribute('aria-hidden','true'); }
+  closeGroupActionsMenu();
 }
 function refreshBlockButton(){
   if(!blockCurrentButton) return;
@@ -3090,8 +3112,20 @@ if(groupAvatarInput){
   };
 }
 
+if(groupActionsToggle){
+  groupActionsToggle.onclick=(event)=>{
+    event.stopPropagation();
+    if(groupActionsMenu) groupActionsMenu.classList.toggle('hidden');
+    groupActionsToggle.setAttribute('aria-expanded', String(groupActionsMenu ? !groupActionsMenu.classList.contains('hidden') : false));
+  };
+}
+document.addEventListener('click',(event)=>{
+  if(groupActionsWrap && !groupActionsWrap.contains(event.target)) closeGroupActionsMenu();
+});
+
 if(groupRenameButton){
   groupRenameButton.onclick=()=>{
+    closeGroupActionsMenu();
     const group=allGroups.find(g=>String(g.id)===String(selectedGroupId));
     if(!group) return;
     const next=window.prompt("Nuevo nombre del grupo:", group.name || "Grupo");
@@ -3106,6 +3140,7 @@ socket.on("groupNameError",message=>showNotification("Nombre del grupo",message|
 
 if(groupAddMembersButton){
   groupAddMembersButton.onclick=()=>{
+    closeGroupActionsMenu();
     const group=allGroups.find(g=>String(g.id)===String(selectedGroupId));
     if(!group) return;
     groupAddError.textContent='';
@@ -3115,6 +3150,7 @@ if(groupAddMembersButton){
 }
 if(groupDeleteButton){
   groupDeleteButton.onclick=()=>{
+    closeGroupActionsMenu();
     const group=allGroups.find(g=>String(g.id)===String(selectedGroupId));
     if(!group) return;
     if(!window.confirm(`¿Seguro que quieres borrar el grupo «${group.name || "Grupo"}»? Se eliminará para todos sus miembros y se borrarán sus mensajes.`)) return;
