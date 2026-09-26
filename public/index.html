@@ -131,7 +131,18 @@ button,input,textarea{font:inherit}
 .chatSubtitle{margin-top:3px;font-size:13px;color:#777}
 .chatTools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.groupActionsWrap{position:relative;display:none}.groupActionsWrap.visible{display:block}.groupActionsToggle{width:42px;height:42px;border:0;border-radius:10px;background:#f0f2f5;cursor:pointer;font-size:23px;line-height:1;display:flex;align-items:center;justify-content:center}.groupActionsMenu{position:absolute;top:calc(100% + 8px);right:0;display:grid;gap:6px;min-width:170px;padding:8px;background:#fff;border:1px solid #ddd;border-radius:12px;box-shadow:0 14px 32px rgba(0,0,0,.18);z-index:120}.groupActionsMenu .toolBtn{width:100%;text-align:left}.groupActionsMenu.hidden{display:none}.toolBtn{border:0;background:#f0f2f5;border-radius:8px;padding:7px 9px;cursor:pointer}.enterChatBtn{padding:11px 18px!important;min-height:46px;font-size:15px;font-weight:700;border-radius:10px!important}
 .callBtn{background:#25d366;color:#fff}
+.videoBtn{background:#128c7e;color:#fff}
 .hangBtn{background:#b00020;color:#fff}
+.remoteVideo{display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;z-index:0}
+.remoteVideo.visible{display:block}
+.localVideo{display:none;position:absolute;right:18px;top:18px;width:112px;height:158px;object-fit:cover;border-radius:16px;border:2px solid rgba(255,255,255,.75);box-shadow:0 10px 26px rgba(0,0,0,.35);background:#111;z-index:4}
+.localVideo.visible{display:block}
+.videoCallOverlay{position:absolute;inset:0;display:none;z-index:1;background:linear-gradient(180deg,rgba(0,0,0,.25),rgba(0,0,0,.05) 45%,rgba(0,0,0,.45));pointer-events:none}
+.videoCallOverlay.visible{display:block}
+.videoCallTopInfo{position:absolute;left:18px;right:150px;top:18px;z-index:5;color:#fff;text-align:left;text-shadow:0 2px 8px rgba(0,0,0,.55)}
+.videoCallTopInfo .name{font-size:20px;font-weight:700}
+.videoCallTopInfo .status{margin-top:4px;font-size:13px;opacity:.9}
+.videoCallTopInfo .timer{margin-top:3px;font-size:13px;opacity:.85}
 
 #messages{flex:1;min-height:0;overflow-y:auto;padding:20px;background:#e5ddd5}
 .empty{height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:#666}
@@ -1020,6 +1031,7 @@ html.darkTheme .commandModalBox input{background:#111827!important;color:#fff!im
 
         <div class="chatTools">
           <button id="callButton" class="toolBtn callBtn hidden">📞 Llamar</button>
+          <button id="videoCallButton" class="toolBtn videoBtn hidden">📹 Vídeo</button>
           <button id="hangupButton" class="toolBtn hangBtn hidden">📵 Colgar</button>
           <div id="groupActionsWrap" class="groupActionsWrap" aria-hidden="true">
             <button id="groupActionsToggle" class="groupActionsToggle" type="button" aria-label="Opciones del grupo" aria-expanded="false">⋮</button>
@@ -1426,6 +1438,14 @@ html.darkTheme .commandModalBox input{background:#111827!important;color:#fff!im
 
 <!-- PANTALLA DE LLAMADA ACTIVA -->
 <div id="activeCallScreen" class="activeCallScreen" aria-hidden="true">
+  <video id="remoteVideo" class="remoteVideo" autoplay playsinline></video>
+  <video id="localVideo" class="localVideo" autoplay playsinline muted></video>
+  <div id="videoCallOverlay" class="videoCallOverlay"></div>
+  <div id="videoCallTopInfo" class="videoCallTopInfo">
+    <div id="videoCallTopName" class="name"></div>
+    <div id="videoCallTopStatus" class="status"></div>
+    <div id="videoCallTopTimer" class="timer"></div>
+  </div>
   <div class="activeCallContent">
 
     <div class="activeCallTopLabel">Mi Chat · llamada</div>
@@ -1451,6 +1471,11 @@ html.darkTheme .commandModalBox input{background:#111827!important;color:#fff!im
       <button id="muteCallButton" class="activeCallControl" type="button" aria-label="Silenciar micrófono">
         <span id="muteCallIcon" class="activeCallControlIcon">🎤</span>
         <span id="muteCallText" class="activeCallControlText">Silenciar</span>
+      </button>
+
+      <button id="cameraCallButton" class="activeCallControl active" type="button" aria-label="Cámara">
+        <span id="cameraCallIcon" class="activeCallControlIcon">📹</span>
+        <span id="cameraCallText" class="activeCallControlText">Cámara</span>
       </button>
 
       <button id="speakerCallButton" class="activeCallControl active" type="button" aria-label="Altavoz">
@@ -1623,6 +1648,7 @@ const headerAvatar = $("headerAvatar");
 const blockCurrentButton = $("blockCurrentButton");
 let blockedUsersClient = new Set();
 const callButton = $("callButton");
+const videoCallButton = $("videoCallButton");
 const hangupButton = $("hangupButton");
 
 const incomingCallModal = $("incomingCallModal");
@@ -1633,6 +1659,7 @@ const callError = $("callError");
 const remoteAudio = $("remoteAudio");
 
 const activeCallScreen = $("activeCallScreen");
+const activeCallContent = activeCallScreen?.querySelector(".activeCallContent");
 const activeCallAvatarImage = $("activeCallAvatarImage");
 const activeCallAvatarLetter = $("activeCallAvatarLetter");
 const activeCallName = $("activeCallName");
@@ -1644,6 +1671,16 @@ const muteCallText = $("muteCallText");
 const speakerCallButton = $("speakerCallButton");
 const speakerCallIcon = $("speakerCallIcon");
 const speakerCallText = $("speakerCallText");
+const cameraCallButton = $("cameraCallButton");
+const cameraCallIcon = $("cameraCallIcon");
+const cameraCallText = $("cameraCallText");
+const remoteVideo = $("remoteVideo");
+const localVideo = $("localVideo");
+const videoCallOverlay = $("videoCallOverlay");
+const videoCallTopInfo = $("videoCallTopInfo");
+const videoCallTopName = $("videoCallTopName");
+const videoCallTopStatus = $("videoCallTopStatus");
+const videoCallTopTimer = $("videoCallTopTimer");
 const recordCallButton = $("recordCallButton");
 const recordCallIcon = $("recordCallIcon");
 const recordCallText = $("recordCallText");
@@ -1654,6 +1691,8 @@ let activeCallTimerInterval = null;
 let activeCallStartTime = null;
 let callMuted = false;
 let callSpeaker = true;
+let callMode = "audio";
+let callCameraEnabled = true;
 
 const layout = $("layout");
 document.querySelectorAll("#mobileBottomNav [data-main-tab]").forEach(button => {
@@ -1725,13 +1764,24 @@ function renderCallsTab(){
         <div class="userName">${esc(user.displayName || user.username)}</div>
         <div class="${user.online ? "online" : "offline"}">${user.online ? "● En línea" : "○ Desconectado"}</div>
       </div>
-      <button class="toolBtn" type="button" aria-label="Llamar">📞</button>
+      <div style="display:flex;gap:6px;margin-left:auto">
+        <button class="toolBtn" type="button" aria-label="Llamada de voz">📞</button>
+        <button class="toolBtn videoBtn" type="button" aria-label="Videollamada">📹</button>
+      </div>
     `;
-    row.querySelector("button").onclick = async () => {
+    const buttons = row.querySelectorAll("button");
+    buttons[0].onclick = async () => {
       switchMainTab("chats");
       openChat(user.username, user.displayName || user.username, !!user.online, user.profileImage || "");
       setTimeout(() => {
         if(!callButton.classList.contains("hidden")) callButton.click();
+      }, 80);
+    };
+    buttons[1].onclick = async () => {
+      switchMainTab("chats");
+      openChat(user.username, user.displayName || user.username, !!user.online, user.profileImage || "");
+      setTimeout(() => {
+        if(!videoCallButton.classList.contains("hidden")) videoCallButton.click();
       }, 80);
     };
     container.appendChild(row);
@@ -2627,6 +2677,16 @@ socket.on("kicked", data => {
   authError.textContent = `Has sido expulsado del chat.${reason} Vuelve a iniciar sesión para entrar de nuevo.`;
 });
 
+socket.on("ipBanned", data => {
+  try { closeModerationModal(); } catch {}
+  if(socket.connected) socket.disconnect();
+  app.style.display = "none";
+  authScreen.style.display = "flex";
+  const until = data?.expiresAt ? ` hasta ${new Date(Number(data.expiresAt)).toLocaleString("es-ES")}` : " permanentemente";
+  const reason = data?.reason ? ` Motivo: ${data.reason}` : "";
+  authError.textContent = `Tu IP ha sido bloqueada${until}.${reason}`;
+});
+
 socket.on("banned", data => {
   localStorage.removeItem("chatToken");
   try { closeModerationModal(); } catch {}
@@ -2969,7 +3029,7 @@ function openGroupChat(group){
   headerAvatar.classList.toggle("canEdit", canEditAvatar);
   headerAvatar.title = canEditAvatar ? "Cambiar foto del grupo" : "";
   headerAvatar.onclick = canEditAvatar ? () => groupAvatarInput?.click() : null;
-  blockCurrentButton.classList.add("hidden"); callButton.classList.add("hidden"); hangupButton.classList.add("hidden"); layout.classList.add("mobileChat");
+  blockCurrentButton.classList.add("hidden"); callButton.classList.add("hidden"); videoCallButton.classList.add("hidden"); hangupButton.classList.add("hidden"); layout.classList.add("mobileChat");
   refreshGroupAddButton();
   messageInput.disabled=false; sendButton.disabled=false; attachButton.disabled=false; messagesContainer.innerHTML='<div class="empty">Cargando grupo...</div>';
   socket.emit("getGroupConversation",group.id); socket.emit("markGroupRead",group.id);
@@ -3370,6 +3430,7 @@ function openChat(
   refreshBlockButton();
 
   callButton.classList.remove("hidden");
+  videoCallButton.classList.remove("hidden");
   hangupButton.classList.add("hidden");
 
   layout.classList.add("mobileChat");
@@ -3877,28 +3938,50 @@ const rtcConfig = {
   ]
 };
 
-async function ensureMicrophone(){
-
-  if(
-    !navigator.mediaDevices ||
-    !navigator.mediaDevices.getUserMedia
-  ){
-
-    throw new Error(
-      "Este navegador no permite usar el micrófono aquí."
-    );
+async function ensureLocalMedia(mode = "audio"){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    throw new Error("Este navegador no permite usar cámara y micrófono aquí.");
   }
-
+  const wantVideo = mode === "video";
   if(!localStream){
-
-    localStream =
-      await navigator.mediaDevices.getUserMedia({
-        audio:true,
-        video:false
-      });
+    localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:wantVideo});
+  }else if(wantVideo && !localStream.getVideoTracks().length){
+    const extra = await navigator.mediaDevices.getUserMedia({audio:false, video:true});
+    extra.getVideoTracks().forEach(track => localStream.addTrack(track));
   }
-
+  if(wantVideo && !localStream.getVideoTracks().length){
+    throw new Error("No se pudo activar la cámara.");
+  }
+  updateLocalVideoPreview();
+  updateCameraButton();
   return localStream;
+}
+
+async function ensureMicrophone(){
+  return ensureLocalMedia("audio");
+}
+
+function updateLocalVideoPreview(){
+  const hasVideo = !!(localStream && localStream.getVideoTracks().length);
+  if(hasVideo){
+    localVideo.srcObject = localStream;
+  }else{
+    localVideo.srcObject = null;
+  }
+  localVideo.classList.toggle("visible", callMode === "video" && hasVideo);
+}
+
+function updateVideoCallUI(){
+  const video = callMode === "video";
+  videoCallOverlay.classList.toggle("visible", video);
+  videoCallTopInfo.style.display = video ? "block" : "none";
+  activeCallScreen.classList.toggle("videoMode", video);
+  remoteVideo.classList.toggle("visible", video && !!remoteVideo.srcObject);
+  updateLocalVideoPreview();
+  cameraCallButton.style.display = video ? "flex" : "none";
+  if(video){
+    activeCallContent && (activeCallContent.style.zIndex = "2");
+  }
 }
 
 async function flushIceCandidates(){
@@ -3943,7 +4026,7 @@ async function startPeer(){
     );
 
   const stream =
-    await ensureMicrophone();
+    await ensureLocalMedia(callMode);
 
   stream.getTracks().forEach(
     track => {
@@ -3967,13 +4050,18 @@ async function startPeer(){
         return;
       }
 
-      remoteAudio.srcObject =
-        event.streams[0];
+      const remoteStream = event.streams[0];
+      remoteAudio.srcObject = remoteStream;
+      remoteVideo.srcObject = remoteStream;
 
       remoteAudio.autoplay = true;
       remoteAudio.playsInline = true;
       remoteAudio.muted = false;
       remoteAudio.volume = 1.0;
+      remoteVideo.autoplay = true;
+      remoteVideo.playsInline = true;
+      remoteVideo.muted = true;
+      updateVideoCallUI();
 
       remoteAudio.play()
         .then(() => {
@@ -4083,8 +4171,13 @@ function showActiveCallScreen(username, status = "Conectando..."){
 
   callMuted = false;
   callSpeaker = true;
+  callCameraEnabled = true;
   updateMuteButton();
   updateSpeakerButton();
+  updateCameraButton();
+  if(videoCallTopName) videoCallTopName.textContent = name;
+  if(videoCallTopStatus) videoCallTopStatus.textContent = status;
+  updateVideoCallUI();
 
   activeCallScreen.classList.add("visible");
   activeCallScreen.setAttribute("aria-hidden", "false");
@@ -4098,6 +4191,12 @@ function hideActiveCallScreen(){
   activeCallScreen.classList.remove("visible");
   activeCallScreen.setAttribute("aria-hidden", "true");
   stopCallTimer();
+  remoteVideo.srcObject = null;
+  localVideo.srcObject = null;
+  remoteVideo.classList.remove("visible");
+  localVideo.classList.remove("visible");
+  videoCallOverlay.classList.remove("visible");
+  videoCallTopInfo.style.display = "none";
 }
 
 function setActiveCallStatus(status){
@@ -4106,6 +4205,7 @@ function setActiveCallStatus(status){
     return;
   }
   activeCallStatus.textContent = status;
+  if(videoCallTopStatus) videoCallTopStatus.textContent = status;
 }
 
 function startCallTimer(){
@@ -4135,10 +4235,9 @@ function updateCallTimer(){
   const minutes = Math.floor(elapsed / 60);
   const seconds = elapsed % 60;
 
-  activeCallTimer.textContent =
-    String(minutes).padStart(2, "0") +
-    ":" +
-    String(seconds).padStart(2, "0");
+  const timeText = String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0");
+  activeCallTimer.textContent = timeText;
+  if(videoCallTopTimer) videoCallTopTimer.textContent = timeText;
 }
 
 function updateMuteButton(){
@@ -4174,6 +4273,23 @@ function updateSpeakerButton(){
   speakerCallButton.classList.toggle("active", callSpeaker);
 }
 
+function updateCameraButton(){
+  const tracks = localStream?.getVideoTracks?.() || [];
+  callCameraEnabled = tracks.length ? tracks[0].enabled : false;
+  cameraCallIcon.textContent = callCameraEnabled ? "📹" : "🚫";
+  cameraCallText.textContent = callCameraEnabled ? "Cámara" : "Activar";
+  cameraCallButton.classList.toggle("active", callCameraEnabled);
+}
+
+function toggleCamera(){
+  if(callMode !== "video" || !localStream) return;
+  const tracks = localStream.getVideoTracks();
+  if(!tracks.length) return;
+  callCameraEnabled = !callCameraEnabled;
+  tracks.forEach(track => track.enabled = callCameraEnabled);
+  updateCameraButton();
+}
+
 async function toggleCallSpeaker(){
   /*
      Android WebView mantiene la salida en el dispositivo de
@@ -4195,6 +4311,7 @@ async function toggleCallSpeaker(){
 
 muteCallButton.onclick = toggleCallMute;
 speakerCallButton.onclick = toggleCallSpeaker;
+cameraCallButton.onclick = toggleCamera;
 activeHangupButton.onclick = () => cleanupCall(true);
 
 
@@ -4473,39 +4590,25 @@ async function createAndSendOffer(){
   );
 }
 
-async function callUser(){
-
-  if(
-    !selectedUser ||
-    callState !== "idle"
-  ){
-    return;
-  }
-
-  callPeer =
-    selectedUser;
-
-  callState =
-    "calling";
-
-  showActiveCallScreen(callPeer, "Llamando...");
+async function callUser(mode = "audio"){
+  if(!selectedUser || callState !== "idle") return;
+  callPeer = selectedUser;
+  callMode = mode === "video" ? "video" : "audio";
+  callState = "calling";
+  showActiveCallScreen(callPeer, callMode === "video" ? "Videollamada..." : "Llamando...");
 
   callButton.classList.add("hidden");
+  videoCallButton.classList.add("hidden");
   hangupButton.classList.remove("hidden");
 
   chatSubtitle.textContent =
-    "📞 Llamando...";
+    callMode === "video" ? "📹 Videollamada..." : "📞 Llamando...";
 
   try{
 
-    await ensureMicrophone();
+    await ensureLocalMedia(callMode);
 
-    socket.emit(
-      "callRequest",
-      {
-        to:callPeer
-      }
-    );
+    socket.emit("callRequest", { to:callPeer, mode:callMode });
 
   }catch(error){
 
@@ -4526,18 +4629,17 @@ async function callUser(){
 
 function showIncomingCallFromNotification(
   username,
-  displayName = ""
+  displayName = "",
+  mode = "audio"
 ){
 
   if(callState !== "idle"){
     return;
   }
 
-  callPeer =
-    username;
-
-  callState =
-    "incoming";
+  callPeer = username;
+  callMode = mode === "video" ? "video" : "audio";
+  callState = "incoming";
 
   const contact =
     allUsers.find(
@@ -4551,9 +4653,7 @@ function showIncomingCallFromNotification(
     contact?.displayName ||
     username;
 
-  incomingCallText.textContent =
-    name +
-    " te está llamando.";
+  incomingCallText.textContent = name + (callMode === "video" ? " te está haciendo una videollamada." : " te está llamando.");
 
   callError.textContent = "";
 
@@ -4573,20 +4673,18 @@ async function acceptCall(){
   incomingCallModal.style.display =
     "none";
 
-  callState =
-    "in-call";
-
-  showActiveCallScreen(callPeer, "Conectando...");
+  callState = "in-call";
+  showActiveCallScreen(callPeer, callMode === "video" ? "Conectando videollamada..." : "Conectando...");
 
   callButton.classList.add("hidden");
   hangupButton.classList.remove("hidden");
 
   chatSubtitle.textContent =
-    "📞 Conectando...";
+    callMode === "video" ? "📹 Conectando videollamada..." : "📞 Conectando...";
 
   try{
 
-    await ensureMicrophone();
+    await ensureLocalMedia(callMode);
 
     await startPeer();
 
@@ -4627,7 +4725,8 @@ async function acceptCall(){
     socket.emit(
       "callAccept",
       {
-        to:callPeer
+        to:callPeer,
+        mode:callMode
       }
     );
 
@@ -4714,6 +4813,8 @@ function cleanupCall(
 
   pendingOffer = null;
   queuedIceCandidates = [];
+  callMode = "audio";
+  callCameraEnabled = true;
 
   callState = "idle";
   callPeer = "";
@@ -4728,6 +4829,7 @@ function cleanupCall(
   if(selectedUser){
 
     callButton.classList.remove("hidden");
+    videoCallButton.classList.remove("hidden");
 
     const user =
       allUsers.find(
@@ -4747,11 +4849,12 @@ function cleanupCall(
   }else{
 
     callButton.classList.add("hidden");
+    videoCallButton.classList.add("hidden");
   }
 }
 
-callButton.onclick =
-  callUser;
+callButton.onclick = () => callUser("audio");
+videoCallButton.onclick = () => callUser("video");
 
 hangupButton.onclick =
   () => cleanupCall(true);
@@ -4788,17 +4891,10 @@ socket.on("incomingCall",data => {
     return;
   }
 
-  callPeer =
-    data.from;
-
-  callState =
-    "incoming";
-
-  incomingCallText.textContent =
-    `${
-      data.fromDisplay ||
-      data.from
-    } te está llamando.`;
+  callPeer = data.from;
+  callMode = data.mode === "video" ? "video" : "audio";
+  callState = "incoming";
+  incomingCallText.textContent = `${data.fromDisplay || data.from}${callMode === "video" ? " te está haciendo una videollamada." : " te está llamando."}`;
 
   callError.textContent = "";
 
@@ -4807,10 +4903,7 @@ socket.on("incomingCall",data => {
 
   showNotification(
     "Llamada entrante",
-    `${
-      data.fromDisplay ||
-      data.from
-    } te está llamando`,
+    `${data.fromDisplay || data.from}${callMode === "video" ? " te está haciendo una videollamada" : " te está llamando"}`,
     data.from,
     "call"
   );
@@ -4826,17 +4919,13 @@ socket.on(
         return;
       }
 
-      callPeer =
-        data.from ||
-        callPeer;
-
-      callState =
-        "in-call";
-
-      showActiveCallScreen(callPeer, "Conectando...");
+      callPeer = data.from || callPeer;
+      if(data.mode === "video") callMode = "video";
+      callState = "in-call";
+      showActiveCallScreen(callPeer, callMode === "video" ? "Conectando videollamada..." : "Conectando...");
 
       chatSubtitle.textContent =
-        "📞 Conectando...";
+        callMode === "video" ? "📹 Conectando videollamada..." : "📞 Conectando...";
 
       await createAndSendOffer();
 
@@ -6874,10 +6963,7 @@ function handleNativeCallNotification(data){
     return;
   }
 
-  showIncomingCallFromNotification(
-    username,
-    data.sender || ""
-  );
+  showIncomingCallFromNotification(username, data.sender || "", data.mode || "audio");
 
   // La llamada se muestra primero para que el usuario vea
   // el estado incluso si el micrófono tarda un momento en abrirse.
