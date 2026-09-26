@@ -3388,6 +3388,21 @@ app.get("/api/admin/bans", requireAdmin, (req, res) => {
   })));
 });
 
+app.delete("/api/admin/bans/:id", requireAdmin, (req, res) => {
+  const id = String(req.params.id || "");
+  if (!id) return res.status(400).json({ error: "Identificador de baneo inválido." });
+
+  const list = bans();
+  const index = list.findIndex(item => String(item.id) === id);
+  if (index < 0) return res.status(404).json({ error: "Baneo no encontrado." });
+
+  const [removed] = list.splice(index, 1);
+  saveBans(list);
+  addAdminActivity(`Administrador eliminó el registro de baneo de @${removed.username}.`);
+
+  res.json({ success: true, ban: removed });
+});
+
 app.post("/api/admin/users/:username/access-block", requireAdmin, (req, res) => {
   const username = norm(req.params.username || "");
   const user = getUser(username);
