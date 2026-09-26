@@ -1369,7 +1369,7 @@ function cleanExpiredStories() {
 }
 
 function norm(v) {
-  return String(v || "").trim().toLowerCase();
+  return String(v || "").trim().normalize("NFC").toLowerCase();
 }
 
 function getUser(username) {
@@ -3857,10 +3857,12 @@ app.post("/api/register", (req, res) => {
     });
   }
 
-  if (!/^[a-zA-Z0-9_]+$/.test(displayName)) {
+  // Permitimos letras Unicode (incluidas tildes/ñ), mayúsculas, números y _.
+  // No se permiten espacios ni símbolos para mantener el @usuario limpio.
+  if (!/^[\p{L}\p{M}0-9_]+$/u.test(displayName)) {
     return res.status(400).json({
       error:
-        "Solo letras, números y _."
+        "Usa solo letras (incluidas tildes y ñ), números y _."
     });
   }
 
