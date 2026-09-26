@@ -66,7 +66,7 @@ button,input,textarea{font:inherit}
 .profileActionBtn{border:0;border-radius:13px;padding:14px;text-align:left;background:#f0f2f5;cursor:pointer}
 .profileActionBtn strong{display:block}
 .profileActionBtn span{display:block;margin-top:3px;color:#777;font-size:12px}
-.mobileBottomNav{display:flex;position:relative;flex:0 0 auto;height:76px;padding:7px 7px max(7px,env(safe-area-inset-bottom));background:#fff;border-top:1px solid #ddd;box-shadow:0 -3px 12px rgba(0,0,0,.08);z-index:100}
+.mobileBottomNav{display:none;position:relative;flex:0 0 auto;height:76px;padding:7px 7px max(7px,env(safe-area-inset-bottom));background:#fff;border-top:1px solid #ddd;box-shadow:0 -3px 12px rgba(0,0,0,.08);z-index:100}
 .mobileBottomNav button{flex:1;border:0;background:transparent;color:#666;border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;min-width:0}
 .mobileBottomNav button .navIcon{font-size:23px;line-height:1}
 .mobileBottomNav button .navLabel{font-size:11px;font-weight:600;white-space:nowrap}
@@ -422,7 +422,6 @@ button,input,textarea{font:inherit}
   .mobileChat .mobileBottomNav{display:none}
 }
 @media(min-width:801px){
-  .mobileBottomNav{display:flex;max-width:1500px;margin:auto}
   #layout{flex:1;width:100%}
   .mainTabPage{min-height:0}
   .newsPage .storiesBar{grid-template-columns:repeat(5,minmax(0,1fr))}
