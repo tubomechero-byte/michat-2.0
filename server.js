@@ -2116,6 +2116,72 @@ function pickMetric(metrics, patterns) {
   return candidates.sort((a, b) => b.value - a.value)[0] || null;
 }
 
+
+async function listSupabaseStorageObjectsFromDatabase(maxObjects = 10000) {
+  const objects = [];
+  const PAGE_SIZE = 1000;
+  let offset = 0;
+
+  while (objects.length < maxObjects) {
+    const rows = await supabaseRequest(
+      `storage.objects?select=bucket_id,name,metadata,updated_at,created_at&order=bucket_id.asc,name.asc&limit=${PAGE_SIZE}&offset=${offset}`
+    );
+
+    if (!Array.isArray(rows) || rows.length === 0) break;
+
+    for (const row of rows) {
+      const bucket = String(row?.bucket_id || '').trim();
+      const name = String(row?.name || '').replace(/^\/+/, '').trim();
+      if (!bucket || !name) continue;
+      let metadata = row?.metadata;
+      if (typeof metadata === 'string') {
+        try { metadata = JSON.parse(metadata); } catch { metadata = {}; }
+      }
+      const size = Number(metadata?.size ?? 0);
+      objects.push({
+        bucket,
+        bucketName: bucket,
+        path: name,
+        size: Number.isFinite(size) && size > 0 ? size : 0,
+        updatedAt: row?.updated_at || row?.created_at || null,
+        mimeType: String(metadata?.mimetype || metadata?.contentType || ''),
+        public: false
+      });
+      if (objects.length >= maxObjects) break;
+    }
+
+    if (rows.length < PAGE_SIZE) break;
+    offset += rows.length;
+  }
+
+  return {
+    objects,
+    truncated: objects.length >= maxObjects
+  };
+}
+
+function summarizeSupabaseStorageObjects(objects, bucketMap = new Map()) {
+  const buckets = new Map();
+  for (const object of objects) {
+    const id = String(object.bucket || '').trim();
+    if (!id) continue;
+    if (!buckets.has(id)) {
+      buckets.set(id, {
+        id,
+        name: String(bucketMap.get(id)?.name || id),
+        public: bucketMap.get(id)?.public === true,
+        files: 0,
+        bytes: 0,
+        truncated: false
+      });
+    }
+    const item = buckets.get(id);
+    item.files += 1;
+    item.bytes += Number(object.size || 0);
+  }
+  return [...buckets.values()].sort((a, b) => b.bytes - a.bytes);
+}
+
 async function getSupabaseUsage() {
   const result = {
     connected: Boolean(SUPABASE_URL && SUPABASE_SECRET_KEY),
@@ -2135,7 +2201,9 @@ async function getSupabaseUsage() {
     storage: {
       totalBytes: 0,
       totalFiles: 0,
-      buckets: []
+      buckets: [],
+      source: null,
+      truncated: false
     },
     errors: []
   };
@@ -2189,26 +2257,53 @@ async function getSupabaseUsage() {
     result.errors.push(`michat_state: ${error.message}`);
   }
 
-  // 3) Tamaño lógico de los objetos de Supabase Storage.
+  // 3) Tamaño de los objetos de Supabase Storage.
+  // Primero intentamos el Storage API; si no devuelve objetos, usamos storage.objects
+  // como fuente de respaldo. Supabase documenta que los objetos de Storage también
+  // tienen su metadata en Postgres y pueden consultarse desde el esquema storage.
   try {
     const buckets = await supabaseStorageRequest("bucket");
     const bucketList = Array.isArray(buckets) ? buckets : [];
-    for (const bucket of bucketList) {
-      const id = String(bucket?.id || bucket?.name || "").trim();
-      if (!id) continue;
-      const listed = await listSupabaseStorageFiles(id, 10000);
-      const bytes = listed.files.reduce((sum, file) => sum + Number(file.size || 0), 0);
-      result.storage.totalBytes += bytes;
-      result.storage.totalFiles += listed.files.length;
-      result.storage.buckets.push({
-        id,
-        name: String(bucket?.name || id),
-        bytes,
-        files: listed.files.length,
-        truncated: Boolean(listed.truncated)
-      });
+    const bucketMap = new Map(bucketList.map(bucket => [
+      String(bucket?.id || bucket?.name || "").trim(),
+      { name: String(bucket?.name || bucket?.id || ""), public: bucket?.public === true }
+    ]));
+
+    let listedObjects = [];
+    let listedTruncated = false;
+    try {
+      for (const bucket of bucketList) {
+        const id = String(bucket?.id || bucket?.name || "").trim();
+        if (!id) continue;
+        const listed = await listSupabaseStorageFiles(id, 10000);
+        listedObjects.push(...listed.files.map(file => ({
+          ...file,
+          bucketName: String(bucket?.name || id),
+          public: bucket?.public === true
+        })));
+        listedTruncated = listedTruncated || Boolean(listed.truncated);
+      }
+    } catch (storageApiError) {
+      result.errors.push(`Storage API: ${storageApiError.message}`);
     }
-    result.storage.buckets.sort((a, b) => b.bytes - a.bytes);
+
+    if (listedObjects.length === 0) {
+      const dbListed = await listSupabaseStorageObjectsFromDatabase(10000);
+      listedObjects = dbListed.objects.map(object => ({
+        ...object,
+        bucketName: String(bucketMap.get(object.bucket)?.name || object.bucket),
+        public: bucketMap.get(object.bucket)?.public === true
+      }));
+      listedTruncated = listedTruncated || Boolean(dbListed.truncated);
+      result.storage.source = "storage.objects";
+    } else {
+      result.storage.source = "storage-api";
+    }
+
+    result.storage.totalBytes = listedObjects.reduce((sum, file) => sum + Number(file.size || 0), 0);
+    result.storage.totalFiles = listedObjects.length;
+    result.storage.buckets = summarizeSupabaseStorageObjects(listedObjects, bucketMap);
+    result.storage.truncated = listedTruncated;
   } catch (error) {
     result.errors.push(`Storage: ${error.message}`);
   }
@@ -2321,38 +2416,50 @@ app.get("/api/admin/supabase/storage", requireAdmin, async (req, res) => {
   try {
     const buckets = await supabaseStorageRequest("bucket");
     const bucketList = Array.isArray(buckets) ? buckets : [];
-    const objects = [];
-    const bucketSummaries = [];
+    const bucketMap = new Map(bucketList.map(bucket => [
+      String(bucket?.id || bucket?.name || "").trim(),
+      { name: String(bucket?.name || bucket?.id || ""), public: bucket?.public === true }
+    ]));
+
+    let objects = [];
+    let source = "storage-api";
     let truncated = false;
+    const errors = [];
 
-    for (const bucket of bucketList) {
-      const id = String(bucket?.id || bucket?.name || "").trim();
-      if (!id) continue;
-
-      const listed = await listSupabaseStorageFiles(id, 5000);
-      let bytes = 0;
-      for (const file of listed.files) {
-        bytes += Number(file.size || 0);
-        objects.push({
+    try {
+      for (const bucket of bucketList) {
+        const id = String(bucket?.id || bucket?.name || "").trim();
+        if (!id) continue;
+        const listed = await listSupabaseStorageFiles(id, 5000);
+        objects.push(...listed.files.map(file => ({
           ...file,
           public: bucket?.public === true,
           bucketName: String(bucket?.name || id)
-        });
+        })));
+        truncated = truncated || Boolean(listed.truncated);
       }
+    } catch (error) {
+      errors.push(`Storage API: ${error.message}`);
+    }
 
-      bucketSummaries.push({
-        id,
-        name: String(bucket?.name || id),
-        public: bucket?.public === true,
-        files: listed.files.length,
-        bytes,
-        truncated: listed.truncated
-      });
-
-      if (listed.truncated) truncated = true;
+    if (objects.length === 0) {
+      try {
+        const dbListed = await listSupabaseStorageObjectsFromDatabase(10000);
+        objects = dbListed.objects.map(object => ({
+          ...object,
+          public: bucketMap.get(object.bucket)?.public === true,
+          bucketName: String(bucketMap.get(object.bucket)?.name || object.bucket)
+        }));
+        truncated = truncated || Boolean(dbListed.truncated);
+        source = "storage.objects";
+      } catch (error) {
+        errors.push(`storage.objects: ${error.message}`);
+      }
     }
 
     objects.sort((a, b) => Number(b.size || 0) - Number(a.size || 0));
+    const bucketSummaries = summarizeSupabaseStorageObjects(objects, bucketMap);
+    for (const summary of bucketSummaries) summary.truncated = truncated;
 
     res.json({
       configured: true,
@@ -2360,7 +2467,9 @@ app.get("/api/admin/supabase/storage", requireAdmin, async (req, res) => {
       objects,
       totalFiles: objects.length,
       totalBytes: objects.reduce((sum, item) => sum + Number(item.size || 0), 0),
-      truncated
+      truncated,
+      source,
+      errors
     });
   } catch (error) {
     console.error("Error consultando Supabase Storage:", error.message);
@@ -3747,6 +3856,22 @@ app.patch("/api/admin/appeals/:id", requireAdmin, (req, res) => {
   if (sid) io.to(sid).emit("appealStatus", { id:item.id, noticeId:item.noticeId, status:item.status, updatedAt:item.updatedAt });
 
   res.json({ success: true, appeal: item });
+});
+
+app.delete("/api/admin/appeals/:id", requireAdmin, (req, res) => {
+  const id = String(req.params.id || "");
+  const list = appeals();
+  const index = list.findIndex(item => String(item.id) === id);
+  if (index < 0) return res.status(404).json({ error: "Apelación no encontrada." });
+
+  const [removed] = list.splice(index, 1);
+  saveAppeals(list);
+  addAdminActivity(`Administrador eliminó la apelación de @${removed.username}.`);
+
+  const sid = socketIdFor(removed.username);
+  if (sid) io.to(sid).emit("appealDeleted", { id: removed.id, noticeId: removed.noticeId });
+
+  res.json({ success: true, appeal: removed });
 });
 
 app.get("/api/admin/activity", requireAdmin, (req, res) => {
