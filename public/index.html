@@ -454,6 +454,112 @@ button,input,textarea{font:inherit}
 .accessBlockedTitle{margin:0;font-size:24px;line-height:1.25;color:#111827}
 .accessBlockedText{margin:12px 0 20px;color:#6b7280;font-size:14px;line-height:1.5}
 
+
+
+/* =====================================================
+   NAVEGACIÓN DE PC: barra lateral vertical tipo WhatsApp Web
+   En móvil se mantiene la barra inferior original.
+===================================================== */
+@media(min-width:801px){
+  #app{
+    position:relative;
+    flex-direction:column;
+  }
+
+  #layout{
+    width:calc(100% - 90px);
+    max-width:none;
+    height:100%;
+    margin:0 0 0 90px;
+  }
+
+  #mobileBottomNav{
+    position:fixed;
+    left:0;
+    top:0;
+    bottom:0;
+    width:90px;
+    height:100dvh;
+    box-sizing:border-box;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:flex-start;
+    gap:8px;
+    padding:10px 8px;
+    background:#fff;
+    border-right:1px solid #ddd;
+    border-top:0;
+    box-shadow:2px 0 10px rgba(0,0,0,.05);
+    z-index:1000;
+  }
+
+  #mobileBottomNav button{
+    flex:0 0 58px;
+    width:58px;
+    min-width:58px;
+    height:58px;
+    padding:0;
+    border-radius:18px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:0;
+  }
+
+  #mobileBottomNav button .navPill,
+  #mobileBottomNav button:not(.active) .navPill,
+  #mobileBottomNav button.active .navPill{
+    width:48px;
+    min-width:48px;
+    height:48px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    position:relative;
+    background:transparent;
+  }
+
+  #mobileBottomNav button.active .navPill{
+    background:#d9fdd3;
+  }
+
+  #mobileBottomNav button .navIcon{
+    font-size:24px;
+    line-height:1;
+  }
+
+  #mobileBottomNav button .navLabel{
+    display:none;
+  }
+
+  #mobileBottomNav .navBadge{
+    position:absolute;
+    top:-2px;
+    right:-2px;
+    margin:0;
+    min-width:18px;
+    height:18px;
+    padding:0 4px;
+    border-radius:10px;
+    font-size:10px;
+  }
+
+  /* Deja "Tú" abajo, como el rail lateral de WhatsApp Web. */
+  #mobileBottomNav button[data-main-tab="profile"]{
+    margin-top:auto;
+  }
+}
+
+@media(max-width:800px){
+  #layout{
+    width:auto;
+    max-width:1500px;
+    margin:0 auto;
+  }
+}
+
 </style>
 </head>
 
