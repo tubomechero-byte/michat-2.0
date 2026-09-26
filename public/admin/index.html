@@ -635,20 +635,34 @@ function renderSupabaseUsage(data){
   if(!msg||!cards||!breakdown)return;
 
   const dbBytes=Number(data?.database?.actualBytes);
+  const diskUsed=Number(data?.database?.diskUsedBytes);
+  const diskTotal=Number(data?.database?.diskTotalBytes);
+  const diskFree=Number(data?.database?.diskFreeBytes);
   const appBytes=Number(data?.appData?.totalBytes||0);
   const storageBytes=Number(data?.storage?.totalBytes||0);
   const storageFiles=Number(data?.storage?.totalFiles||0);
   const dbOk=Number.isFinite(dbBytes)&&dbBytes>0;
+  const diskOk=Number.isFinite(diskUsed)&&Number.isFinite(diskTotal)&&diskTotal>0;
   const errors=Array.isArray(data?.errors)?data.errors:[];
 
-  cards.innerHTML=`<div class="supabase-usage-card"><div class="small">🗄️ Base de datos PostgreSQL</div><div class="supabase-usage-value">${dbOk?formatBytes(dbBytes):'No disponible'}</div><div class="supabase-usage-note">${dbOk?esc(data.database.sourceMetric?`Métrica: ${data.database.sourceMetric}`:'Tamaño reportado por Supabase'): 'No se pudo obtener la métrica física desde Supabase.'}</div></div><div class="supabase-usage-card"><div class="small">💬 Datos de Mi Chat</div><div class="supabase-usage-value">${formatBytes(appBytes)}</div><div class="supabase-usage-note">Payload de los ${Number(data?.appData?.rows||0).toLocaleString('es-ES')} registros de <code>michat_state</code>. Es un desglose lógico de los datos de Mi Chat, no el tamaño físico de PostgreSQL.</div></div><div class="supabase-usage-card"><div class="small">📦 Supabase Storage</div><div class="supabase-usage-value">${formatBytes(storageBytes)}</div><div class="supabase-usage-note">${storageFiles.toLocaleString('es-ES')} objetos listados en los buckets.</div></div>`;
+  const dbValue=dbOk?formatBytes(dbBytes):(diskOk?formatBytes(diskUsed):'No disponible');
+  const dbNote=dbOk
+    ? esc(data.database.sourceMetric?`Métrica: ${data.database.sourceMetric}`:'Tamaño reportado por Supabase')
+    : diskOk
+      ? `Disco físico de PostgreSQL: ${formatBytes(diskUsed)} usados de ${formatBytes(diskTotal)} · ${formatBytes(diskFree)} libres`
+      : 'No se pudo leer el Metrics API de Supabase.';
+
+  cards.innerHTML=`<div class="supabase-usage-card"><div class="small">🗄️ PostgreSQL</div><div class="supabase-usage-value">${dbValue}</div><div class="supabase-usage-note">${dbNote}</div></div><div class="supabase-usage-card"><div class="small">💾 Disco de PostgreSQL</div><div class="supabase-usage-value">${diskOk?formatBytes(diskUsed):'No disponible'}</div><div class="supabase-usage-note">${diskOk?`${formatBytes(diskFree)} libres de ${formatBytes(diskTotal)} totales. Incluye base de datos, WAL y sistema.`:'No disponible desde el Metrics API.'}</div></div><div class="supabase-usage-card"><div class="small">💬 Datos de Mi Chat</div><div class="supabase-usage-value">${formatBytes(appBytes)}</div><div class="supabase-usage-note">Payload de los ${Number(data?.appData?.rows||0).toLocaleString('es-ES')} registros de <code>michat_state</code>. Es un desglose lógico, no el tamaño físico de PostgreSQL.</div></div><div class="supabase-usage-card"><div class="small">📦 Supabase Storage</div><div class="supabase-usage-value">${formatBytes(storageBytes)}</div><div class="supabase-usage-note">${storageFiles.toLocaleString('es-ES')} objetos listados en los buckets.</div></div>`;
 
   if(dbOk){
     msg.className='supabase-usage-ok';
-    msg.textContent='✅ El tamaño de PostgreSQL se está leyendo desde el Metrics API de Supabase. Este es el dato que debes usar para saber cuánto ocupa realmente la base de datos.';
+    msg.textContent='✅ Supabase ha devuelto el tamaño de la base de datos PostgreSQL.';
+  }else if(diskOk){
+    msg.className='supabase-usage-ok';
+    msg.textContent='✅ Supabase ha devuelto el uso físico del disco de PostgreSQL. El tamaño exacto de tablas + índices puede ser distinto.';
   }else{
     msg.className=errors.length?'supabase-usage-warn':'msg';
-    msg.textContent=errors.length?'⚠️ Se pudo leer el desglose de Mi Chat, pero no el tamaño físico total de PostgreSQL.':'No se pudo obtener el tamaño físico total de PostgreSQL.';
+    msg.textContent=errors.length?'⚠️ No se pudo consultar el Metrics API de Supabase.':'No se pudo obtener el almacenamiento de Supabase.';
   }
 
   if(errors.length){
@@ -659,7 +673,8 @@ function renderSupabaseUsage(data){
   const itemRows=items.map(item=>`<tr><td class="supabase-usage-key">${esc(item.stateKey)}</td><td>${formatBytes(Number(item.bytes||0))}</td><td>${item.updatedAt?supabaseFileDate(item.updatedAt):'—'}</td></tr>`).join('');
   const bucketRows=(data?.storage?.buckets||[]).map(bucket=>`<tr><td>🪣 ${esc(bucket.name)}</td><td>${formatBytes(Number(bucket.bytes||0))}</td><td>${Number(bucket.files||0).toLocaleString('es-ES')}${bucket.truncated?' ⚠️ listado limitado':''}</td></tr>`).join('');
   const dbNote=esc(String(data?.database?.note||''));
-  breakdown.innerHTML=`<div class="supabase-usage-note" style="margin-top:14px">${dbNote}</div><h3 style="margin:16px 0 8px">Qué está ocupando Mi Chat</h3><div class="table-wrap"><table class="supabase-usage-table"><thead><tr><th>Datos</th><th>Tamaño del contenido</th><th>Actualizado</th></tr></thead><tbody>${itemRows||'<tr><td colspan="3">No se han podido leer los datos de <code>michat_state</code>.</td></tr>'}</tbody></table></div><h3 style="margin:16px 0 8px">Supabase Storage por bucket</h3><div class="table-wrap"><table class="supabase-usage-table"><thead><tr><th>Bucket</th><th>Tamaño de archivos</th><th>Objetos</th></tr></thead><tbody>${bucketRows||'<tr><td colspan="3">No hay objetos listados en Storage.</td></tr>'}</tbody></table></div><div class="supabase-usage-warn">ℹ️ El tamaño de la base de datos incluye datos, índices y otros componentes de PostgreSQL. Borrar filas no siempre reduce inmediatamente el tamaño físico porque PostgreSQL puede necesitar VACUUM para recuperar espacio. No se debe confundir con el almacenamiento de archivos de Storage.</div>`;
+  const diskDetail=(Number.isFinite(diskUsed)&&Number.isFinite(diskTotal))?`<div class="supabase-usage-note" style="margin-top:8px">💽 Disco físico de PostgreSQL: <b>${formatBytes(diskUsed)}</b> usados / <b>${formatBytes(diskTotal)}</b> totales · ${formatBytes(Number.isFinite(diskFree)?diskFree:0)} libres.</div>`:'';
+  breakdown.innerHTML=`<div class="supabase-usage-note" style="margin-top:14px">${dbNote}</div>${diskDetail}<h3 style="margin:16px 0 8px">Qué está ocupando Mi Chat</h3><div class="table-wrap"><table class="supabase-usage-table"><thead><tr><th>Datos</th><th>Tamaño del contenido</th><th>Actualizado</th></tr></thead><tbody>${itemRows||'<tr><td colspan="3">No se han podido leer los datos de <code>michat_state</code>.</td></tr>'}</tbody></table></div><h3 style="margin:16px 0 8px">Supabase Storage por bucket</h3><div class="table-wrap"><table class="supabase-usage-table"><thead><tr><th>Bucket</th><th>Tamaño de archivos</th><th>Objetos</th></tr></thead><tbody>${bucketRows||'<tr><td colspan="3">No hay objetos listados en Storage.</td></tr>'}</tbody></table></div><div class="supabase-usage-warn">ℹ️ El tamaño de la base de datos incluye datos, índices y otros componentes de PostgreSQL. Borrar filas no siempre reduce inmediatamente el tamaño físico porque PostgreSQL puede necesitar VACUUM para recuperar espacio. No se debe confundir con el almacenamiento de archivos de Storage.</div>`;
   observed.textContent=data?.observedAt?`Última lectura: ${new Date(data.observedAt).toLocaleString('es-ES')}`:'';
 }
 
