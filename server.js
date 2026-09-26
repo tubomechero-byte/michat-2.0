@@ -68,10 +68,17 @@ function getStorageInfo() {
       total,
       free,
       used: Math.max(0, total - free),
-      usedByData
+      usedByData,
+      backend: supabaseAvailable ? "supabase" : "local"
     };
   } catch {
-    return { total: null, free: null, used: null, usedByData };
+    return {
+      total: null,
+      free: null,
+      used: null,
+      usedByData,
+      backend: supabaseAvailable ? "supabase" : "local"
+    };
   }
 }
 
