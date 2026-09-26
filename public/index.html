@@ -20,7 +20,7 @@ button,input,textarea{font:inherit}
 .switchButton{border:0;background:transparent;color:#075e54;cursor:pointer;margin-top:15px}
 #authError{min-height:22px;margin-top:10px;color:#c00}
 
-#app{display:none;height:100vh;height:100dvh;min-height:0}
+#app{display:none;height:100vh;height:100dvh;min-height:0;flex-direction:column}
 .layout{display:flex;height:100%;min-height:0;max-width:1500px;margin:auto;background:#fff}
 
 .sidebar{width:350px;border-right:1px solid #ddd;display:flex;flex-direction:column;background:#fff;position:relative}
@@ -34,6 +34,51 @@ button,input,textarea{font:inherit}
 .actionBtn{width:100%;border:0;border-radius:10px;padding:11px;cursor:pointer;background:#25d366;color:#fff;font-weight:bold}
 .actions{display:grid;gap:8px}
 .quickActions{position:absolute;right:18px;bottom:18px;z-index:60}
+/* =====================================================
+   NAVEGACIÓN PRINCIPAL TIPO WHATSAPP
+===================================================== */
+.mainTabPage{display:flex;flex:1;min-height:0;flex-direction:column}
+.mainTabPage.hiddenTab{display:none!important}
+.tabPageHeader{padding:18px 16px 12px;border-bottom:1px solid #e5e7eb;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tabPageHeader h2{margin:0;font-size:24px}
+.tabPageHeaderSub{margin:4px 0 0;color:#777;font-size:13px}
+.tabPageHeaderText{min-width:0}
+.tabPageAction{border:0;border-radius:20px;padding:9px 13px;background:#128c7e;color:#fff;font-weight:700;cursor:pointer}
+.newsPage{overflow:hidden;background:#fff}
+.newsPage .storiesBar{border:0;padding:14px 12px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;overflow:auto;align-content:start;flex:1}
+.newsPage .storyItem{width:auto;min-width:0;text-align:center;padding:4px}
+.newsPage .storyRing{width:min(92px,24vw);height:min(92px,24vw);margin:0 auto}
+.newsPage .storyLabel{font-size:13px;font-weight:600}
+.newsPage .storySeenLabel{font-size:11px}
+.communityPage,.callsPage,.profilePage{overflow:auto;background:#fff}
+.communityList,.callsList{padding:8px 12px 90px}
+.communityEmpty,.callsEmpty{padding:35px 20px;text-align:center;color:#777}
+.communityCreate{margin:0 12px 10px}
+.callsItem{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid #eee}
+.callsItem .userInfo{min-width:0}
+.callsItem .toolBtn{margin-left:auto;background:#25d366;color:#fff;border-radius:50%;width:44px;height:44px;padding:0}
+.profilePageInner{padding:20px 16px 100px}
+.profileCard{display:flex;align-items:center;gap:14px;padding:18px;border-radius:18px;background:#f0f2f5;margin-bottom:14px}
+.profileCard .avatar{width:68px;height:68px;font-size:24px}
+.profileCardName{font-size:20px;font-weight:700}
+.profileCardUser{margin-top:3px;color:#777}
+.profileActions{display:grid;gap:9px}
+.profileActionBtn{border:0;border-radius:13px;padding:14px;text-align:left;background:#f0f2f5;cursor:pointer}
+.profileActionBtn strong{display:block}
+.profileActionBtn span{display:block;margin-top:3px;color:#777;font-size:12px}
+.mobileBottomNav{display:flex;position:relative;flex:0 0 auto;height:76px;padding:7px 7px max(7px,env(safe-area-inset-bottom));background:#fff;border-top:1px solid #ddd;box-shadow:0 -3px 12px rgba(0,0,0,.08);z-index:100}
+.mobileBottomNav button{flex:1;border:0;background:transparent;color:#666;border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;min-width:0}
+.mobileBottomNav button .navIcon{font-size:23px;line-height:1}
+.mobileBottomNav button .navLabel{font-size:11px;font-weight:600;white-space:nowrap}
+.mobileBottomNav button.active{color:#075e54}
+.mobileBottomNav button.active .navPill{background:#d9fdd3;border-radius:18px;min-width:52px;height:30px;display:flex;align-items:center;justify-content:center}
+.mobileBottomNav button:not(.active) .navPill{height:30px;display:flex;align-items:center;justify-content:center}
+.mobileBottomNav .navBadge{position:absolute;margin:-25px 0 0 25px;min-width:17px;height:17px;padding:0 4px;border-radius:10px;background:#25d366;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center}
+#layout.mainTabChats .sidebar{display:flex}
+#layout.mainTabChats .chat{display:flex}
+#layout.mainTabNonChat .chat{display:none}
+#layout.mainTabNonChat .sidebar{width:100%;border-right:0}
+
 .quickActionsFab{width:52px;height:52px;border:0;border-radius:50%;background:#128c7e;color:#fff;font-size:30px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 14px rgba(0,0,0,.18);transition:transform .16s ease,background .16s ease}
 .quickActionsFab.open{transform:rotate(45deg);background:#075e54}
 .quickActionsMenu{position:absolute;right:12px;bottom:66px;display:grid;gap:8px;width:min(240px,calc(100vw - 36px));padding:10px;background:#fff;border:1px solid #ddd;border-radius:14px;box-shadow:0 14px 35px rgba(0,0,0,.18);z-index:50}
@@ -367,6 +412,21 @@ button,input,textarea{font:inherit}
   .activeCallHangup{width:76px;height:76px}
 }
 
+
+@media(max-width:800px){
+  .mobileBottomNav{display:flex}
+  .mainTabPage{min-height:0}
+  .newsPage .storiesBar{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  .newsPage .storyRing{width:76px;height:76px}
+  .quickActions{right:16px;bottom:84px}
+  .mobileChat .mobileBottomNav{display:none}
+}
+@media(min-width:801px){
+  .mobileBottomNav{display:flex;max-width:1500px;margin:auto}
+  #layout{flex:1;width:100%}
+  .mainTabPage{min-height:0}
+  .newsPage .storiesBar{grid-template-columns:repeat(5,minmax(0,1fr))}
+}
 @media(max-width:800px){
   html,body{height:100%;height:100dvh}
   #app{height:100%;height:100dvh}
@@ -470,34 +530,95 @@ button,input,textarea{font:inherit}
         </div>
       </div>
 
-      <div class="quickActions">
-        <button id="quickActionsToggle" class="quickActionsFab" type="button" aria-label="Más acciones" aria-expanded="false">+</button>
-        <div id="quickActionsMenu" class="quickActionsMenu hidden">
-          <button class="actionBtn" id="newChatButton" type="button">
-            ➕ Enviar solicitud
-          </button>
-          <button class="actionBtn" id="newGroupButton" type="button">
-            👥 Crear grupo
-          </button>
-          <button class="actionBtn requestBtn" id="requestsButton" type="button">
-            📥 Solicitudes <span id="requestsBadge" class="requestBadge hidden">0</span>
+      <div id="chatsPage" class="mainTabPage">
+        <div class="quickActions">
+          <button id="quickActionsToggle" class="quickActionsFab" type="button" aria-label="Más acciones" aria-expanded="false">+</button>
+          <div id="quickActionsMenu" class="quickActionsMenu hidden">
+            <button class="actionBtn" id="newChatButton" type="button">
+              ➕ Enviar solicitud
+            </button>
+            <button class="actionBtn" id="newGroupButton" type="button">
+              👥 Crear grupo
+            </button>
+            <button class="actionBtn requestBtn" id="requestsButton" type="button">
+              📥 Solicitudes <span id="requestsBadge" class="requestBadge hidden">0</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="actions" id="commandActions">
+          <button class="actionBtn commandBtn hidden" id="commandButton" type="button">
+            🖥️ Consola de comandos
           </button>
         </div>
+
+        <div class="search">
+          <input id="searchInput" placeholder="Buscar usuarios..." autocomplete="off">
+        </div>
+
+        <div id="users"></div>
       </div>
 
-      <div class="actions" id="commandActions">
-        <button class="actionBtn commandBtn hidden" id="commandButton" type="button">
-          🖥️ Consola de comandos
-        </button>
+      <div id="newsPage" class="mainTabPage hiddenTab newsPage">
+        <div class="tabPageHeader">
+          <div class="tabPageHeaderText">
+            <h2>Novedades</h2>
+            <div class="tabPageHeaderSub">Historias de tus contactos</div>
+          </div>
+          <button id="newsCreateStoryButton" class="tabPageAction" type="button">＋ Mi historia</button>
+        </div>
+        <div id="storiesBar" class="storiesBar"></div>
       </div>
 
-      <div id="storiesBar" class="storiesBar"></div>
-
-      <div class="search">
-        <input id="searchInput" placeholder="Buscar usuarios para añadirlos..." autocomplete="off">
+      <div id="communityPage" class="mainTabPage hiddenTab communityPage">
+        <div class="tabPageHeader">
+          <div class="tabPageHeaderText">
+            <h2>Comunidades</h2>
+            <div class="tabPageHeaderSub"><span id="groupsCount">0</span> comunidades</div>
+          </div>
+          <button id="communityCreateButton" class="tabPageAction" type="button">＋ Crear</button>
+        </div>
+        <div id="groupList" class="communityList"></div>
       </div>
 
-      <div id="users"></div>
+      <div id="callsPage" class="mainTabPage hiddenTab callsPage">
+        <div class="tabPageHeader">
+          <div class="tabPageHeaderText">
+            <h2>Llamadas</h2>
+            <div class="tabPageHeaderSub">Llama a tus contactos</div>
+          </div>
+        </div>
+        <div id="callsList" class="callsList"></div>
+      </div>
+
+      <div id="profilePage" class="mainTabPage hiddenTab profilePage">
+        <div class="tabPageHeader">
+          <div class="tabPageHeaderText">
+            <h2>Tú</h2>
+            <div class="tabPageHeaderSub">Tu cuenta y configuración</div>
+          </div>
+        </div>
+        <div class="profilePageInner">
+          <div id="profileTabCard" class="profileCard"></div>
+          <div class="profileActions">
+            <button id="profileEditButton" class="profileActionBtn" type="button">
+              <strong>👤 Editar perfil</strong><span>Cambia tu nombre, foto, correo o teléfono.</span>
+            </button>
+            <button id="profileSettingsButton" class="profileActionBtn" type="button">
+              <strong>⚙️ Ajustes</strong><span>Notificaciones, privacidad y otras opciones.</span>
+            </button>
+            <button id="profileAccountButton" class="profileActionBtn" type="button">
+              <strong>🔐 Cuenta</strong><span>Usuario y contraseña.</span>
+            </button>
+            <button id="profileBlockedButton" class="profileActionBtn" type="button">
+              <strong>🚫 Usuarios bloqueados</strong><span>Gestiona tus bloqueos.</span>
+            </button>
+            <button id="profileLogoutButton" class="profileActionBtn" type="button">
+              <strong>Salir</strong><span>Cerrar sesión de Mi Chat.</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </aside>
 
     <main class="chat">
@@ -540,6 +661,29 @@ button,input,textarea{font:inherit}
 
     </main>
   </div>
+
+  <nav id="mobileBottomNav" class="mobileBottomNav" aria-label="Navegación principal">
+    <button type="button" data-main-tab="chats" class="active">
+      <span class="navPill"><span class="navIcon">💬</span><span id="navRequestsBadge" class="navBadge hidden">0</span></span>
+      <span class="navLabel">Chats</span>
+    </button>
+    <button type="button" data-main-tab="news">
+      <span class="navPill"><span class="navIcon">◉</span></span>
+      <span class="navLabel">Novedades</span>
+    </button>
+    <button type="button" data-main-tab="communities">
+      <span class="navPill"><span class="navIcon">👥</span></span>
+      <span class="navLabel">Comunidades</span>
+    </button>
+    <button type="button" data-main-tab="calls">
+      <span class="navPill"><span class="navIcon">☎</span></span>
+      <span class="navLabel">Llamadas</span>
+    </button>
+    <button type="button" data-main-tab="profile">
+      <span class="navPill"><span class="navIcon">👤</span></span>
+      <span class="navLabel">Tú</span>
+    </button>
+  </nav>
 </div>
 
 <div id="notifications"></div>
@@ -953,6 +1097,50 @@ const $ = id => document.getElementById(id);
 
 const authScreen = $("authScreen");
 const app = $("app");
+const mainLayout = $("layout");
+const mainTabPages = {
+  chats: $("chatsPage"),
+  news: $("newsPage"),
+  communities: $("communityPage"),
+  calls: $("callsPage"),
+  profile: $("profilePage")
+};
+const mainBottomNav = $("mobileBottomNav");
+let activeMainTab = "chats";
+
+function switchMainTab(tab){
+  const next = ["chats","news","communities","calls","profile"].includes(tab) ? tab : "chats";
+  activeMainTab = next;
+
+  Object.entries(mainTabPages).forEach(([name,page]) => {
+    if(page) page.classList.toggle("hiddenTab", name !== next);
+  });
+
+  if(mainLayout){
+    mainLayout.classList.toggle("mainTabChats", next === "chats");
+    mainLayout.classList.toggle("mainTabNonChat", next !== "chats");
+  }
+
+  document.querySelectorAll("#mobileBottomNav [data-main-tab]").forEach(button => {
+    button.classList.toggle("active", button.dataset.mainTab === next);
+  });
+
+  if(next === "communities") renderGroups();
+  if(next === "calls") renderCallsTab();
+  if(next === "profile") renderProfileTab();
+  if(next === "news") renderStories();
+
+  if(next !== "chats" && layout.classList.contains("mobileChat")){
+    layout.classList.remove("mobileChat");
+  }
+}
+
+function openTopLevelTab(tab){
+  switchMainTab(tab);
+  window.scrollTo?.(0,0);
+}
+
+
 const authUsername = $("authUsername");
 const authPassword = $("authPassword");
 const authEmail = $("authEmail");
@@ -1026,6 +1214,75 @@ let callMuted = false;
 let callSpeaker = true;
 
 const layout = $("layout");
+document.querySelectorAll("#mobileBottomNav [data-main-tab]").forEach(button => {
+  button.addEventListener("click", () => openTopLevelTab(button.dataset.mainTab));
+});
+
+$("backButton").addEventListener("click", () => { layout.classList.remove("mobileChat"); switchMainTab("chats"); });
+
+$("newsCreateStoryButton").onclick = () => openStoryCreator();
+$("communityCreateButton").onclick = () => {
+  switchMainTab("communities");
+  newGroupButton?.click();
+};
+
+$("profileEditButton").onclick = () => $("profileModal").style.display = "flex";
+$("profileSettingsButton").onclick = () => $("settingsButton").click();
+$("profileAccountButton").onclick = () => $("settingsAccount").click();
+$("profileBlockedButton").onclick = () => $("settingsBlocked").click();
+$("profileLogoutButton").onclick = () => $("logoutButton").click();
+
+function renderProfileTab(){
+  const card = $("profileTabCard");
+  if(!card) return;
+  const me = allUsers.find(user => norm(user?.username) === norm(myUsername)) || { username: myUsername, displayName: myUsername };
+  const displayName = me.displayName || myUsername || "Usuario";
+  card.innerHTML = `
+    <div class="avatar">${avatarHtml(me)}</div>
+    <div>
+      <div class="profileCardName">${esc(displayName)}</div>
+      <div class="profileCardUser">@${esc(myUsername)}</div>
+    </div>
+  `;
+}
+
+function renderCallsTab(){
+  const container = $("callsList");
+  if(!container) return;
+  const contacts = allUsers.filter(user =>
+    user &&
+    norm(user.username) !== norm(myUsername) &&
+    isContact(user.username)
+  );
+
+  container.innerHTML = "";
+  if(!contacts.length){
+    container.innerHTML = '<div class="callsEmpty">Aquí aparecerán tus contactos para realizar llamadas.<br><br>Añade y acepta contactos desde Chats.</div>';
+    return;
+  }
+
+  contacts.forEach(user => {
+    const row = document.createElement("div");
+    row.className = "callsItem";
+    row.innerHTML = `
+      <div class="avatar">${avatarHtml(user)}</div>
+      <div class="userInfo">
+        <div class="userName">${esc(user.displayName || user.username)}</div>
+        <div class="${user.online ? "online" : "offline"}">${user.online ? "● En línea" : "○ Desconectado"}</div>
+      </div>
+      <button class="toolBtn" type="button" aria-label="Llamar">📞</button>
+    `;
+    row.querySelector("button").onclick = async () => {
+      switchMainTab("chats");
+      openChat(user.username, user.displayName || user.username, !!user.online, user.profileImage || "");
+      setTimeout(() => {
+        if(!callButton.classList.contains("hidden")) callButton.click();
+      }, 80);
+    };
+    container.appendChild(row);
+  });
+}
+
 const notifications = $("notifications");
 const requestsButton = $("requestsButton");
 const requestsBadge = $("requestsBadge");
@@ -1688,7 +1945,7 @@ async function checkSession(){
 function enterApp(){
 
   authScreen.style.display = "none";
-  app.style.display = "block";
+  app.style.display = "flex";
 
   if(!socket.connected){
     socket.connect();
@@ -1971,6 +2228,11 @@ function updateRequestsBadge(){
   const count = relationshipData.incoming.length;
   requestsBadge.textContent = count > 99 ? "99+" : String(count);
   requestsBadge.classList.toggle("hidden", count === 0);
+  const navBadge = $("navRequestsBadge");
+  if(navBadge){
+    navBadge.textContent = count > 99 ? "99+" : String(count);
+    navBadge.classList.toggle("hidden", count === 0);
+  }
 }
 function renderRequests(){
   updateRequestsBadge();
@@ -2003,9 +2265,9 @@ function renderRequests(){
 }
 
 
-socket.on("groupsData", data => { allGroups = Array.isArray(data) ? data : []; renderUsers(); });
-socket.on("groupUnreadCounts", data => { groupUnread = data && typeof data === "object" ? data : {}; renderUsers(); });
-socket.on("groupCreated", group => { if(group?.id && !allGroups.some(g=>String(g.id)===String(group.id))) allGroups.unshift(group); renderUsers(); if(group?.createdBy && norm(group.createdBy)===norm(myUsername)) showNotification("Grupo creado", `Has creado «${group?.name || "Grupo"}».`); else showNotification("Nuevo grupo", `Te han añadido a «${group?.name || "Grupo"}».`); });
+socket.on("groupsData", data => { allGroups = Array.isArray(data) ? data : []; renderUsers(); renderGroups(); });
+socket.on("groupUnreadCounts", data => { groupUnread = data && typeof data === "object" ? data : {}; renderUsers(); renderGroups(); });
+socket.on("groupCreated", group => { if(group?.id && !allGroups.some(g=>String(g.id)===String(group.id))) allGroups.unshift(group); renderUsers(); renderGroups(); if(group?.createdBy && norm(group.createdBy)===norm(myUsername)) showNotification("Grupo creado", `Has creado «${group?.name || "Grupo"}».`); else showNotification("Nuevo grupo", `Te han añadido a «${group?.name || "Grupo"}».`); });
 socket.on("groupUpdated", group => {
   if(!group?.id) return;
   allGroups = allGroups.map(g=>String(g.id)===String(group.id)?group:g);
@@ -2225,6 +2487,7 @@ function refreshBlockButton(){
   blockCurrentButton.textContent = blockedUsersClient.has(norm(selectedUser)) ? '✅ Desbloquear' : '🚫 Bloquear';
 }
 function openGroupChat(group){
+  switchMainTab("chats");
   if(!group?.id) return;
   selectedGroupId=String(group.id); selectedUser=""; groupUnread[selectedGroupId]=0; renderGroups();
   chatTitle.textContent=group.name||"Grupo"; chatSubtitle.textContent=`👥 ${Number(group.memberCount||(group.members||[]).length)} miembros`;
@@ -2575,6 +2838,7 @@ function openChat(
   online,
   profileImage = ""
 ){
+  switchMainTab("chats");
 
   selectedGroupId = "";
   hideGroupTools();
