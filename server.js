@@ -2066,6 +2066,166 @@ app.get("/api/global-access/status", (req, res) => {
 });
 
 
+
+async function supabaseMetricsRequest() {
+  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
+    throw new Error("Supabase no está configurado en el servidor.");
+  }
+
+  const base = SUPABASE_URL.replace(/\/$/, "");
+  const url = base + "/customer/v1/privileged/metrics";
+  const auth = Buffer.from("service_role:" + SUPABASE_SECRET_KEY, "utf8").toString("base64");
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: "Basic " + auth,
+      Accept: "text/plain"
+    },
+    signal: AbortSignal.timeout(10000)
+  });
+
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`Supabase Metrics HTTP ${response.status}: ${text.slice(0, 500)}`);
+  }
+  return text;
+}
+
+function parsePrometheusMetrics(text) {
+  const metrics = [];
+  for (const rawLine of String(text || "").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const match = line.match(/^([^\s{]+)(?:\{[^}]*\})?\s+(-?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?|NaN|Inf|-Inf)$/);
+    if (!match) continue;
+    const name = match[1];
+    const value = Number(match[2]);
+    if (!Number.isFinite(value)) continue;
+    metrics.push({ name, value });
+  }
+  return metrics;
+}
+
+function pickMetric(metrics, patterns) {
+  const candidates = [];
+  for (const item of metrics) {
+    const name = String(item.name || "").toLowerCase();
+    if (patterns.some(pattern => pattern.test(name))) candidates.push(item);
+  }
+  return candidates.sort((a, b) => b.value - a.value)[0] || null;
+}
+
+async function getSupabaseUsage() {
+  const result = {
+    connected: Boolean(SUPABASE_URL && SUPABASE_SECRET_KEY),
+    observedAt: new Date().toISOString(),
+    database: {
+      actualBytes: null,
+      source: null,
+      sourceMetric: null,
+      metricsAvailable: false,
+      note: ""
+    },
+    appData: {
+      totalBytes: 0,
+      rows: 0,
+      items: []
+    },
+    storage: {
+      totalBytes: 0,
+      totalFiles: 0,
+      buckets: []
+    },
+    errors: []
+  };
+
+  if (!result.connected) {
+    result.errors.push("Faltan SUPABASE_URL o SUPABASE_SECRET_KEY.");
+    return result;
+  }
+
+  // 1) Medición real del tamaño de PostgreSQL mediante el Metrics API de Supabase.
+  try {
+    const metricsText = await supabaseMetricsRequest();
+    const metrics = parsePrometheusMetrics(metricsText);
+    const dbMetric = pickMetric(metrics, [
+      /pg_database_size/i,
+      /database.*size.*bytes/i,
+      /database_size/i
+    ]);
+    if (dbMetric) {
+      result.database.actualBytes = dbMetric.value;
+      result.database.source = "supabase-metrics-api";
+      result.database.sourceMetric = dbMetric.name;
+      result.database.metricsAvailable = true;
+      result.database.note = "Tamaño de la base de datos reportado por Supabase; incluye datos, índices y otros componentes de PostgreSQL.";
+    } else {
+      result.database.note = "El Metrics API respondió, pero no se encontró una métrica reconocible de tamaño de base de datos.";
+    }
+  } catch (error) {
+    result.errors.push(`Metrics API: ${error.message}`);
+    result.database.note = "No se pudo consultar el tamaño físico de PostgreSQL desde el Metrics API.";
+  }
+
+  // 2) Desglose de lo que Mi Chat guarda en la tabla michat_state.
+  try {
+    const rows = await supabaseRequest(
+      "michat_state?select=state_key,state_data,updated_at&order=state_key.asc"
+    );
+    const list = Array.isArray(rows) ? rows : [];
+    result.appData.rows = list.length;
+    result.appData.items = list.map(row => {
+      const payload = row?.state_data === undefined ? null : row.state_data;
+      const bytes = Buffer.byteLength(payload === null ? "null" : JSON.stringify(payload), "utf8");
+      result.appData.totalBytes += bytes;
+      return {
+        stateKey: String(row?.state_key || ""),
+        bytes,
+        updatedAt: row?.updated_at || null
+      };
+    }).sort((a, b) => b.bytes - a.bytes);
+  } catch (error) {
+    result.errors.push(`michat_state: ${error.message}`);
+  }
+
+  // 3) Tamaño lógico de los objetos de Supabase Storage.
+  try {
+    const buckets = await supabaseStorageRequest("bucket");
+    const bucketList = Array.isArray(buckets) ? buckets : [];
+    for (const bucket of bucketList) {
+      const id = String(bucket?.id || bucket?.name || "").trim();
+      if (!id) continue;
+      const listed = await listSupabaseStorageFiles(id, 10000);
+      const bytes = listed.files.reduce((sum, file) => sum + Number(file.size || 0), 0);
+      result.storage.totalBytes += bytes;
+      result.storage.totalFiles += listed.files.length;
+      result.storage.buckets.push({
+        id,
+        name: String(bucket?.name || id),
+        bytes,
+        files: listed.files.length,
+        truncated: Boolean(listed.truncated)
+      });
+    }
+    result.storage.buckets.sort((a, b) => b.bytes - a.bytes);
+  } catch (error) {
+    result.errors.push(`Storage: ${error.message}`);
+  }
+
+  return result;
+}
+
+app.get("/api/admin/supabase/usage", requireAdmin, async (req, res) => {
+  try {
+    const usage = await getSupabaseUsage();
+    res.json(usage);
+  } catch (error) {
+    console.error("Error obteniendo uso real de Supabase:", error.message);
+    res.status(502).json({ error: error.message || "No se pudo obtener el almacenamiento de Supabase." });
+  }
+});
+
 async function supabaseStorageRequest(pathname, options = {}) {
   if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
     throw new Error("Supabase no está configurado en el servidor.");
