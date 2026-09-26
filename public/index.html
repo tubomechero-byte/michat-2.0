@@ -413,7 +413,7 @@ button,input,textarea{font:inherit}
 }
 
 
-@media(max-width:800px){
+@media(max-width:900px){
   .mobileBottomNav{display:flex}
   .mainTabPage{min-height:0}
   .newsPage .storiesBar{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
@@ -421,12 +421,12 @@ button,input,textarea{font:inherit}
   .quickActions{right:16px;bottom:84px}
   .mobileChat .mobileBottomNav{display:none}
 }
-@media(min-width:801px){
+@media(min-width:901px){
   #layout{flex:1;width:100%}
   .mainTabPage{min-height:0}
   .newsPage .storiesBar{grid-template-columns:repeat(5,minmax(0,1fr))}
 }
-@media(max-width:800px){
+@media(max-width:900px){
   html,body{height:100%;height:100dvh}
   #app{height:100%;height:100dvh}
   .layout{height:100%;height:100dvh;min-height:0}
@@ -460,7 +460,7 @@ button,input,textarea{font:inherit}
    NAVEGACIÓN DE PC: barra lateral vertical tipo WhatsApp Web
    En móvil se mantiene la barra inferior original.
 ===================================================== */
-@media(min-width:801px){
+@media(min-width:901px){
   #app{
     position:relative;
     flex-direction:column;
@@ -552,11 +552,56 @@ button,input,textarea{font:inherit}
   }
 }
 
-@media(max-width:800px){
+@media(max-width:900px){
+  #app{
+    width:100%;
+  }
+
   #layout{
-    width:auto;
-    max-width:1500px;
-    margin:0 auto;
+    width:100%;
+    max-width:none;
+    margin:0;
+  }
+
+  .sidebar{
+    width:100%;
+  }
+
+  .callsList{
+    padding:6px 14px 112px;
+  }
+
+  .callsItem{
+    gap:14px;
+    padding:14px 4px;
+    min-height:92px;
+  }
+
+  .callsItem .avatar{
+    width:64px;
+    height:64px;
+    flex:0 0 64px;
+  }
+
+  .callsItem .userInfo{
+    flex:1;
+    min-width:0;
+  }
+
+  .callsItem .userName{
+    font-size:19px;
+  }
+
+  .callsItem .online,
+  .callsItem .offline{
+    font-size:16px;
+  }
+
+  .callsItem .toolBtn{
+    width:56px;
+    height:56px;
+    flex:0 0 56px;
+    font-size:22px;
   }
 }
 
