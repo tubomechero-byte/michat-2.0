@@ -68,6 +68,8 @@ body.admin-dark .supabase-toolbar,body.admin-dark .appeal-actions{color:#e5e7eb}
 #themeToggle{margin:0 4px 0 auto}
 
 </style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<style>#locationMap{height:520px;border-radius:12px;border:1px solid #d1d5db;margin-top:12px}.location-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:12px}.location-card{border:1px solid #e5e7eb;border-radius:10px;padding:12px;background:#fafafa}.location-card b{display:block;margin-bottom:5px}.location-card .meta{font-size:12px;color:#6b7280;line-height:1.5}</style>
 </head>
 <body>
 <header><strong>Mi Chat · Administración</strong><div style="display:flex;align-items:center;gap:8px"><button id="themeToggle" type="button" class="secondary" title="Cambiar tema">🌙 Tema oscuro</button><button id="logout" class="secondary hidden">Cerrar sesión</button></div></header>
@@ -893,6 +895,67 @@ async function deleteSupabaseStorageObjects(objects){
 
 async function check(){const t=localStorage.getItem(tokenKey);if(!t)return;if(t)try{await api('/api/admin/me');showPanel();startActivity()}catch{localStorage.removeItem(tokenKey)}}
 $('loginBtn').onclick=login;$('latestActivity').onclick=()=>{const t=$('terminal');if(t)t.scrollTop=0};$('activityFilter').onchange=()=>renderActivity(activityCache);$('refreshCommandAccess').onclick=loadCommandAccess;$('grantCommandAccess').onclick=grantCommandAccess;$('commandAccessUser').onchange=updateSelectedRankFromUser;$('revokeCommandAccess').onclick=revokeSelectedCommandAccess;$('refresh').onclick=loadAll;$('enableGlobalAccess').onclick=enableGlobalAccess;$('disableGlobalAccess').onclick=disableGlobalAccess;$('refreshGlobalAccess').onclick=loadGlobalAccess;$('refreshChats').onclick=loadChats;$('chatBackToPeople').onclick=closeAdminPerson;$('deleteSelectedConversation').onclick=deleteSelectedConversation;$('deleteSelectedPersonChats').onclick=deleteSelectedPersonChats;$('refreshContactRequests').onclick=loadContactRequests;$('sendModeration').onclick=sendModeration;$('refreshAppeals').onclick=loadAppeals;$('refreshBans').onclick=loadBans;$('refreshIpBans').onclick=loadIpBans;$('banIpBtn').onclick=()=>{const ip=$('ipBanAddress').value.trim();if(!ip){$('ipBansMsg').className='msg error';$('ipBansMsg').textContent='Escribe una IP.';return;}const duration=$('ipBanDuration').value.trim()||'0';const reason=$('ipBanReason').value.trim();api('/api/admin/ip-bans',{method:'POST',body:JSON.stringify({ip,duration,reason})}).then(()=>{ $('ipBansMsg').className='msg ok'; $('ipBansMsg').textContent='IP bloqueada correctamente.'; $('ipBanAddress').value=''; $('ipBanReason').value=''; return loadIpBans(); }).catch(e=>{ $('ipBansMsg').className='msg error'; $('ipBansMsg').textContent=e.message; });};$('refreshReports').onclick=loadReports;$('refreshStories').onclick=loadStories;$('refreshRecordings').onclick=loadRecordings;$('clearBrowserCache').onclick=clearBrowserCache;$('refreshSupabaseStorage').onclick=loadSupabaseStorage;$('refreshSupabaseUsage').onclick=loadSupabaseUsage;$('deleteSelectedSupabaseFiles').onclick=deleteSelectedSupabaseStorageFiles;$('supabaseStorageSelectAll').onchange=e=>setAllSupabaseStorageSelection(e.target.checked);$('supabaseStorageHeaderCheck').onchange=e=>setAllSupabaseStorageSelection(e.target.checked);document.addEventListener('change',e=>{if(e.target.classList.contains('supabase-file-check'))updateSupabaseStorageSelection()});$('logout').onclick=()=>{localStorage.removeItem(tokenKey);location.reload()};$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});check();
-</script>
+
+let locationMap=null;
+let locationMarkers={};
+
+function initLocationMap(){
+  if(locationMap || !window.L) return;
+  locationMap=L.map("locationMap").setView([40.4168,-3.7038],6);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+    maxZoom:19,
+    attribution:"&copy; OpenStreetMap contributors"
+  }).addTo(locationMap);
+}
+
+async function loadLocations(){
+  const msg=$('locationsMsg');
+  try{
+    initLocationMap();
+    const list=await api('/api/admin/locations');
+    const active=new Set(list.map(x=>x.username));
+    Object.keys(locationMarkers).forEach(name=>{
+      if(!active.has(name)){
+        locationMap?.removeLayer(locationMarkers[name]);
+        delete locationMarkers[name];
+      }
+    });
+    if(!list.length){
+      msg.className='msg';
+      msg.textContent='No hay usuarios compartiendo su ubicación actualmente.';
+      $('locationList').innerHTML='';
+      return;
+    }
+    msg.className='msg ok';
+    msg.textContent=list.length+' usuario(s) compartiendo ubicación.';
+    const bounds=[];
+    $('locationList').innerHTML=list.map(item=>{
+      const lat=Number(item.latitude),lng=Number(item.longitude);
+      bounds.push([lat,lng]);
+      const when=item.updatedAt?new Date(item.updatedAt).toLocaleString('es-ES'):'Desconocido';
+      const acc=Number.isFinite(Number(item.accuracy))?Math.round(Number(item.accuracy))+' m':'desconocida';
+      return `<div class="location-card"><b>📍 ${esc(item.displayName||item.username)} ${item.online?'<span class="online">● Online</span>':'<span class="offline">○ Offline</span>'}</b><div class="meta">@${esc(item.username)}<br>Precisión: ${esc(acc)}<br>Última actualización: ${esc(when)}<br>${lat.toFixed(6)}, ${lng.toFixed(6)}</div></div>`;
+    }).join('');
+    list.forEach(item=>{
+      const lat=Number(item.latitude),lng=Number(item.longitude);
+      if(!locationMap) return;
+      const popup=`<b>${esc(item.displayName||item.username)}</b><br>@${esc(item.username)}<br>Precisión: ${Number.isFinite(Number(item.accuracy))?Math.round(Number(item.accuracy))+' m':'—'}<br>${item.updatedAt?new Date(item.updatedAt).toLocaleString('es-ES'):'—'}`;
+      if(!locationMarkers[item.username]){
+        locationMarkers[item.username]=L.marker([lat,lng]).addTo(locationMap);
+      }else{
+        locationMarkers[item.username].setLatLng([lat,lng]);
+      }
+      locationMarkers[item.username].bindPopup(popup);
+    });
+    if(bounds.length && !window._locationMapFittedOnce){
+      locationMap.fitBounds(bounds,{padding:[30,30],maxZoom:15});
+      window._locationMapFittedOnce=true;
+    }
+  }catch(e){
+    msg.className='msg error';
+    msg.textContent=e.message||'No se pudieron cargar las ubicaciones.';
+  }
+}
+$('refreshLocations').onclick=loadLocations;loadLocations();setInterval(loadLocations,5000);</script>
 </body>
 </html>
