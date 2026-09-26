@@ -2068,28 +2068,48 @@ app.get("/api/global-access/status", (req, res) => {
 
 
 async function supabaseMetricsRequest() {
-  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
-    throw new Error("Supabase no está configurado en el servidor.");
+  if (!SUPABASE_URL) {
+    throw new Error("SUPABASE_URL no está configurada en el servidor.");
+  }
+
+  const secretCandidates = [
+    process.env.SUPABASE_SECRET_KEY,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  ].map(v => String(v || "").trim()).filter(Boolean);
+
+  if (!secretCandidates.length) {
+    throw new Error("Falta SUPABASE_SECRET_KEY o SUPABASE_SERVICE_ROLE_KEY.");
   }
 
   const base = SUPABASE_URL.replace(/\/$/, "");
   const url = base + "/customer/v1/privileged/metrics";
-  const auth = Buffer.from("service_role:" + SUPABASE_SECRET_KEY, "utf8").toString("base64");
+  let lastError = null;
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: "Basic " + auth,
-      Accept: "text/plain"
-    },
-    signal: AbortSignal.timeout(10000)
-  });
+  // Supabase documenta el Metrics API con HTTP Basic Auth. La contraseña es
+  // la Secret API key (o la service_role antigua); el usuario no es la key.
+  for (const secret of secretCandidates) {
+    for (const username of ["username", "service_role"]) {
+      const auth = Buffer.from(username + ":" + secret, "utf8").toString("base64");
+      try {
+        const response = await fetch(url, {
+          method: "GET",
+          headers: {
+            Authorization: "Basic " + auth,
+            Accept: "text/plain"
+          },
+          signal: AbortSignal.timeout(10000)
+        });
 
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`Supabase Metrics HTTP ${response.status}: ${text.slice(0, 500)}`);
+        const text = await response.text();
+        if (response.ok) return text;
+        lastError = new Error(`Supabase Metrics HTTP ${response.status}: ${text.slice(0, 300)}`);
+      } catch (error) {
+        lastError = error;
+      }
+    }
   }
-  return text;
+
+  throw lastError || new Error("No se pudo acceder al Metrics API de Supabase.");
 }
 
 function parsePrometheusMetrics(text) {
@@ -2097,21 +2117,32 @@ function parsePrometheusMetrics(text) {
   for (const rawLine of String(text || "").split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) continue;
-    const match = line.match(/^([^\s{]+)(?:\{[^}]*\})?\s+(-?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?|NaN|Inf|-Inf)$/);
+    const match = line.match(/^([^\s{]+)(?:\{([^}]*)\})?\s+(-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|NaN|Inf|-Inf)$/);
     if (!match) continue;
     const name = match[1];
-    const value = Number(match[2]);
+    const labelText = match[2] || "";
+    const labels = {};
+    if (labelText) {
+      const labelRe = /([a-zA-Z_][a-zA-Z0-9_]*)="((?:\\.|[^"\\])*)"/g;
+      let lm;
+      while ((lm = labelRe.exec(labelText))) {
+        labels[lm[1]] = lm[2].replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+      }
+    }
+    const value = Number(match[3]);
     if (!Number.isFinite(value)) continue;
-    metrics.push({ name, value });
+    metrics.push({ name, value, labels });
   }
   return metrics;
 }
 
-function pickMetric(metrics, patterns) {
+function pickMetric(metrics, patterns, predicate = null) {
   const candidates = [];
   for (const item of metrics) {
     const name = String(item.name || "").toLowerCase();
-    if (patterns.some(pattern => pattern.test(name))) candidates.push(item);
+    if (patterns.some(pattern => pattern.test(name)) && (!predicate || predicate(item))) {
+      candidates.push(item);
+    }
   }
   return candidates.sort((a, b) => b.value - a.value)[0] || null;
 }
@@ -2190,6 +2221,10 @@ async function getSupabaseUsage() {
       actualBytes: null,
       source: null,
       sourceMetric: null,
+      diskTotalBytes: null,
+      diskUsedBytes: null,
+      diskFreeBytes: null,
+      diskSourceMetric: null,
       metricsAvailable: false,
       note: ""
     },
@@ -2213,27 +2248,56 @@ async function getSupabaseUsage() {
     return result;
   }
 
-  // 1) Medición real del tamaño de PostgreSQL mediante el Metrics API de Supabase.
+  // 1) Metrics API de Supabase.
+  // El Metrics API expone con fiabilidad el DISCO del servidor PostgreSQL
+  // (filesystem size/available). El tamaño exacto de la BD se presenta aparte
+  // porque no todas las versiones del API exponen pg_database_size.
   try {
     const metricsText = await supabaseMetricsRequest();
     const metrics = parsePrometheusMetrics(metricsText);
+
     const dbMetric = pickMetric(metrics, [
       /pg_database_size/i,
       /database.*size.*bytes/i,
-      /database_size/i
+      /^database_size/i
     ]);
+
+    const fsSize = pickMetric(metrics, [/^node_filesystem_size_bytes$/], item =>
+      (!item.labels || item.labels.service_type === "db") &&
+      (!item.labels || item.labels.mountpoint === "/")
+    );
+    const fsAvail = pickMetric(metrics, [/^node_filesystem_avail_bytes$/], item =>
+      (!item.labels || item.labels.service_type === "db") &&
+      (!item.labels || item.labels.mountpoint === "/")
+    );
+
     if (dbMetric) {
       result.database.actualBytes = dbMetric.value;
       result.database.source = "supabase-metrics-api";
       result.database.sourceMetric = dbMetric.name;
       result.database.metricsAvailable = true;
       result.database.note = "Tamaño de la base de datos reportado por Supabase; incluye datos, índices y otros componentes de PostgreSQL.";
-    } else {
-      result.database.note = "El Metrics API respondió, pero no se encontró una métrica reconocible de tamaño de base de datos.";
+    }
+
+    if (fsSize && fsAvail) {
+      result.database.diskTotalBytes = fsSize.value;
+      result.database.diskFreeBytes = Math.max(0, fsAvail.value);
+      result.database.diskUsedBytes = Math.max(0, fsSize.value - fsAvail.value);
+      result.database.diskSourceMetric = fsSize.name;
+      if (!result.database.actualBytes) {
+        result.database.source = "supabase-metrics-disk";
+        result.database.sourceMetric = fsSize.name;
+        result.database.metricsAvailable = true;
+        result.database.note = "Supabase está proporcionando el uso físico del disco de PostgreSQL. El tamaño exacto de la base de datos (tablas + índices) no está expuesto como métrica en este endpoint.";
+      }
+    }
+
+    if (!result.database.actualBytes && !result.database.diskUsedBytes) {
+      result.database.note = "El Metrics API respondió, pero no incluyó una métrica de tamaño de base de datos ni de filesystem utilizable.";
     }
   } catch (error) {
     result.errors.push(`Metrics API: ${error.message}`);
-    result.database.note = "No se pudo consultar el tamaño físico de PostgreSQL desde el Metrics API.";
+    result.database.note = "No se pudo consultar el Metrics API de Supabase. Revisa la Secret API key/service_role y el endpoint de métricas.";
   }
 
   // 2) Desglose de lo que Mi Chat guarda en la tabla michat_state.
