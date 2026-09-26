@@ -10,10 +10,67 @@ body{font-family:Arial,sans-serif;margin:0;background:#f4f6f8;color:#222}header{
 .supabase-storage-summary{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.supabase-storage-stat{flex:1;min-width:160px;padding:12px;border:1px solid #e5e7eb;border-radius:10px;background:#fafafa}.supabase-storage-stat b{font-size:18px}.supabase-storage-table th,.supabase-storage-table td{white-space:normal;vertical-align:top}.supabase-file-path{word-break:break-all;min-width:240px}.supabase-file-actions{white-space:nowrap}.supabase-file-actions button{margin:0}.supabase-toolbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:10px}.supabase-muted{font-size:12px;color:#6b7280}.supabase-empty{padding:20px;text-align:center;color:#6b7280;background:#f8fafc;border-radius:10px}.supabase-check{width:18px;height:18px;margin:0}.supabase-bucket-badge{display:inline-block;padding:3px 7px;border-radius:999px;background:#eef2ff;font-size:11px;margin-bottom:4px}.supabase-warning{margin-top:10px;padding:10px;border-radius:8px;background:#fff7ed;color:#92400e}.supabase-danger-note{margin-top:10px;padding:10px;border-radius:8px;background:#fff1f2;color:#9f1239}@media(max-width:700px){.supabase-storage-table th,.supabase-storage-table td{padding:8px 6px}.supabase-file-path{min-width:160px}}
 
 .supabase-usage-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-top:12px}.supabase-usage-card{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fafafa}.supabase-usage-value{font-size:24px;font-weight:700;margin-top:5px}.supabase-usage-table{width:100%;border-collapse:collapse;margin-top:12px}.supabase-usage-table th,.supabase-usage-table td{text-align:left;padding:9px;border-bottom:1px solid #eee;vertical-align:top}.supabase-usage-key{font-family:Consolas,Monaco,monospace;font-size:12px;word-break:break-word}.supabase-usage-note{font-size:12px;color:#6b7280;line-height:1.45}.supabase-usage-warn{padding:10px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;margin-top:10px}.supabase-usage-ok{padding:10px;border-radius:8px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;margin-top:10px}.supabase-usage-error{padding:10px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;margin-top:10px}
+
+/* Tema oscuro del panel de administración */
+:root{color-scheme:light}
+body.admin-dark{background:#0b1220;color:#e5e7eb}
+body.admin-dark header{background:#020617;color:#f8fafc}
+body.admin-dark .card{background:#111827;color:#e5e7eb;box-shadow:0 2px 12px #0006}
+body.admin-dark input,body.admin-dark select,body.admin-dark textarea{background:#0f172a;color:#e5e7eb;border-color:#334155}
+body.admin-dark input::placeholder,body.admin-dark textarea::placeholder{color:#94a3b8}
+body.admin-dark button{color:#f8fafc}
+body.admin-dark button.secondary{background:#334155}
+body.admin-dark .stat{background:#172554}
+body.admin-dark .storage-bar{background:#334155}
+body.admin-dark .storage-details,body.admin-dark .small,body.admin-dark .command-access-meta,body.admin-dark .command-access-help,body.admin-dark .supabase-muted,body.admin-dark .story-meta,body.admin-dark .admin-wa-main-meta,body.admin-dark .admin-wa-chat-row-preview,body.admin-dark .admin-wa-chat-row-time,body.admin-dark .admin-wa-note{color:#94a3b8}
+body.admin-dark .storage-separator{background:#334155}
+body.admin-dark th,body.admin-dark td{border-bottom-color:#334155}
+body.admin-dark .msg{background:#1f2937;color:#e5e7eb}
+body.admin-dark .error{color:#fca5a5}
+body.admin-dark .ok,.admin-dark .online{color:#86efac}
+body.admin-dark .offline{color:#94a3b8}
+body.admin-dark .stories-grid .story-card{border-color:#334155;background:#0f172a;color:#e5e7eb}
+body.admin-dark .story-text{background:#1e293b;color:#e5e7eb}
+body.admin-dark .notice-card{border-color:#7c2d12;background:#2a160b}
+body.admin-dark .appeal-card{border-color:#1d4ed8;background:#0c1b36}
+body.admin-dark .ban-card{border-color:#7f1d1d;background:#2a1010}
+body.admin-dark .global-access-card{border-color:#7f1d1d;background:#2a1010}
+body.admin-dark .command-access-item{border-color:#334155;background:#0f172a}
+body.admin-dark .admin-wa-person{background:#0f172a;color:#e5e7eb;border-color:#334155}
+body.admin-dark .admin-wa-person:hover{background:#172033;border-color:#475569}
+body.admin-dark .admin-wa-avatar{background:#334155;color:#e5e7eb}
+body.admin-dark .admin-wa-workspace{border-color:#334155;background:#0b1220}
+body.admin-dark .admin-wa-sidebar{background:#0f172a;border-right-color:#334155}
+body.admin-dark .admin-wa-side-head{border-bottom-color:#334155}
+body.admin-dark .admin-wa-chat-row{color:#e5e7eb}
+body.admin-dark .admin-wa-chat-row:hover,body.admin-dark .admin-wa-chat-row.active{background:#1e293b}
+body.admin-dark .admin-wa-main{background:#111827}
+body.admin-dark .admin-wa-main-head{background:#0f172a;border-bottom-color:#334155}
+body.admin-dark .admin-wa-bubble.me{background:#14532d;color:#f0fdf4}
+body.admin-dark .admin-wa-bubble.other{background:#1e293b;color:#e5e7eb}
+body.admin-dark .admin-wa-bubble-meta{color:#94a3b8}
+body.admin-dark .supabase-storage-stat{background:#0f172a;border-color:#334155}
+body.admin-dark .supabase-empty{background:#0f172a;color:#94a3b8}
+body.admin-dark .modal-box{background:#111827;color:#e5e7eb}
+body.admin-dark .close{background:#475569}
+body.admin-dark .terminal-card{background:#020617;color:#e5e7eb}
+body.admin-dark .terminal{background:#00040a}
+body.admin-dark .supabase-storage-table th,body.admin-dark .supabase-storage-table td{border-bottom-color:#334155}
+body.admin-dark .table-wrap{background:transparent}
+body.admin-dark a{color:#93c5fd}
+body.admin-dark .notice-card .notice-title{color:#fdba74}
+body.admin-dark .appeal-pending{color:#fbbf24}
+body.admin-dark .appeal-approved{color:#86efac}
+body.admin-dark .appeal-rejected{color:#fca5a5}
+body.admin-dark .ban-active,body.admin-dark .banned{color:#fca5a5}
+body.admin-dark .ban-revoked{color:#94a3b8}
+body.admin-dark .supabase-toolbar,body.admin-dark .appeal-actions{color:#e5e7eb}
+#themeToggle{margin:0 4px 0 auto}
+
 </style>
 </head>
 <body>
-<header><strong>Mi Chat · Administración</strong><button id="logout" class="secondary hidden">Cerrar sesión</button></header>
+<header><strong>Mi Chat · Administración</strong><div style="display:flex;align-items:center;gap:8px"><button id="themeToggle" type="button" class="secondary" title="Cambiar tema">🌙 Tema oscuro</button><button id="logout" class="secondary hidden">Cerrar sesión</button></div></header>
 <main>
 <section id="loginCard" class="card">
 <h2>Acceso de administrador</h2>
@@ -41,6 +98,26 @@ body{font-family:Arial,sans-serif;margin:0;background:#f4f6f8;color:#222}header{
 </main>
 <div id="storyModal" class="modal hidden"><div class="modal-box"><button class="close" onclick="closeStoryModal()">Cerrar</button><h2 id="storyModalTitle">Estado</h2><div id="storyModalContent"></div></div></div>
 <script>
+
+function applyAdminTheme(theme){
+  const dark = theme === 'dark';
+  document.body.classList.toggle('admin-dark', dark);
+  document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+  const btn = document.getElementById('themeToggle');
+  if(btn){ btn.textContent = dark ? '☀️ Tema claro' : '🌙 Tema oscuro'; btn.title = dark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'; }
+  localStorage.setItem('michat_admin_theme', dark ? 'dark' : 'light');
+}
+function initAdminTheme(){
+  const saved = localStorage.getItem('michat_admin_theme');
+  applyAdminTheme(saved === 'dark' ? 'dark' : 'light');
+  const btn = document.getElementById('themeToggle');
+  if(btn && !btn.dataset.bound){
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', ()=>applyAdminTheme(document.body.classList.contains('admin-dark') ? 'light' : 'dark'));
+  }
+}
+initAdminTheme();
+
 const tokenKey='michat_admin_token';
 let supabaseStorageFiles=[];
 let supabaseUsageData=null;
@@ -819,4 +896,3 @@ $('loginBtn').onclick=login;$('latestActivity').onclick=()=>{const t=$('terminal
 </script>
 </body>
 </html>
-s
