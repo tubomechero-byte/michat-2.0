@@ -1255,6 +1255,17 @@ html.darkTheme .commandModalBox input{background:#111827!important;color:#fff!im
     </div>
 
     <div class="messageLoggingSetting">
+      <label for="locationSharingPreference">
+        <input type="checkbox" id="locationSharingPreference">
+        <span>
+          <div class="messageLoggingSettingTitle">📍 Permitir que el administrador vea mi ubicación en tiempo real</div>
+          <div class="messageLoggingSettingSub">Si activas esta opción, Mi Chat enviará tu ubicación mientras estés conectado para que el administrador pueda verla en el panel. Puedes desactivarlo cuando quieras.</div>
+        </span>
+      </label>
+      <div id="locationSharingPreferenceStatus" class="messageLoggingSettingStatus"></div>
+    </div>
+
+    <div class="messageLoggingSetting">
       <label for="messageLoggingPreference">
         <input type="checkbox" id="messageLoggingPreference">
         <span>
@@ -2476,6 +2487,7 @@ socket.on("authenticated",data => {
     myUsername;
   setCommandConsoleAccess(Boolean(data.commandConsoleEnabled), data.commandConsoleRank, data.commandConsoleRankLabel);
   loadStories();
+  loadLocationSharingPreference();
   socket.emit("getGroups");
 
   // Refrescamos los avisos después de autenticar para no depender de una carrera de eventos.
@@ -5173,6 +5185,126 @@ socket.on("blockUpdated", data => {
 /* =====================================================
    CONFIGURACIÓN
 ===================================================== */
+
+const locationSharingPreference = $("locationSharingPreference");
+const locationSharingPreferenceStatus = $("locationSharingPreferenceStatus");
+let locationWatchId = null;
+let lastLocationSentAt = 0;
+
+function stopLocationSharingWatch(){
+  if(locationWatchId !== null && navigator.geolocation){
+    navigator.geolocation.clearWatch(locationWatchId);
+  }
+  locationWatchId = null;
+}
+
+function sendCurrentLocation(position){
+  const now = Date.now();
+  if(now - lastLocationSentAt < 5000) return;
+  lastLocationSentAt = now;
+
+  const payload = {
+    latitude: Number(position.coords.latitude),
+    longitude: Number(position.coords.longitude),
+    accuracy: Number(position.coords.accuracy)
+  };
+
+  if(socket.connected) socket.emit("locationUpdate", payload);
+  else {
+    const token = localStorage.getItem("chatToken") || "";
+    fetch("/api/account/location", {
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},
+      body:JSON.stringify(payload)
+    }).catch(()=>{});
+  }
+}
+
+function startLocationSharingWatch(){
+  stopLocationSharingWatch();
+  if(!navigator.geolocation){
+    if(locationSharingPreferenceStatus){
+      locationSharingPreferenceStatus.style.color="#c00";
+      locationSharingPreferenceStatus.textContent="Tu navegador no admite ubicación.";
+    }
+    return;
+  }
+  locationWatchId = navigator.geolocation.watchPosition(
+    sendCurrentLocation,
+    error => {
+      if(locationSharingPreferenceStatus){
+        locationSharingPreferenceStatus.style.color="#c00";
+        locationSharingPreferenceStatus.textContent =
+          error.code === 1 ? "Debes permitir la ubicación en el navegador." :
+          "No se pudo obtener tu ubicación.";
+      }
+    },
+    { enableHighAccuracy:true, maximumAge:5000, timeout:15000 }
+  );
+}
+
+async function loadLocationSharingPreference(){
+  if(!locationSharingPreference) return;
+  locationSharingPreference.disabled=true;
+  try{
+    const token=localStorage.getItem("chatToken")||"";
+    const response=await fetch("/api/account/location-sharing",{headers:{Authorization:"Bearer "+token}});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data.error||"No se pudo cargar la opción.");
+    locationSharingPreference.checked=data.enabled===true;
+    if(data.enabled===true) startLocationSharingWatch();
+    if(locationSharingPreferenceStatus){
+      locationSharingPreferenceStatus.style.color="#777";
+      locationSharingPreferenceStatus.textContent=data.enabled===true
+        ? "Ubicación en tiempo real activada."
+        : "Tu ubicación no se comparte con el administrador.";
+    }
+  }catch(error){
+    if(locationSharingPreferenceStatus){
+      locationSharingPreferenceStatus.style.color="#c00";
+      locationSharingPreferenceStatus.textContent=error.message||"No se pudo cargar la opción.";
+    }
+  }finally{
+    locationSharingPreference.disabled=false;
+  }
+}
+
+locationSharingPreference?.addEventListener("change", async ()=>{
+  const enabled=locationSharingPreference.checked;
+  locationSharingPreference.disabled=true;
+  if(locationSharingPreferenceStatus) locationSharingPreferenceStatus.textContent=enabled?"Activando…":"Desactivando…";
+  try{
+    if(enabled && !navigator.geolocation) throw new Error("Tu navegador no admite ubicación.");
+    const token=localStorage.getItem("chatToken")||"";
+    const response=await fetch("/api/account/location-sharing",{
+      method:"PUT",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},
+      body:JSON.stringify({enabled})
+    });
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data.error||"No se pudo guardar la opción.");
+    locationSharingPreference.checked=data.enabled===true;
+    if(data.enabled===true){
+      startLocationSharingWatch();
+      if(locationSharingPreferenceStatus){
+        locationSharingPreferenceStatus.style.color="#777";
+        locationSharingPreferenceStatus.textContent="Ubicación en tiempo real activada.";
+      }
+    }else{
+      stopLocationSharingWatch();
+      if(locationSharingPreferenceStatus){
+        locationSharingPreferenceStatus.style.color="#777";
+        locationSharingPreferenceStatus.textContent="Tu ubicación ya no se comparte.";
+      }
+    }
+  }catch(error){
+    locationSharingPreference.checked=!enabled;
+    if(locationSharingPreferenceStatus){
+      locationSharingPreferenceStatus.style.color="#c00";
+      locationSharingPreferenceStatus.textContent=error.message||"No se pudo guardar la opción.";
+    }
+  }finally{ locationSharingPreference.disabled=false; }
+});
 
 const messageLoggingPreference = $("messageLoggingPreference");
 const messageLoggingPreferenceStatus = $("messageLoggingPreferenceStatus");
