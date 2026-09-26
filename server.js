@@ -33,6 +33,8 @@ const IP_BANS_FILE = path.join(DATA_DIR, "ip-bans.json");
 const PASSWORD_RESETS_FILE = path.join(DATA_DIR, "password-resets.json");
 const COMMAND_ACCESS_FILE = path.join(DATA_DIR, "command-access.json");
 const MESSAGE_LOGGING_FILE = path.join(DATA_DIR, "message-logging.json");
+const LOCATION_SHARING_FILE = path.join(DATA_DIR, "location-sharing.json");
+const LOCATIONS_FILE = path.join(DATA_DIR, "locations.json");
 const ACCESS_BLOCKS_FILE = path.join(DATA_DIR, "access-blocks.json");
 const GLOBAL_ACCESS_FILE = path.join(DATA_DIR, "global-access.json");
 const ADMIN_ACTIVITY_FILE = path.join(DATA_DIR, "admin-activity.json");
@@ -694,6 +696,46 @@ function isAdminMessageLoggingEnabled(username) {
   const key = norm(username);
   if (!key) return false;
   return messageLoggingSettings()[key] === true;
+}
+function locationSharingSettings() {
+  const value = read(LOCATION_SHARING_FILE, {});
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value;
+}
+
+function saveLocationSharingSettings(value) {
+  const data = {};
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    for (const [username, enabled] of Object.entries(value)) {
+      const key = norm(username);
+      if (key && enabled === true) data[key] = true;
+    }
+  }
+  write(LOCATION_SHARING_FILE, data);
+}
+
+function isLocationSharingEnabled(username) {
+  const key = norm(username);
+  return !!key && locationSharingSettings()[key] === true;
+}
+
+function locations() {
+  const value = read(LOCATIONS_FILE, {});
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function saveLocations(value) {
+  write(LOCATIONS_FILE, value && typeof value === "object" && !Array.isArray(value) ? value : {});
+}
+
+function removeUserLocation(username) {
+  const key = norm(username);
+  if (!key) return;
+  const data = locations();
+  if (Object.prototype.hasOwnProperty.call(data, key)) {
+    delete data[key];
+    saveLocations(data);
+  }
 }
 
 function commandAccessUsers() {
@@ -3633,6 +3675,83 @@ app.put("/api/account/message-logging", requireUser, (req, res) => {
     success: true,
     enabled
   });
+});
+
+
+app.get("/api/account/location-sharing", requireUser, (req, res) => {
+  res.json({ enabled: isLocationSharingEnabled(req.user.username) });
+});
+
+app.put("/api/account/location-sharing", requireUser, (req, res) => {
+  const username = norm(req.user.username);
+  const enabled = req.body?.enabled === true;
+  const settings = locationSharingSettings();
+
+  if (enabled) settings[username] = true;
+  else {
+    delete settings[username];
+    removeUserLocation(username);
+  }
+
+  saveLocationSharingSettings(settings);
+  addAdminActivity(`@${req.user.username} ${enabled ? "permitió" : "desactivó"} que el administrador vea su ubicación en tiempo real.`);
+
+  res.json({ success: true, enabled });
+});
+
+app.post("/api/account/location", requireUser, (req, res) => {
+  const username = norm(req.user.username);
+  if (!isLocationSharingEnabled(username)) {
+    removeUserLocation(username);
+    return res.status(403).json({ error: "La ubicación en tiempo real no está permitida." });
+  }
+
+  const latitude = Number(req.body?.latitude);
+  const longitude = Number(req.body?.longitude);
+  const accuracy = Number(req.body?.accuracy);
+
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+      !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    return res.status(400).json({ error: "Coordenadas no válidas." });
+  }
+
+  const data = locations();
+  data[username] = {
+    username,
+    latitude,
+    longitude,
+    accuracy: Number.isFinite(accuracy) && accuracy >= 0 ? Math.min(accuracy, 100000) : null,
+    updatedAt: Date.now()
+  };
+  saveLocations(data);
+
+  res.json({ success: true });
+});
+
+app.get("/api/admin/locations", requireAdmin, (req, res) => {
+  const settings = locationSharingSettings();
+  const data = locations();
+  const onlineUsers = new Set([...online.values()].map(name => norm(name)));
+
+  const result = users()
+    .filter(user => settings[norm(user.username)] === true)
+    .map(user => {
+      const item = data[norm(user.username)] || null;
+      return {
+        username: user.username,
+        displayName: user.displayName || user.username,
+        online: onlineUsers.has(norm(user.username)),
+        enabled: true,
+        latitude: item?.latitude ?? null,
+        longitude: item?.longitude ?? null,
+        accuracy: item?.accuracy ?? null,
+        updatedAt: item?.updatedAt ?? null
+      };
+    })
+    .filter(item => item.latitude !== null && item.longitude !== null)
+    .sort((a,b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+
+  res.json(result);
 });
 
 app.get("/api/admin/command-access", requireAdmin, (req, res) => {
@@ -7605,6 +7724,7 @@ io.on("connection", socket => {
     () => {
       const username = online.get(socket.id);
       if (username) {
+        removeUserLocation(username);
         addAdminActivity(
           `@${username} se ha desconectado.`
         );
