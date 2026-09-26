@@ -6,6 +6,13 @@
 <title>Mi Chat</title>
 
 <script src="/socket.io/socket.io.js"></script>
+<script>
+  try {
+    if (localStorage.getItem("michat_theme") === "dark") {
+      document.documentElement.classList.add("darkTheme");
+    }
+  } catch {}
+</script>
 
 <style>
 *{box-sizing:border-box}
@@ -619,6 +626,186 @@ button,input,textarea{font:inherit}
   }
 }
 
+
+/* =====================================================
+   TEMA OSCURO
+   Se activa con html.darkTheme y se guarda en localStorage.
+===================================================== */
+html.darkTheme body{
+  background:#0f1113;
+  color:#e7e9ea;
+}
+html.darkTheme #authScreen{
+  background:linear-gradient(135deg,#0b3f39,#062d29);
+}
+html.darkTheme .authBox,
+html.darkTheme .sidebar,
+html.darkTheme .mainTabPage,
+html.darkTheme .tabPageHeader,
+html.darkTheme .chatHeader,
+html.darkTheme .profileCard,
+html.darkTheme .profileActionBtn,
+html.darkTheme .mobileBottomNav,
+html.darkTheme .settingsItem,
+html.darkTheme .notification,
+html.darkTheme .moderationModalBox,
+html.darkTheme .modalBox{
+  background:#181a1b;
+  color:#e7e9ea;
+}
+html.darkTheme .layout{background:#181a1b}
+html.darkTheme .sidebar{border-right-color:#303234}
+html.darkTheme .tabPageHeader,
+html.darkTheme .chatHeader,
+html.darkTheme .actions,
+html.darkTheme .search,
+html.darkTheme .user,
+html.darkTheme .callsItem,
+html.darkTheme .groupsSection,
+html.darkTheme .blockItem,
+html.darkTheme .mobileBottomNav,
+html.darkTheme .messageInput{
+  border-color:#303234;
+}
+html.darkTheme .sidebarHeader{background:#064e46}
+html.darkTheme .search input,
+html.darkTheme .messageInput input,
+html.darkTheme .modalInput,
+html.darkTheme .moderationAppealText,
+html.darkTheme .authInput,
+html.darkTheme .storyComposer textarea{
+  background:#242729;
+  color:#f2f4f5;
+  border-color:#3b3f42;
+}
+html.darkTheme .search input::placeholder,
+html.darkTheme .messageInput input::placeholder,
+html.darkTheme .authInput::placeholder,
+html.darkTheme .modalInput::placeholder{
+  color:#9aa0a6;
+}
+html.darkTheme .chatSubtitle,
+html.darkTheme .tabPageHeaderSub,
+html.darkTheme .userSub,
+html.darkTheme .groupSub,
+html.darkTheme .settingsItemSub,
+html.darkTheme .profileCardUser,
+html.darkTheme .requestItemUser,
+html.darkTheme .notificationText,
+html.darkTheme .mediaName,
+html.darkTheme .from,
+html.darkTheme .time,
+html.darkTheme .deletedText,
+html.darkTheme .empty,
+html.darkTheme .offline,
+html.darkTheme .storySeenLabel,
+html.darkTheme .blockItem,
+html.darkTheme .messageLoggingSettingSub{
+  color:#9aa0a6;
+}
+html.darkTheme .communityPage,
+html.darkTheme .callsPage,
+html.darkTheme .profilePage,
+html.darkTheme .newsPage{
+  background:#181a1b;
+}
+html.darkTheme .groupRow:hover,
+html.darkTheme .profileActionBtn:hover,
+html.darkTheme .settingsItem:hover{
+  background:#232628;
+}
+html.darkTheme .toolBtn,
+html.darkTheme .muted,
+html.darkTheme .moderationClose,
+html.darkTheme .storyTypeRow button,
+html.darkTheme .messageLoggingSetting,
+html.darkTheme .fileAttachment{
+  background:#242729;
+  color:#e7e9ea;
+}
+html.darkTheme .attachBtn{
+  background:#242729;
+  color:#6de7c2;
+}
+html.darkTheme #messages{
+  background:#0f1113;
+}
+html.darkTheme .bubble{
+  background:#242729;
+  color:#e7e9ea;
+  box-shadow:0 1px 2px rgba(0,0,0,.35);
+}
+html.darkTheme .mine .bubble{
+  background:#005c4b;
+  color:#effffb;
+}
+html.darkTheme .messageInput{
+  background:#1c1f20;
+}
+html.darkTheme .mobileBottomNav button{color:#aeb4b8}
+html.darkTheme .mobileBottomNav button.active{color:#8af0cf}
+html.darkTheme #mobileBottomNav{
+  background:#151718;
+  border-right-color:#303234;
+  box-shadow:2px 0 10px rgba(0,0,0,.35);
+}
+html.darkTheme #mobileBottomNav button.active .navPill{
+  background:#17483f;
+}
+html.darkTheme .storyAvatar{
+  background:#242729;
+  border-color:#181a1b;
+  color:#8af0cf;
+}
+html.darkTheme .storyItem{color:#e7e9ea}
+html.darkTheme .storyComposer textarea:focus,
+html.darkTheme .modalInput:focus,
+html.darkTheme .moderationAppealText:focus{
+  border-color:#128c7e;
+  box-shadow:0 0 0 3px rgba(18,140,126,.18);
+}
+html.darkTheme .modal,
+html.darkTheme .moderationModalBackdrop{
+  background:rgba(0,0,0,.70);
+}
+html.darkTheme .modalHeaderRow{
+  background:#181a1b;
+}
+html.darkTheme .blockItem,
+html.darkTheme .requestItem,
+html.darkTheme .groupMemberOption{
+  border-bottom-color:#303234;
+  border-color:#3b3f42;
+}
+html.darkTheme .groupMemberOption{
+  background:#202324;
+}
+html.darkTheme .quickActionsMenu{
+  background:#181a1b;
+  border-color:#3b3f42;
+  box-shadow:0 14px 35px rgba(0,0,0,.45);
+}
+html.darkTheme .notification{
+  box-shadow:0 6px 25px rgba(0,0,0,.45);
+}
+html.darkTheme .profileCard .avatar{
+  border:0;
+}
+html.darkTheme .accessBlockedModal .accessBlockedBox{
+  background:#181a1b;
+  color:#e7e9ea;
+}
+html.darkTheme .accessBlockedTitle{color:#f3f4f6}
+html.darkTheme .accessBlockedText{color:#a1a1aa}
+html.darkTheme .groupHeaderAvatar.canEdit::after{
+  background:#242729;
+  border-color:#3b3f42;
+}
+html.darkTheme .settingsItemSub,
+html.darkTheme .messageLoggingSettingSub{color:#a7adb2}
+html.darkTheme .commandModalBox{background:#0b1120!important;color:#e5e7eb}
+html.darkTheme .commandModalBox input{background:#111827!important;color:#fff!important}
+
 </style>
 </head>
 
@@ -996,6 +1183,11 @@ button,input,textarea{font:inherit}
         <div class="settingsItemSub">
           Ver y desbloquear usuarios que hayas bloqueado.
         </div>
+      </button>
+
+      <button id="settingsTheme" class="settingsItem" type="button">
+        <div class="settingsItemTitle" id="settingsThemeTitle">🌙 Tema oscuro</div>
+        <div class="settingsItemSub" id="settingsThemeSub">Activar el modo oscuro para toda la aplicación.</div>
       </button>
 
       <button id="settingsPush" class="settingsItem">
@@ -4830,6 +5022,31 @@ messageLoggingPreference?.addEventListener("change", async () => {
     messageLoggingPreference.disabled = false;
   }
 });
+
+function updateThemeSettingText(){
+  const dark = document.documentElement.classList.contains("darkTheme");
+  const title = $("settingsThemeTitle");
+  const sub = $("settingsThemeSub");
+  if(title) title.textContent = dark ? "☀️ Tema claro" : "🌙 Tema oscuro";
+  if(sub) sub.textContent = dark
+    ? "El modo oscuro está activado. Pulsa para volver al tema claro."
+    : "Activar el modo oscuro para toda la aplicación.";
+}
+
+function setDarkTheme(enabled){
+  document.documentElement.classList.toggle("darkTheme", enabled);
+  try {
+    localStorage.setItem("michat_theme", enabled ? "dark" : "light");
+  } catch {}
+  updateThemeSettingText();
+}
+
+updateThemeSettingText();
+
+$("settingsTheme").onclick = () => {
+  const enabled = !document.documentElement.classList.contains("darkTheme");
+  setDarkTheme(enabled);
+};
 
 $("settingsButton").onclick = async () => {
   $("settingsModal").style.display = "flex";
