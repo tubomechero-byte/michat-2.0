@@ -1,7089 +1,6994 @@
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
-const webpush = require("web-push");
-const path = require("path");
-const fs = require("fs");
-const crypto = require("crypto");
-const tls = require("tls");
-const net = require("net");
-const { initializeApp, cert, getApps } = require("firebase-admin/app");
-const { getMessaging } = require("firebase-admin/messaging");
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<title>Mi Chat</title>
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
-const PORT = process.env.PORT || 3000;
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  try {
+    if (localStorage.getItem("michat_theme") === "dark") {
+      document.documentElement.classList.add("darkTheme");
+    }
+  } catch {}
+</script>
 
-const DATA_DIR = path.join(__dirname, "data");
-const USERS_FILE = path.join(DATA_DIR, "users.json");
-const MESSAGES_FILE = path.join(DATA_DIR, "messages.json");
-const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
-const PUSH_FILE = path.join(DATA_DIR, "push.json");
-const STORIES_FILE = path.join(DATA_DIR, "stories.json");
-const FCM_FILE = path.join(DATA_DIR, "fcm.json");
-const RECORDINGS_FILE = path.join(DATA_DIR, "recordings.json");
-const REPORTS_FILE = path.join(DATA_DIR, "reports.json");
-const MODERATION_FILE = path.join(DATA_DIR, "moderation.json");
-const MODERATION_READS_FILE = path.join(DATA_DIR, "moderation-reads.json");
-const APPEALS_FILE = path.join(DATA_DIR, "appeals.json");
-const BANS_FILE = path.join(DATA_DIR, "bans.json");
-const PASSWORD_RESETS_FILE = path.join(DATA_DIR, "password-resets.json");
-const COMMAND_ACCESS_FILE = path.join(DATA_DIR, "command-access.json");
-const MESSAGE_LOGGING_FILE = path.join(DATA_DIR, "message-logging.json");
-const ACCESS_BLOCKS_FILE = path.join(DATA_DIR, "access-blocks.json");
-const GLOBAL_ACCESS_FILE = path.join(DATA_DIR, "global-access.json");
-const ADMIN_ACTIVITY_FILE = path.join(DATA_DIR, "admin-activity.json");
-const GROUPS_FILE = path.join(DATA_DIR, "groups.json");
-const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;height:100vh;height:100dvh;overflow:hidden;background:#f0f2f5}
+/* Ocultar las barras de desplazamiento visibles sin quitar el scroll */
+*{scrollbar-width:none;-ms-overflow-style:none}*::-webkit-scrollbar{width:0;height:0}*::-webkit-scrollbar-thumb{background:transparent}
+button,input,textarea{font:inherit}
+.hidden{display:none!important}
 
-fs.mkdirSync(DATA_DIR, { recursive: true });
-fs.mkdirSync(RECORDINGS_DIR, { recursive: true });
+#authScreen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(135deg,#128c7e,#075e54)}
+.authBox{width:100%;max-width:420px;padding:30px;background:#fff;border-radius:20px;text-align:center;box-shadow:0 15px 40px rgba(0,0,0,.25)}
+.authInput{width:100%;padding:14px;margin:7px 0;border:1px solid #ddd;border-radius:10px;outline:none}
+.authButton{width:100%;min-height:68px;padding:20px 22px;margin-top:14px;border:0;border-radius:14px;background:#128c7e;color:#fff;font-size:22px;font-weight:bold;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.16);letter-spacing:.2px}.authButton:active{transform:translateY(1px) scale(.99)}
+.switchButton{border:0;background:transparent;color:#075e54;cursor:pointer;margin-top:15px}
+#authError{min-height:22px;margin-top:10px;color:#c00}
 
-// =====================================================
-// SUPABASE / PERSISTENCIA
-// =====================================================
-// Render Free tiene almacenamiento de archivos efímero.
-// Guardamos el estado persistente mediante la Data API de Supabase
-// para no depender de DATABASE_URL, pg ni de un pooler de PostgreSQL.
+#app{display:none;height:100vh;height:100dvh;min-height:0;flex-direction:column}
+.layout{display:flex;height:100%;min-height:0;max-width:1500px;margin:auto;background:#fff}
 
-const SUPABASE_URL = String(process.env.SUPABASE_URL || "")
-  .replace(/\/rest\/v1\/?$/i, "")
-  .replace(/\/$/, "");
-const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || "";
+.sidebar{width:350px;border-right:1px solid #ddd;display:flex;flex-direction:column;background:#fff;position:relative}
+.sidebarHeader{padding:15px;background:#075e54;color:#fff}
+.headerTop{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.headerTop h2{margin:0}
+.topButtons{display:flex;gap:6px}
+.smallBtn{border:0;border-radius:8px;padding:7px 10px;background:rgba(255,255,255,.14);color:#fff;cursor:pointer}
 
-const STATE_FILES = {
-  "users.json": [],
-  "messages.json": [],
-  "sessions.json": {},
-  "push.json": [],
-  "stories.json": [],
-  "fcm.json": {},
-  "recordings.json": [],
-  "reports.json": [],
-  "moderation.json": [],
-  "moderation-reads.json": {},
-  "appeals.json": [],
-  "bans.json": [],
-  "password-resets.json": [],
-  "command-access.json": {},
-  "message-logging.json": {},
-  "access-blocks.json": {},
-  "global-access.json": { enabled: false, ownerUsername: "", salt: "", passwordHash: "", updatedAt: 0 },
-  "admin-activity.json": [],
-  "groups.json": []
+.actions{padding:10px;border-bottom:1px solid #ddd}
+.actionBtn{width:100%;border:0;border-radius:10px;padding:11px;cursor:pointer;background:#25d366;color:#fff;font-weight:bold}
+.actions{display:grid;gap:8px}
+.quickActions{position:absolute;right:18px;bottom:18px;z-index:60}
+/* =====================================================
+   NAVEGACIÓN PRINCIPAL TIPO WHATSAPP
+===================================================== */
+.mainTabPage{display:flex;flex:1;min-height:0;flex-direction:column}
+.mainTabPage.hiddenTab{display:none!important}
+.tabPageHeader{padding:18px 16px 12px;border-bottom:1px solid #e5e7eb;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tabPageHeader h2{margin:0;font-size:24px}
+.tabPageHeaderSub{margin:4px 0 0;color:#777;font-size:13px}
+.tabPageHeaderText{min-width:0}
+.tabPageAction{border:0;border-radius:20px;padding:9px 13px;background:#128c7e;color:#fff;font-weight:700;cursor:pointer}
+.newsPage{overflow:hidden;background:#fff}
+.newsPage .storiesBar{border:0;padding:14px 12px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;overflow:auto;align-content:start;flex:1}
+.newsPage .storyItem{width:auto;min-width:0;text-align:center;padding:4px}
+.newsPage .storyRing{width:min(92px,24vw);height:min(92px,24vw);margin:0 auto}
+.newsPage .storyLabel{font-size:13px;font-weight:600}
+.newsPage .storySeenLabel{font-size:11px}
+.communityPage,.callsPage,.profilePage{overflow:auto;background:#fff}
+.communityList,.callsList{padding:8px 12px 90px}
+.communityEmpty,.callsEmpty{padding:35px 20px;text-align:center;color:#777}
+.communityCreate{margin:0 12px 10px}
+.callsItem{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid #eee}
+.callsItem .userInfo{min-width:0}
+.callsItem .toolBtn{margin-left:auto;background:#25d366;color:#fff;border-radius:50%;width:44px;height:44px;padding:0}
+.profilePageInner{padding:20px 16px 100px}
+.profileCard{display:flex;align-items:center;gap:14px;padding:18px;border-radius:18px;background:#f0f2f5;margin-bottom:14px}
+.profileCard .avatar{width:68px;height:68px;font-size:24px}
+.profileCardName{font-size:20px;font-weight:700}
+.profileCardUser{margin-top:3px;color:#777}
+.profileActions{display:grid;gap:9px}
+.profileActionBtn{border:0;border-radius:13px;padding:14px;text-align:left;background:#f0f2f5;cursor:pointer}
+.profileActionBtn strong{display:block}
+.profileActionBtn span{display:block;margin-top:3px;color:#777;font-size:12px}
+.mobileBottomNav{display:none;position:relative;flex:0 0 auto;height:76px;margin-bottom:var(--android-nav-offset,0px);padding:7px 7px max(7px,env(safe-area-inset-bottom));background:#fff;border-top:1px solid #ddd;box-shadow:0 -3px 12px rgba(0,0,0,.08);z-index:100}
+.mobileBottomNav button{flex:1;border:0;background:transparent;color:#666;border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;min-width:0}
+.mobileBottomNav button .navIcon{font-size:23px;line-height:1}
+.mobileBottomNav button .navLabel{font-size:11px;font-weight:600;white-space:nowrap}
+.mobileBottomNav button.active{color:#075e54}
+.mobileBottomNav button.active .navPill{background:#d9fdd3;border-radius:18px;min-width:52px;height:30px;display:flex;align-items:center;justify-content:center}
+.mobileBottomNav button:not(.active) .navPill{height:30px;display:flex;align-items:center;justify-content:center}
+.mobileBottomNav .navBadge{position:absolute;margin:-25px 0 0 25px;min-width:17px;height:17px;padding:0 4px;border-radius:10px;background:#25d366;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center}
+.mobileBottomNav .navProfileAvatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:23px;line-height:1;background:#128c7e;color:#fff;font-weight:700}
+.mobileBottomNav .navProfileAvatar img{width:100%;height:100%;display:block;object-fit:cover;border-radius:50%}
+#layout.mainTabChats .sidebar{display:flex}
+#layout.mainTabChats .chat{display:flex}
+#layout.mainTabNonChat .chat{display:none}
+#layout.mainTabNonChat .sidebar{width:100%;border-right:0}
+
+.quickActionsFab{position:relative;width:52px;height:52px;border:0;border-radius:50%;background:#128c7e;color:#fff;font-size:30px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 14px rgba(0,0,0,.18);transition:transform .16s ease,background .16s ease}
+.quickActionsFab.open{transform:rotate(45deg);background:#075e54}
+.quickActionsFab .requestFabDot{position:absolute;top:2px;right:2px;width:11px;height:11px;border-radius:50%;background:#25d366;border:2px solid #fff;box-sizing:border-box;box-shadow:0 1px 4px rgba(0,0,0,.18);z-index:2}
+.quickActionsMenu{position:absolute;right:12px;bottom:66px;display:grid;gap:8px;width:min(240px,calc(100vw - 36px));padding:10px;background:#fff;border:1px solid #ddd;border-radius:14px;box-shadow:0 14px 35px rgba(0,0,0,.18);z-index:50}
+.quickActionsMenu .actionBtn{width:100%;box-shadow:none}
+.requestBtn{background:#128c7e}
+.requestBadge{display:inline-flex;min-width:20px;height:20px;padding:0 6px;margin-left:4px;border-radius:20px;align-items:center;justify-content:center;background:#fff;color:#128c7e;font-size:12px}
+.requestItem{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #eee}
+.requestItem .avatar{width:42px;height:42px}
+.requestItemInfo{flex:1;min-width:0}
+.requestItemName{font-weight:bold}
+.requestItemUser{font-size:12px;color:#777;margin-top:2px}
+.requestItemActions{display:flex;gap:6px}
+.requestItemActions button{border:0;border-radius:8px;padding:8px 10px;cursor:pointer}
+.modalHeaderRow{display:flex;align-items:center;justify-content:space-between;gap:12px}.requestsExitBtn{display:inline-flex!important;align-items:center;justify-content:center;flex:0 0 auto;padding:10px 12px!important;white-space:nowrap;border:0;border-radius:10px;cursor:pointer}
+.modalHeaderRow h2{margin:0;flex:1}
+
+
+.search{padding:10px;border-bottom:1px solid #ddd}
+.groupsSection{padding:8px 10px 2px;border-bottom:1px solid #eee}.groupAddBtn{display:none}.groupAddBtn.visible{display:inline-flex}.groupsSectionTitle{display:flex;justify-content:space-between;padding:4px 4px 8px;font-size:12px;color:#777;font-weight:bold;text-transform:uppercase}.groupList{display:flex;flex-direction:column;gap:4px;padding-bottom:6px}.groupRow{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;cursor:pointer}.groupRow:hover{background:#f3f4f6}.groupAvatar{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#dbeafe;flex:0 0 56px;overflow:hidden;font-size:26px}.groupAvatar img{display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit}.groupInfo{min-width:0;flex:1}.groupName{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupSub{font-size:12px;color:#777;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupUnread{min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#2563eb;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center}.groupCreateList{display:grid;gap:8px;max-height:320px;overflow:auto;padding:6px 0}.groupMemberOption{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid #e5e7eb;border-radius:10px}.groupMemberOption input{width:18px;height:18px}.groupHeaderAvatar{position:relative;cursor:default}.groupHeaderAvatar.canEdit{cursor:pointer}.groupHeaderAvatar.canEdit::after{content:"📷";position:absolute;right:-2px;bottom:-2px;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #ddd;font-size:12px}
+.search input{width:100%;border:0;outline:none;padding:12px 14px;border-radius:20px;background:#f0f2f5}
+#users{flex:1;overflow-y:auto}
+
+.user{display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid #eee}
+.avatar{width:45px;height:45px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#128c7e;color:#fff;font-weight:bold;overflow:hidden}
+.avatar img{width:100%;height:100%;object-fit:cover}
+.userInfo{flex:1;min-width:0}
+.userName{font-weight:bold}
+.userSub{margin-top:3px;font-size:12px;color:#777}
+.statusRow{display:flex;justify-content:space-between;align-items:center;gap:5px}
+.online{color:#18a558}
+.offline{color:#999}
+.badge{min-width:21px;height:21px;padding:0 6px;display:flex;align-items:center;justify-content:center;border-radius:20px;background:#25d366;color:#fff;font-size:12px;font-weight:bold}
+
+.chat{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.chatHeader{height:70px;padding:12px 18px;border-bottom:1px solid #ddd;display:flex;align-items:center;gap:12px}
+.chatInfo{flex:1;min-width:0}
+.chatTitle{font-weight:bold}
+.chatSubtitle{margin-top:3px;font-size:13px;color:#777}
+.chatTools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.groupActionsWrap{position:relative;display:none}.groupActionsWrap.visible{display:block}.groupActionsToggle{width:42px;height:42px;border:0;border-radius:10px;background:#f0f2f5;cursor:pointer;font-size:23px;line-height:1;display:flex;align-items:center;justify-content:center}.groupActionsMenu{position:absolute;top:calc(100% + 8px);right:0;display:grid;gap:6px;min-width:170px;padding:8px;background:#fff;border:1px solid #ddd;border-radius:12px;box-shadow:0 14px 32px rgba(0,0,0,.18);z-index:120}.groupActionsMenu .toolBtn{width:100%;text-align:left}.groupActionsMenu.hidden{display:none}.toolBtn{border:0;background:#f0f2f5;border-radius:8px;padding:7px 9px;cursor:pointer}.enterChatBtn{padding:11px 18px!important;min-height:46px;font-size:15px;font-weight:700;border-radius:10px!important}
+.callBtn{background:#25d366;color:#fff}
+.hangBtn{background:#b00020;color:#fff}
+
+#messages{flex:1;min-height:0;overflow-y:auto;padding:20px;background:#e5ddd5}
+.empty{height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:#666}
+.messageRow{display:flex;margin:7px 0}
+.mine{justify-content:flex-end}
+.bubble{max-width:75%;padding:9px 12px;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.15);word-break:break-word}
+.mine .bubble{background:#d9fdd3}
+.from{margin-bottom:4px;color:#666;font-size:11px;font-weight:bold}
+.time{margin-top:5px;color:#777;font-size:10px;text-align:right}
+.deletedText{font-style:italic;color:#777}
+.messageContext{display:flex;align-items:center;gap:6px;margin-top:5px}
+.deleteBtn{border:0;background:transparent;color:#b00;font-size:11px;cursor:pointer}
+
+.messageInput{display:flex;gap:8px;padding:10px;background:#f0f2f5;border-top:1px solid #ddd;align-items:center;flex:0 0 auto;position:relative;z-index:20;padding-bottom:max(10px,env(safe-area-inset-bottom))}
+.messageInput input{flex:1;border:0;outline:none;border-radius:25px;padding:14px 18px;min-width:0}
+.attachBtn{width:50px;height:50px;border:0;border-radius:50%;background:#fff;color:#128c7e;cursor:pointer;font-size:21px;flex-shrink:0}
+.attachBtn:disabled{opacity:.5;cursor:not-allowed}
+.mediaName{font-size:12px;color:#555;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.send{width:50px;height:50px;border:0;border-radius:50%;background:#128c7e;color:#fff;cursor:pointer;font-size:20px;flex-shrink:0}
+.send:disabled{opacity:.5;cursor:not-allowed}
+.chatMedia{max-width:min(320px,70vw);border-radius:12px;margin:5px 0;display:block}
+.chatVideo{max-height:280px;background:#000}
+.chatAudio{width:min(320px,70vw);margin:5px 0}
+.fileAttachment{display:flex;align-items:center;gap:9px;padding:10px 12px;background:rgba(0,0,0,.06);border-radius:12px;text-decoration:none;color:inherit;max-width:320px}
+.fileAttachmentIcon{font-size:24px}
+.fileAttachmentName{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.back{display:none;border:0;background:transparent;font-size:25px;cursor:pointer}
+
+#notifications{position:fixed;top:15px;right:15px;z-index:9999;width:min(360px,calc(100vw - 30px))}
+
+.moderationModalBackdrop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.62);z-index:12000}.moderationModalBackdrop.open{display:flex}.moderationModalBox{width:min(560px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 18px 70px rgba(0,0,0,.35);padding:24px;box-sizing:border-box}.moderationModalHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.moderationModalIcon{font-size:38px;line-height:1}.moderationModalTitle{margin:0;font-size:22px}.moderationModalMeta{margin-top:4px;color:#777;font-size:13px}.moderationModalMessage{margin:18px 0;padding:16px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;white-space:pre-wrap;word-break:break-word;color:#3f3f46}.moderationAppealLabel{display:block;font-weight:700;margin:12px 0 7px}.moderationAppealText{width:100%;min-height:130px;resize:vertical;box-sizing:border-box;padding:13px;border:1px solid #d4d4d8;border-radius:12px;font:inherit;outline:none}.moderationAppealText:focus{border-color:#128c7e;box-shadow:0 0 0 3px rgba(18,140,126,.1)}.moderationModalActions{display:flex;gap:10px;margin-top:14px}.moderationModalActions button{flex:1;padding:12px;border:0;border-radius:12px;cursor:pointer}.moderationClose{background:#eee}.moderationAppeal{background:#128c7e;color:#fff}.moderationModalStatus{min-height:22px;margin-top:10px;font-size:14px}.moderationCloseTop{min-width:44px;min-height:44px;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center}.moderationModalBackdrop.open{display:flex !important}.moderationModalBackdrop button{pointer-events:auto}.moderationModalBackdrop{pointer-events:auto}
+.commandBtn{background:#111827!important;color:#fff}.commandModalBox{max-width:820px!important;background:#0b1120!important;color:#e5e7eb}.commandModalHeader{display:flex;align-items:center;justify-content:space-between;gap:10px}.commandModalHeader h2{margin:0}.commandOutput{height:340px;max-height:55vh;overflow:auto;background:#020617;border:1px solid #1f2937;border-radius:12px;padding:12px;font-family:Consolas,Monaco,monospace;font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-word}.commandOutputLine{margin:0 0 6px}.commandOutputPrompt{color:#60a5fa}.commandOutputOk{color:#e5e7eb}.commandOutputError{color:#fca5a5}.commandInputRow{display:flex;gap:8px;margin-top:10px}.commandInputRow input{flex:1;min-width:0;background:#111827;color:#fff;border:1px solid #374151;padding:12px;border-radius:10px;outline:none}.commandInputRow input:focus{border-color:#60a5fa}.commandInputRow button{padding:12px 16px;border:0;border-radius:10px;background:#2563eb;color:#fff;cursor:pointer}.commandHint{margin-top:8px;font-size:12px;color:#9ca3af;line-height:1.4}.commandRankBadge{display:inline-block;margin-left:8px;padding:3px 8px;border-radius:999px;background:#1f2937;color:#93c5fd;font-size:11px;font-weight:700;vertical-align:middle}
+.notification{padding:14px;margin-bottom:10px;background:#fff;border-left:5px solid #25d366;border-radius:14px;box-shadow:0 6px 25px rgba(0,0,0,.2);cursor:pointer}
+.notificationTitle{font-weight:bold;margin-bottom:5px}
+.notificationText{color:#555;font-size:14px}
+
+.modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.45);z-index:5000}
+.modalBox{position:relative;width:100%;max-width:440px;max-height:90vh;overflow-y:auto;background:#fff;border-radius:18px;padding:25px;box-sizing:border-box}.modalHeaderRow{position:sticky;top:-25px;z-index:5;background:#fff;padding:25px 0 12px}
+.modalBox h2{margin-top:0}
+.modalInput{width:100%;padding:13px;border:1px solid #ddd;border-radius:10px;outline:none;margin:6px 0}
+.modalRow{display:flex;gap:10px;margin-top:12px}
+.modalRow button{flex:1;padding:12px;border:0;border-radius:10px;cursor:pointer}
+.primary{background:#128c7e;color:#fff}
+.danger{background:#b00020;color:#fff}
+.muted{background:#eee}
+.modalError{min-height:20px;color:#c00;font-size:14px;margin-top:7px}
+
+.profilePreview{width:90px;height:90px;border-radius:50%;background:#ddd;overflow:hidden;margin:10px auto}
+.profilePreview img{width:100%;height:100%;object-fit:cover}
+.blockList{max-height:220px;overflow:auto;margin-top:10px}
+.blockItem{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #eee}
+
+.settingsMenu{display:grid;gap:10px}
+.settingsItem{width:100%;text-align:left;border:0;background:#f5f5f5;border-radius:12px;padding:14px;cursor:pointer}
+.settingsItemTitle{font-weight:bold}
+.settingsItemSub{font-size:12px;color:#777;margin-top:3px}
+.messageLoggingSetting{margin-top:12px;padding:14px;border:1px solid #ddd;border-radius:12px;background:#fafafa}
+.messageLoggingSetting label{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.messageLoggingSetting input{width:20px;height:20px;flex:0 0 auto;margin:1px 0 0}
+.messageLoggingSettingTitle{font-weight:700}
+.messageLoggingSettingSub{font-size:12px;color:#777;margin-top:4px;line-height:1.4}
+.messageLoggingSettingStatus{min-height:18px;margin-top:8px;font-size:13px}
+
+.storiesBar{padding:10px;border-bottom:1px solid #ddd;display:flex;gap:10px;overflow-x:auto;background:#fff}
+.storyItem{border:0;background:transparent;min-width:62px;width:62px;padding:0;cursor:pointer}
+.storyRing{width:58px;height:58px;border-radius:50%;padding:3px;background:linear-gradient(135deg,#25d366,#128c7e,#075e54)}
+.storyRing.seen{background:#b8b8b8}
+.storySeenLabel{font-size:9px;color:#777;margin-top:2px}
+.storyAvatar{width:100%;height:100%;border-radius:50%;overflow:hidden;background:#eee;display:flex;align-items:center;justify-content:center;border:3px solid #fff;font-weight:bold;color:#075e54}
+.storyAvatar img{width:100%;height:100%;object-fit:cover}
+.storyLabel{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
+.storyAdd{font-size:30px;color:#128c7e}
+.storyModal .modalBox{max-width:520px;padding:18px}
+.storyComposer{display:grid;gap:10px}
+.storyComposer textarea{width:100%;min-height:140px;resize:none;border:1px solid #ddd;border-radius:12px;padding:14px;outline:none}
+.storyPreview{min-height:260px;border-radius:16px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#075e54;color:#fff;font-size:26px;text-align:center;padding:25px;word-break:break-word}
+.storyPreview img{width:100%;height:100%;object-fit:cover}
+.storyTypeRow{display:flex;gap:8px}
+.storyTypeRow button{flex:1;padding:10px;border:0;border-radius:10px;background:#eee;cursor:pointer}
+.storyTypeRow .active{background:#128c7e;color:#fff}
+
+.storyViewer{position:relative;background:#111;color:#fff;width:min(520px,95vw);height:min(800px,90vh);border-radius:16px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.storyViewer img{width:100%;height:100%;object-fit:contain}
+.storyViewerText{font-size:32px;padding:35px;text-align:center;word-break:break-word}
+.storyClose{position:absolute;right:12px;top:10px;z-index:2;border:0;background:rgba(0,0,0,.45);color:#fff;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:20px}
+.storyNav{position:absolute;inset:0;display:flex;z-index:1}
+.storyNav button{flex:1;border:0;background:transparent;cursor:pointer}
+.storyProgress{position:absolute;top:8px;left:8px;right:8px;z-index:2;height:3px;background:rgba(255,255,255,.35);border-radius:3px}
+.storyProgress span{display:block;height:100%;background:#fff;border-radius:3px;width:0}
+.storyMeta{position:absolute;left:14px;top:18px;z-index:2;display:flex;align-items:center;gap:8px;text-shadow:0 1px 3px #000}
+.storyMeta .avatar{width:34px;height:34px}
+.storyViews{position:absolute;left:14px;bottom:14px;z-index:2;padding:8px 10px;border-radius:10px;background:rgba(0,0,0,.45);font-size:12px;max-width:80%}
+.storyDelete{position:absolute;bottom:14px;right:14px;z-index:2;border:0;border-radius:10px;padding:9px 12px;background:rgba(176,0,32,.9);color:#fff;cursor:pointer}
+
+
+
+/* =====================================================
+   PANTALLA DE LLAMADA ACTIVA
+===================================================== */
+.activeCallScreen{
+  position:fixed;
+  inset:0;
+  z-index:100000;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  background:linear-gradient(180deg,#075e54 0%,#063f3a 42%,#111827 100%);
+  color:#fff;
+}
+
+.activeCallScreen.visible{
+  display:flex;
+}
+
+.activeCallContent{
+  width:100%;
+  max-width:520px;
+  min-height:100%;
+  min-height:100dvh;
+  padding:42px 24px 32px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  text-align:center;
+}
+
+.activeCallTopLabel{
+  font-size:14px;
+  opacity:.82;
+  letter-spacing:.3px;
+}
+
+.activeCallAvatar{
+  width:118px;
+  height:118px;
+  margin-top:30px;
+  border-radius:50%;
+  overflow:hidden;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#128c7e;
+  border:4px solid rgba(255,255,255,.22);
+  box-shadow:0 12px 35px rgba(0,0,0,.30);
+  flex-shrink:0;
+}
+
+.activeCallAvatar img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+
+.activeCallAvatarLetter{
+  font-size:52px;
+  font-weight:bold;
+}
+
+.activeCallName{
+  margin-top:22px;
+  font-size:28px;
+  line-height:1.2;
+  font-weight:700;
+  word-break:break-word;
+}
+
+.activeCallStatus{
+  margin-top:9px;
+  font-size:16px;
+  opacity:.84;
+}
+
+.activeCallTimer{
+  margin-top:7px;
+  font-size:17px;
+  opacity:.82;
+  font-variant-numeric:tabular-nums;
+  min-height:21px;
+}
+
+.activeCallFill{
+  flex:1;
+  min-height:30px;
+}
+
+.activeCallRecordTop{
+  position:absolute;
+  top:22px;
+  right:22px;
+  width:58px;
+  height:58px;
+  border:0;
+  border-radius:50%;
+  background:rgba(255,255,255,.16);
+  color:#fff;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:2px;
+  cursor:pointer;
+  box-shadow:0 6px 20px rgba(0,0,0,.18);
+  -webkit-tap-highlight-color:transparent;
+  backdrop-filter:blur(6px);
+  z-index:3;
+}
+.activeCallRecordTop:active{transform:scale(.95)}
+.activeCallRecordTop.active{background:#fff;color:#111827}
+.activeCallRecordTop .activeCallControlIcon{font-size:23px}
+.activeCallRecordTop .activeCallControlText{font-size:9px}
+
+.activeCallControls{
+  display:flex;
+  justify-content:center;
+  gap:22px;
+  margin-bottom:28px;
+}
+
+.activeCallControl{
+  width:82px;
+  height:82px;
+  border:0;
+  border-radius:50%;
+  background:rgba(255,255,255,.15);
+  color:#fff;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+  cursor:pointer;
+  box-shadow:0 6px 20px rgba(0,0,0,.16);
+  -webkit-tap-highlight-color:transparent;
+}
+
+.recordingBanner{display:none;margin:10px auto 0;padding:8px 12px;border-radius:999px;background:#7f1d1d;color:#fff;font-size:13px;font-weight:bold;width:max-content}.recordingBanner.visible{display:block}.recordingDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#fff;margin-right:6px}
+.activeCallControl:active{
+  transform:scale(.95);
+}
+
+.activeCallControl.active{
+  background:#fff;
+  color:#111827;
+}
+
+.activeCallControlIcon{
+  font-size:27px;
+  line-height:1;
+}
+
+.activeCallControlText{
+  font-size:11px;
+  opacity:.95;
+}
+
+.activeCallHangup{
+  width:82px;
+  height:82px;
+  border:0;
+  border-radius:50%;
+  background:#ef4444;
+  color:#fff;
+  font-size:32px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transform:rotate(135deg);
+  box-shadow:0 10px 28px rgba(0,0,0,.28);
+  -webkit-tap-highlight-color:transparent;
+}
+
+.activeCallHangup:active{
+  transform:rotate(135deg) scale(.95);
+}
+
+.activeCallHangupText{
+  margin-top:9px;
+  font-size:12px;
+  opacity:.82;
+}
+
+@media(max-width:420px){
+  .activeCallRecordTop{top:16px;right:16px;width:54px;height:54px}
+  .activeCallContent{padding:35px 18px 26px}
+  .activeCallAvatar{width:104px;height:104px}
+  .activeCallName{font-size:24px}
+  .activeCallControl{width:74px;height:74px}
+  .activeCallHangup{width:76px;height:76px}
+}
+
+
+@media(max-width:900px){
+  .mobileBottomNav{display:flex}
+  /* Al entrar en una conversación, en móvil desaparece la navegación inferior
+     para dejar toda la pantalla al chat. */
+  #layout.mobileChat + #mobileBottomNav{display:none !important}
+  .mainTabPage{min-height:0}
+  .newsPage .storiesBar{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  .newsPage .storyRing{width:76px;height:76px}
+  .quickActions{right:16px;bottom:72px}
+  .mobileChat .mobileBottomNav{display:none}
+}
+@media(min-width:901px){
+  #layout{flex:1;width:100%}
+  .mainTabPage{min-height:0}
+  .newsPage .storiesBar{grid-template-columns:repeat(5,minmax(0,1fr))}
+}
+@media(max-width:900px){
+  .chatHeader{min-height:82px;height:auto;padding:20px 10px 8px;gap:8px} 
+  html,body{height:100%;height:100dvh}
+  #app{height:100%;height:100dvh}
+  .layout{height:100%;height:100dvh;min-height:0}
+  .sidebar{width:100%;min-height:0}
+  .chat{display:none;height:100%;min-height:0}
+  #layout.mobileChat .sidebar{display:none !important}
+  #layout.mobileChat .chat{display:flex !important;min-height:0}
+  .back{display:block}
+  .messageInput{padding-left:8px;padding-right:8px}
+  .messageInput input{min-height:50px;font-size:16px}
+}
+
+@media(max-width:420px){
+  .chatHeader{min-height:82px;height:auto;padding:20px 10px 8px;gap:8px}
+  .chatTools{gap:4px}
+  .toolBtn{padding:7px 8px}
+  #messages{padding:12px}
+  .messageInput{gap:6px;padding-top:8px}
+  .attachBtn,.send{width:46px;height:46px}
+}
+
+.accessBlockedModal{background:rgba(0,0,0,.58);z-index:200000;}
+.accessBlockedModal .accessBlockedBox{max-width:420px;text-align:center;padding:32px 26px;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,.28)}
+.accessBlockedIcon{font-size:54px;line-height:1;margin-bottom:14px}
+.accessBlockedTitle{margin:0;font-size:24px;line-height:1.25;color:#111827}
+.accessBlockedText{margin:12px 0 20px;color:#6b7280;font-size:14px;line-height:1.5}
+
+
+
+/* =====================================================
+   NAVEGACIÓN DE PC: barra lateral vertical tipo WhatsApp Web
+   En móvil se mantiene la barra inferior original.
+===================================================== */
+@media(min-width:901px){
+  #app{
+    position:relative;
+    flex-direction:column;
+  }
+
+  #layout{
+    width:calc(100% - 90px);
+    max-width:none;
+    height:100%;
+    margin:0 0 0 90px;
+  }
+
+  #mobileBottomNav{
+    position:fixed;
+    left:0;
+    top:0;
+    bottom:0;
+    width:90px;
+    height:100dvh;
+    box-sizing:border-box;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:flex-start;
+    gap:8px;
+    padding:10px 8px;
+    background:#fff;
+    border-right:1px solid #ddd;
+    border-top:0;
+    box-shadow:2px 0 10px rgba(0,0,0,.05);
+    z-index:1000;
+  }
+
+  #mobileBottomNav button{
+    flex:0 0 58px;
+    width:58px;
+    min-width:58px;
+    height:58px;
+    padding:0;
+    border-radius:18px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:0;
+  }
+
+  #mobileBottomNav button .navPill,
+  #mobileBottomNav button:not(.active) .navPill,
+  #mobileBottomNav button.active .navPill{
+    width:48px;
+    min-width:48px;
+    height:48px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    position:relative;
+    background:transparent;
+  }
+
+  #mobileBottomNav button.active .navPill{
+    background:#d9fdd3;
+  }
+
+  #mobileBottomNav button .navIcon{
+    font-size:24px;
+    line-height:1;
+  }
+
+  #mobileBottomNav button .navLabel{
+    display:none;
+  }
+
+  #mobileBottomNav .navBadge{
+    position:absolute;
+    top:-2px;
+    right:-2px;
+    margin:0;
+    min-width:18px;
+    height:18px;
+    padding:0 4px;
+    border-radius:10px;
+    font-size:10px;
+  }
+
+  /* Deja "Tú" abajo, como el rail lateral de WhatsApp Web. */
+  #mobileBottomNav button[data-main-tab="profile"]{
+    margin-top:auto;
+  }
+}
+
+/* Android: deja un pequeño espacio extra sobre la navegación del sistema.
+   El valor se calcula por JS y solo se aplica en Android; en PC/iPhone queda en 0. */
+@media(max-width:900px){
+  .mobileBottomNav{
+    margin-bottom:var(--android-nav-offset,0px);
+  }
+}
+
+@media(min-width:901px){
+  .communityPage{overflow:hidden}
+  .communityList{padding:14px 18px 24px;overflow:auto}
+  .groupRow{max-width:900px;min-height:76px;padding:10px 14px;border-radius:14px}
+  .groupName{font-size:18px}
+  .groupSub{font-size:13px}
+}
+
+@media(max-width:900px){
+  .communityList{padding:8px 12px 96px;overflow:auto}
+  .groupRow{min-height:72px;padding:10px 8px;border-radius:12px}
+  .groupAvatar{width:52px;height:52px;flex-basis:52px}
+  .groupName{font-size:17px}
+  .groupSub{font-size:13px}
+
+  #app{
+    width:100%;
+  }
+
+  #layout{
+    width:100%;
+    max-width:none;
+    margin:0;
+  }
+
+  .sidebar{
+    width:100%;
+  }
+
+  .callsList{
+    padding:6px 14px 112px;
+  }
+
+  .callsItem{
+    gap:14px;
+    padding:14px 4px;
+    min-height:92px;
+  }
+
+  .callsItem .avatar{
+    width:64px;
+    height:64px;
+    flex:0 0 64px;
+  }
+
+  .callsItem .userInfo{
+    flex:1;
+    min-width:0;
+  }
+
+  .callsItem .userName{
+    font-size:19px;
+  }
+
+  .callsItem .online,
+  .callsItem .offline{
+    font-size:16px;
+  }
+
+  .callsItem .toolBtn{
+    width:56px;
+    height:56px;
+    flex:0 0 56px;
+    font-size:22px;
+  }
+}
+
+
+/* =====================================================
+   TEMA OSCURO
+   Se activa con html.darkTheme y se guarda en localStorage.
+===================================================== */
+html.darkTheme body{
+  background:#0f1113;
+  color:#e7e9ea;
+}
+html.darkTheme #authScreen{
+  background:linear-gradient(135deg,#0b3f39,#062d29);
+}
+html.darkTheme .authBox,
+html.darkTheme .sidebar,
+html.darkTheme .mainTabPage,
+html.darkTheme .tabPageHeader,
+html.darkTheme .chatHeader,
+html.darkTheme .profileCard,
+html.darkTheme .profileActionBtn,
+html.darkTheme .mobileBottomNav,
+html.darkTheme .settingsItem,
+html.darkTheme .notification,
+html.darkTheme .moderationModalBox,
+html.darkTheme .modalBox{
+  background:#181a1b;
+  color:#e7e9ea;
+}
+html.darkTheme .layout{background:#181a1b}
+html.darkTheme .sidebar{border-right-color:#303234}
+html.darkTheme .tabPageHeader,
+html.darkTheme .chatHeader,
+html.darkTheme .actions,
+html.darkTheme .search,
+html.darkTheme .user,
+html.darkTheme .callsItem,
+html.darkTheme .groupsSection,
+html.darkTheme .blockItem,
+html.darkTheme .mobileBottomNav,
+html.darkTheme .messageInput{
+  border-color:#303234;
+}
+html.darkTheme .sidebarHeader{background:#064e46}
+html.darkTheme .search input,
+html.darkTheme .messageInput input,
+html.darkTheme .modalInput,
+html.darkTheme .moderationAppealText,
+html.darkTheme .authInput,
+html.darkTheme .storyComposer textarea{
+  background:#242729;
+  color:#f2f4f5;
+  border-color:#3b3f42;
+}
+html.darkTheme .search input::placeholder,
+html.darkTheme .messageInput input::placeholder,
+html.darkTheme .authInput::placeholder,
+html.darkTheme .modalInput::placeholder{
+  color:#9aa0a6;
+}
+html.darkTheme .chatSubtitle,
+html.darkTheme .tabPageHeaderSub,
+html.darkTheme .userSub,
+html.darkTheme .groupSub,
+html.darkTheme .settingsItemSub,
+html.darkTheme .profileCardUser,
+html.darkTheme .requestItemUser,
+html.darkTheme .notificationText,
+html.darkTheme .mediaName,
+html.darkTheme .from,
+html.darkTheme .time,
+html.darkTheme .deletedText,
+html.darkTheme .empty,
+html.darkTheme .offline,
+html.darkTheme .storySeenLabel,
+html.darkTheme .blockItem,
+html.darkTheme .messageLoggingSettingSub{
+  color:#9aa0a6;
+}
+html.darkTheme .communityPage,
+html.darkTheme .callsPage,
+html.darkTheme .profilePage,
+html.darkTheme .newsPage,
+html.darkTheme .storiesBar{
+  background:#181a1b;
+}
+html.darkTheme .storiesBar{
+  border-bottom-color:#303234;
+}
+html.darkTheme .groupRow:hover,
+html.darkTheme .profileActionBtn:hover,
+html.darkTheme .settingsItem:hover{
+  background:#232628;
+}
+html.darkTheme .toolBtn,
+html.darkTheme .muted,
+html.darkTheme .moderationClose,
+html.darkTheme .storyTypeRow button,
+html.darkTheme .messageLoggingSetting,
+html.darkTheme .fileAttachment{
+  background:#242729;
+  color:#e7e9ea;
+}
+html.darkTheme .attachBtn{
+  background:#242729;
+  color:#6de7c2;
+}
+html.darkTheme #messages{
+  background:#0f1113;
+}
+html.darkTheme .bubble{
+  background:#242729;
+  color:#e7e9ea;
+  box-shadow:0 1px 2px rgba(0,0,0,.35);
+}
+html.darkTheme .mine .bubble{
+  background:#005c4b;
+  color:#effffb;
+}
+html.darkTheme .messageInput{
+  background:#1c1f20;
+}
+html.darkTheme .mobileBottomNav button{color:#aeb4b8}
+html.darkTheme .mobileBottomNav button.active{color:#8af0cf}
+html.darkTheme #mobileBottomNav{
+  background:#151718;
+  border-right-color:#303234;
+  box-shadow:2px 0 10px rgba(0,0,0,.35);
+}
+html.darkTheme #mobileBottomNav button.active .navPill{
+  background:#17483f;
+}
+html.darkTheme .storyAvatar{
+  background:#242729;
+  border-color:#181a1b;
+  color:#8af0cf;
+}
+html.darkTheme .storyItem{
+  color:#e7e9ea;
+}
+html.darkTheme .storyLabel{
+  color:#e7e9ea;
+}
+html.darkTheme .storySeenLabel{
+  color:#9aa0a6;
+}
+html.darkTheme .storyComposer textarea:focus,
+html.darkTheme .modalInput:focus,
+html.darkTheme .moderationAppealText:focus{
+  border-color:#128c7e;
+  box-shadow:0 0 0 3px rgba(18,140,126,.18);
+}
+html.darkTheme .modal,
+html.darkTheme .moderationModalBackdrop{
+  background:rgba(0,0,0,.70);
+}
+html.darkTheme .modalHeaderRow{
+  background:#181a1b;
+}
+html.darkTheme .blockItem,
+html.darkTheme .requestItem,
+html.darkTheme .groupMemberOption{
+  border-bottom-color:#303234;
+  border-color:#3b3f42;
+}
+html.darkTheme .groupMemberOption{
+  background:#202324;
+}
+html.darkTheme .quickActionsMenu{
+  background:#181a1b;
+  border-color:#3b3f42;
+  box-shadow:0 14px 35px rgba(0,0,0,.45);
+}
+html.darkTheme .notification{
+  box-shadow:0 6px 25px rgba(0,0,0,.45);
+}
+html.darkTheme .profileCard .avatar{
+  border:0;
+}
+html.darkTheme .accessBlockedModal .accessBlockedBox{
+  background:#181a1b;
+  color:#e7e9ea;
+}
+html.darkTheme .accessBlockedTitle{color:#f3f4f6}
+html.darkTheme .accessBlockedText{color:#a1a1aa}
+html.darkTheme .groupHeaderAvatar.canEdit::after{
+  background:#242729;
+  border-color:#3b3f42;
+}
+html.darkTheme .settingsItemSub,
+html.darkTheme .messageLoggingSettingSub{color:#a7adb2}
+html.darkTheme .commandModalBox{background:#0b1120!important;color:#e5e7eb}
+html.darkTheme .commandModalBox input{background:#111827!important;color:#fff!important}
+
+</style>
+</head>
+
+<body>
+
+<div id="authScreen">
+  <div class="authBox">
+    <h1>💬 Mi Chat</h1>
+    <div id="authDescription">Inicia sesión para entrar.</div>
+
+    <input id="authUsername" class="authInput" placeholder="Usuario, correo o teléfono" maxlength="254" autocomplete="username">
+    <input id="authEmail" class="authInput" type="email" placeholder="Correo electrónico (opcional)" autocomplete="email" style="display:none">
+    <input id="authPhone" class="authInput" type="tel" placeholder="Teléfono (opcional)" autocomplete="tel" style="display:none">
+    <div id="authEmailHint" style="display:none;color:#777;font-size:13px;margin:-4px 0 10px">Puedes dejar el correo y el teléfono vacíos y añadirlos más tarde en tu perfil.</div>
+    <input id="authPassword" class="authInput" type="password" placeholder="Contraseña" autocomplete="current-password">
+
+    <button id="authButton" class="authButton">Iniciar sesión</button>
+    <button id="forgotPasswordButton" class="switchButton" type="button">¿Has olvidado tu contraseña?</button>
+    <button id="switchAuth" class="switchButton">Crear una cuenta</button>
+    <div id="authError"></div>
+  </div>
+</div>
+
+
+<!-- ACCESO BLOQUEADO -->
+<div id="accessBlockedModal" class="modal accessBlockedModal" style="display:none" aria-hidden="true">
+  <div class="modalBox accessBlockedBox">
+    <div class="accessBlockedIcon">🔒</div>
+    <h2 class="accessBlockedTitle">No tienes acceso a este servicio</h2>
+    <p id="accessBlockedText" class="accessBlockedText">Tu acceso a Mi Chat ha sido bloqueado.</p>
+    <div id="globalUnlockFields" style="display:none;text-align:left">
+      <label for="globalUnlockPassword" style="display:block;font-size:13px;color:#374151;margin-bottom:6px">Contraseña de acceso</label>
+      <input id="globalUnlockPassword" type="password" autocomplete="current-password" placeholder="Contraseña de acceso" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #d1d5db;border-radius:10px;margin-bottom:10px">
+      <button id="globalUnlockButton" type="button" style="width:100%;padding:13px 16px;border:0;border-radius:10px;cursor:pointer;font-size:16px;background:#111827;color:#fff">Entrar</button>
+      <div id="globalUnlockError" style="margin-top:10px;color:#b91c1c;font-size:13px;min-height:18px"></div>
+    </div>
+    <button id="accessBlockedLogout" type="button" style="width:100%;padding:13px 16px;border:0;border-radius:10px;cursor:pointer;font-size:16px">Cerrar sesión</button>
+  </div>
+</div>
+
+<!-- BIENVENIDA TRAS EL REGISTRO -->
+<div id="welcomeModal" class="modal" aria-hidden="true">
+  <div class="modalBox" style="max-width:460px;text-align:center">
+    <div style="font-size:52px;margin-bottom:8px">👋</div>
+    <h2 style="margin-bottom:10px">¡Bienvenido a Mi Chat!</h2>
+    <p style="line-height:1.55;margin:0 0 18px;color:#444">
+      Tu cuenta se ha creado correctamente.<br><br>
+      <strong>Importante:</strong> otros usuarios solo podrán hablar contigo cuando te envíen una solicitud de contacto y tú la aceptes, o cuando tú les envíes una solicitud y ellos la acepten.
+    </p>
+    <button id="closeWelcomeModal" class="primary" type="button" style="width:100%;padding:13px 16px;border:0;border-radius:10px;cursor:pointer;font-size:16px">
+      Entendido
+    </button>
+  </div>
+</div>
+
+<div id="app">
+  <div id="layout" class="layout">
+
+    <aside class="sidebar">
+
+      <div class="sidebarHeader">
+        <div class="headerTop">
+          <h2>💬 Mi Chat</h2>
+
+          <div class="topButtons">
+            <button class="smallBtn" id="settingsButton">⚙️</button>
+            <button class="smallBtn" id="logoutButton">Salir</button>
+          </div>
+        </div>
+
+        <div class="onlineCount">
+          <span id="onlineCount">0</span> en línea
+        </div>
+      </div>
+
+      <div id="chatsPage" class="mainTabPage">
+        <div class="quickActions">
+          <button id="quickActionsToggle" class="quickActionsFab" type="button" aria-label="Más acciones" aria-expanded="false">+<span id="requestsFabDot" class="requestFabDot hidden" aria-hidden="true"></span></button>
+          <div id="quickActionsMenu" class="quickActionsMenu hidden">
+            <button class="actionBtn" id="newChatButton" type="button">
+              ➕ Enviar solicitud
+            </button>
+            <button class="actionBtn" id="newGroupButton" type="button">
+              👥 Crear grupo
+            </button>
+            <button class="actionBtn requestBtn" id="requestsButton" type="button">
+              📥 Solicitudes <span id="requestsBadge" class="requestBadge hidden">0</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="actions" id="commandActions">
+          <button class="actionBtn commandBtn hidden" id="commandButton" type="button">
+            🖥️ Consola de comandos
+          </button>
+        </div>
+
+        <div class="search">
+          <input id="searchInput" placeholder="Buscar usuarios..." autocomplete="off">
+        </div>
+
+        <div id="users"></div>
+      </div>
+
+      <div id="newsPage" class="mainTabPage hiddenTab newsPage">
+        <div class="tabPageHeader">
+          <div class="tabPageHeaderText">
+            <h2>Novedades</h2>
+            <div class="tabPageHeaderSub">Historias de tus contactos</div>
+          </div>
+          <button id="newsCreateStoryButton" class="tabPageAction" type="button">＋ Mi historia</button>
+        </div>
+        <div id="storiesBar" class="storiesBar"></div>
+      </div>
+
+      <div id="communityPage" class="mainTabPage hiddenTab communityPage">
+        <div class="tabPageHeader">
+          <div class="tabPageHeaderText">
+            <h2>Comunidades</h2>
+            <div class="tabPageHeaderSub"><span id="groupsCount">0</span> comunidades</div>
+          </div>
+          <button id="communityCreateButton" class="tabPageAction" type="button">＋ Crear</button>
+        </div>
+        <div id="groupList" class="communityList"></div>
+      </div>
+
+      <div id="callsPage" class="mainTabPage hiddenTab callsPage">
+        <div class="tabPageHeader">
+          <div class="tabPageHeaderText">
+            <h2>Llamadas</h2>
+            <div class="tabPageHeaderSub">Llama a tus contactos</div>
+          </div>
+        </div>
+        <div id="callsList" class="callsList"></div>
+      </div>
+
+      <div id="profilePage" class="mainTabPage hiddenTab profilePage">
+        <div class="tabPageHeader">
+          <div class="tabPageHeaderText">
+            <h2>Tú</h2>
+            <div class="tabPageHeaderSub">Tu cuenta y configuración</div>
+          </div>
+        </div>
+        <div class="profilePageInner">
+          <div id="profileTabCard" class="profileCard"></div>
+          <div class="profileActions">
+            <button id="profileEditButton" class="profileActionBtn" type="button">
+              <strong>👤 Editar perfil</strong><span>Cambia tu nombre, foto, correo o teléfono.</span>
+            </button>
+            <button id="profileSettingsButton" class="profileActionBtn" type="button">
+              <strong>⚙️ Ajustes</strong><span>Notificaciones, privacidad y otras opciones.</span>
+            </button>
+            <button id="profileAccountButton" class="profileActionBtn" type="button">
+              <strong>🔐 Cuenta</strong><span>Usuario y contraseña.</span>
+            </button>
+            <button id="profileBlockedButton" class="profileActionBtn" type="button">
+              <strong>🚫 Usuarios bloqueados</strong><span>Gestiona tus bloqueos.</span>
+            </button>
+            <button id="profileLogoutButton" class="profileActionBtn" type="button">
+              <strong>Salir</strong><span>Cerrar sesión de Mi Chat.</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="chat">
+
+      <header class="chatHeader">
+
+        <button id="backButton" class="back">←</button>
+
+        <div id="headerAvatar" class="avatar">?</div>
+
+        <div class="chatInfo">
+          <div id="chatTitle" class="chatTitle">
+            Selecciona una conversación
+          </div>
+
+          <div id="chatSubtitle" class="chatSubtitle">
+            Usa «Nuevo chat» para iniciar una conversación.
+          </div>
+        </div>
+
+        <div class="chatTools">
+          <button id="callButton" class="toolBtn callBtn hidden">📞 Llamar</button>
+          <button id="hangupButton" class="toolBtn hangBtn hidden">📵 Colgar</button>
+          <div id="groupActionsWrap" class="groupActionsWrap" aria-hidden="true">
+            <button id="groupActionsToggle" class="groupActionsToggle" type="button" aria-label="Opciones del grupo" aria-expanded="false">⋮</button>
+            <div id="groupActionsMenu" class="groupActionsMenu hidden">
+              <button id="groupRenameButton" class="toolBtn groupAddBtn hidden" type="button">✏️ Cambiar nombre</button>
+              <button id="groupAddMembersButton" class="toolBtn groupAddBtn hidden" type="button">👥 Añadir personas</button>
+              <button id="groupDeleteButton" class="toolBtn groupAddBtn hidden" type="button">🗑️ Borrar grupo</button>
+            </div>
+          </div>
+          <button id="blockCurrentButton" class="toolBtn hidden" type="button">🚫 Bloquear</button>
+        </div>
+
+      </header>
+
+      <div id="messages">
+        <div class="empty">Aquí aparecerán tus mensajes.</div>
+      </div>
+
+      <div class="messageInput">
+        <button id="attachButton" class="attachBtn" type="button" disabled title="Enviar archivo">📎</button>
+        <input id="fileInput" type="file" hidden accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx">
+        <span id="mediaName" class="mediaName" style="display:none"></span>
+        <input id="messageInput" placeholder="Escribe un mensaje..." autocomplete="off" disabled maxlength="5000">
+        <button id="sendButton" class="send" disabled>➤</button>
+      </div>
+
+    </main>
+  </div>
+
+  <nav id="mobileBottomNav" class="mobileBottomNav" aria-label="Navegación principal">
+    <button type="button" data-main-tab="chats" class="active">
+      <span class="navPill"><span class="navIcon">💬</span><span id="navRequestsBadge" class="navBadge hidden">0</span></span>
+      <span class="navLabel">Chats</span>
+    </button>
+    <button type="button" data-main-tab="news">
+      <span class="navPill"><span class="navIcon">◉</span></span>
+      <span class="navLabel">Novedades</span>
+    </button>
+    <button type="button" data-main-tab="communities">
+      <span class="navPill"><span class="navIcon">👥</span></span>
+      <span class="navLabel">Comunidades</span>
+    </button>
+    <button type="button" data-main-tab="calls">
+      <span class="navPill"><span class="navIcon">☎</span></span>
+      <span class="navLabel">Llamadas</span>
+    </button>
+    <button type="button" data-main-tab="profile">
+      <span class="navPill"><span id="navProfileAvatar" class="navProfileAvatar">👤</span></span>
+      <span class="navLabel">Tú</span>
+    </button>
+  </nav>
+</div>
+
+<div id="notifications"></div>
+
+<div id="moderationModal" class="moderationModalBackdrop" aria-hidden="true">
+  <div class="moderationModalBox" role="dialog" aria-modal="true" aria-labelledby="moderationModalTitle">
+    <div class="moderationModalHead">
+      <div><div class="moderationModalIcon">⚠️</div><h2 id="moderationModalTitle" class="moderationModalTitle">Aviso de moderación</h2><div id="moderationModalDate" class="moderationModalMeta"></div></div>
+      <button id="closeModerationModal" class="muted moderationCloseTop" type="button" aria-label="Cerrar aviso de moderación">✕</button>
+    </div>
+    <div id="moderationModalMessage" class="moderationModalMessage"></div>
+    <label for="moderationAppealText" class="moderationAppealLabel">¿Quieres apelar este aviso?</label>
+    <textarea id="moderationAppealText" class="moderationAppealText" maxlength="3000" placeholder="Explica por qué consideras que el aviso debería revisarse..."></textarea>
+    <div id="moderationModalStatus" class="moderationModalStatus"></div>
+    <div class="moderationModalActions"><button id="closeModerationModalBottom" class="moderationClose" type="button" aria-label="Cerrar aviso de moderación">Cerrar</button><button id="sendModerationAppeal" class="moderationAppeal" type="button">Enviar apelación</button></div>
+  </div>
+</div>
+
+<!-- NUEVO GRUPO -->
+<input id="groupAvatarInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+<div id="groupModal" class="modal">
+  <div class="modalBox" style="max-width:520px">
+    <h2>👥 Crear grupo</h2>
+    <p>Elige un nombre y añade a tus contactos aceptados.</p>
+    <input id="groupNameInput" class="modalInput" maxlength="50" placeholder="Nombre del grupo">
+    <div id="groupMemberOptions" class="groupCreateList"></div>
+    <div id="groupError" class="modalError"></div>
+    <div class="modalRow">
+      <button id="cancelGroup" class="muted" type="button">Cancelar</button>
+      <button id="createGroupButton" class="primary" type="button">Crear grupo</button>
+    </div>
+  </div>
+</div>
+<div id="groupAddModal" class="modal">
+  <div class="modalBox" style="max-width:520px">
+    <h2>👥 Añadir personas</h2>
+    <p>Solo puedes añadir a tus contactos aceptados. Este grupo puede tener hasta 50 personas.</p>
+    <div id="groupAddMemberOptions" class="groupCreateList"></div>
+    <div id="groupAddError" class="modalError"></div>
+    <div class="modalRow">
+      <button id="cancelGroupAdd" class="muted" type="button">Cancelar</button>
+      <button id="confirmGroupAdd" class="primary" type="button">Añadir al grupo</button>
+    </div>
+  </div>
+</div>
+
+<!-- NUEVO CHAT -->
+<div id="newChatModal" class="modal">
+  <div class="modalBox">
+    <h2>➕ Enviar solicitud</h2>
+    <p>Para poder hablar con alguien, primero debes enviarle una solicitud y esperar a que la acepte.</p>
+
+    <input id="newChatUsername" class="modalInput" placeholder="ejemplo: pedro123">
+
+    <div id="newChatError" class="modalError"></div>
+
+    <div class="modalRow">
+      <button id="cancelNewChat" class="muted">Cancelar</button>
+      <button id="contactButton" class="primary">Enviar solicitud</button>
+    </div>
+  </div>
+</div>
+
+<!-- RECUPERAR CONTRASEÑA -->
+<div id="passwordRecoveryModal" class="modal">
+  <div class="modalBox" style="max-width:430px">
+    <h2>🔐 Recuperar contraseña</h2>
+    <p style="color:#777;font-size:14px">Te enviaremos un código de 6 dígitos al correo asociado a tu cuenta.</p>
+
+    <div id="recoveryStep1">
+      <input id="recoveryIdentifier" class="modalInput" placeholder="Usuario, correo o teléfono" autocomplete="username email tel">
+      <div id="recoveryMessage" class="modalError"></div>
+      <div class="modalRow">
+        <button id="closeRecovery" class="muted" type="button">Cancelar</button>
+        <button id="sendRecoveryCode" class="primary" type="button">Enviar código</button>
+      </div>
+    </div>
+
+    <div id="recoveryStep2" style="display:none">
+      <input id="recoveryCode" class="modalInput" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Código de 6 dígitos">
+      <input id="recoveryNewPassword" class="modalInput" type="password" autocomplete="new-password" placeholder="Nueva contraseña">
+      <input id="recoveryNewPassword2" class="modalInput" type="password" autocomplete="new-password" placeholder="Repite la nueva contraseña">
+      <div id="recoveryResetMessage" class="modalError"></div>
+      <div class="modalRow">
+        <button id="closeRecovery2" class="muted" type="button">Cancelar</button>
+        <button id="resetPasswordButton" class="primary" type="button">Cambiar contraseña</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SOLICITUDES -->
+<div id="requestsModal" class="modal">
+  <div class="modalBox">
+    <div class="modalHeaderRow">
+      <h2>📥 Solicitudes de contacto</h2>
+      <button id="exitRequests" class="muted requestsExitBtn" type="button" aria-label="Volver al chat">✕ Cerrar</button>
+    </div>
+    <p>Acepta una solicitud para poder hablar con esa persona.</p>
+    <div id="requestsList"></div>
+    <div class="modalRow">
+      <button id="closeRequests" class="muted" type="button">Salir</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONSOLA DE COMANDOS -->
+<div id="commandModal" class="modal">
+  <div class="modalBox commandModalBox">
+    <div class="commandModalHeader">
+      <h2>🖥️ Consola de comandos <span id="commandRankBadge" class="commandRankBadge" style="display:none"></span></h2>
+      <button id="closeCommandModal" class="muted" type="button" aria-label="Cerrar consola">✕ Cerrar</button>
+    </div>
+    <div id="commandOutput" class="commandOutput" role="log" aria-live="polite"></div>
+    <div class="commandInputRow">
+      <input id="commandInput" type="text" maxlength="1200" autocomplete="off" spellcheck="false" placeholder="Escribe un comando, por ejemplo /help">
+      <button id="sendCommand" type="button">Ejecutar</button>
+    </div>
+    <div class="commandHint">La consola ejecuta solo comandos de Mi Chat; no permite ejecutar comandos del sistema operativo. Tu rango determina qué comandos puedes usar. Usa <b>/help</b> para ver los comandos disponibles.</div>
+  </div>
+</div>
+
+<!-- CONFIGURACIÓN -->
+<div id="settingsModal" class="modal">
+  <div class="modalBox">
+    <h2>⚙️ Configuración</h2>
+
+    <div class="settingsMenu">
+
+      <button id="settingsProfile" class="settingsItem">
+        <div class="settingsItemTitle">👤 Nombre y foto</div>
+        <div class="settingsItemSub">
+          Cambiar tu nombre para mostrar y tu foto de perfil.
+        </div>
+      </button>
+
+      <button id="settingsAccount" class="settingsItem">
+        <div class="settingsItemTitle">🔐 Cuenta</div>
+        <div class="settingsItemSub">
+          Cambiar tu @usuario y tu contraseña.
+        </div>
+      </button>
+
+      <button id="settingsBlocked" class="settingsItem">
+        <div class="settingsItemTitle">🚫 Usuarios bloqueados</div>
+        <div class="settingsItemSub">
+          Ver y desbloquear usuarios que hayas bloqueado.
+        </div>
+      </button>
+
+      <button id="settingsTheme" class="settingsItem" type="button">
+        <div class="settingsItemTitle" id="settingsThemeTitle">🌙 Tema oscuro</div>
+        <div class="settingsItemSub" id="settingsThemeSub">Activar el modo oscuro para toda la aplicación.</div>
+      </button>
+
+      <button id="settingsPush" class="settingsItem">
+        <div class="settingsItemTitle">🔔 Notificaciones</div>
+        <div class="settingsItemSub">
+          Activar las notificaciones cuando recibas mensajes o llamadas.
+        </div>
+      </button>
+
+      <button id="settingsReport" class="settingsItem">
+        <div class="settingsItemTitle">⚠️ Reportar un problema al administrador</div>
+        <div class="settingsItemSub">
+          Envía un reporte al administrador de Mi Chat.
+        </div>
+      </button>
+
+    </div>
+
+    <div class="messageLoggingSetting">
+      <label for="messageLoggingPreference">
+        <input type="checkbox" id="messageLoggingPreference">
+        <span>
+          <div class="messageLoggingSettingTitle">👁️ Permitir que el administrador vea mis mensajes</div>
+          <div class="messageLoggingSettingSub">Si activas esta opción, tus mensajes podrán aparecer en la web de administración y en la terminal de actividad. Tú decides y puedes cambiarlo cuando quieras.</div>
+        </span>
+      </label>
+      <div id="messageLoggingPreferenceStatus" class="messageLoggingSettingStatus"></div>
+    </div>
+
+    <div class="modalRow">
+      <button id="closeSettings" class="muted">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- REPORTAR PROBLEMA -->
+<div id="reportModal" class="modal">
+  <div class="modalBox">
+    <h2>⚠️ Reportar un problema</h2>
+    <p style="color:#777;font-size:14px">Cuéntanos qué ha ocurrido. El administrador podrá ver tu usuario y este mensaje.</p>
+    <label for="reportCategory">Categoría</label>
+    <select id="reportCategory" style="width:100%;padding:12px;border-radius:10px;border:1px solid #ddd;margin:6px 0 12px">
+      <option>Problema técnico</option>
+      <option>Usuario</option>
+      <option>Contenido inapropiado</option>
+      <option>Seguridad</option>
+      <option>Otro</option>
+    </select>
+    <textarea id="reportText" maxlength="2000" placeholder="Escribe tu reporte..." style="width:100%;min-height:140px;resize:vertical;padding:12px;border-radius:10px;border:1px solid #ddd;box-sizing:border-box"></textarea>
+    <div id="reportMessage" style="min-height:22px;margin-top:8px"></div>
+    <div class="modalRow">
+      <button id="closeReport" class="muted">Cancelar</button>
+      <button id="sendReport" class="primary">Enviar reporte</button>
+    </div>
+  </div>
+</div>
+
+<!-- PERFIL -->
+<div id="profileModal" class="modal">
+  <div class="modalBox">
+    <h2>👤 Mi perfil</h2>
+
+    <div class="profilePreview" id="profilePreview"></div>
+
+    <input id="profileName" class="modalInput" placeholder="Nombre para mostrar" maxlength="24">
+    <input id="profileEmail" class="modalInput" type="email" placeholder="Correo para recuperar la contraseña" autocomplete="email">
+    <input id="profilePhone" class="modalInput" type="tel" placeholder="Número de teléfono (opcional)" autocomplete="tel">
+    <input id="profileFile" class="modalInput" type="file" accept="image/*">
+
+    <div class="modalRow">
+      <button id="cancelProfile" class="muted">Cancelar</button>
+      <button id="saveProfile" class="primary">Guardar</button>
+    </div>
+
+    <div id="profileError" class="modalError"></div>
+  </div>
+</div>
+
+<!-- CUENTA -->
+<div id="accountModal" class="modal">
+  <div class="modalBox">
+    <h2>🔐 Cuenta</h2>
+
+    <div style="font-weight:bold;margin:4px 0 8px">Cambiar @usuario</div>
+    <input id="accountUsername" class="modalInput" placeholder="Nuevo @usuario" maxlength="24" autocomplete="off">
+    <input id="accountUsernamePassword" class="modalInput" type="password" placeholder="Contraseña actual" autocomplete="current-password">
+    <button id="saveAccountUsername" class="primary" type="button" style="width:100%;margin-top:4px">Cambiar @usuario</button>
+
+    <div style="height:18px"></div>
+
+    <div style="font-weight:bold;margin:4px 0 8px">Cambiar contraseña</div>
+    <input id="accountCurrentPassword" class="modalInput" type="password" placeholder="Contraseña actual" autocomplete="current-password">
+    <input id="accountNewPassword" class="modalInput" type="password" placeholder="Nueva contraseña" autocomplete="new-password">
+    <input id="accountNewPassword2" class="modalInput" type="password" placeholder="Repite la nueva contraseña" autocomplete="new-password">
+    <button id="saveAccountPassword" class="primary" type="button" style="width:100%;margin-top:4px">Cambiar contraseña</button>
+
+    <div id="accountError" class="modalError"></div>
+
+    <div class="modalRow">
+      <button id="closeAccount" class="muted" type="button">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- BLOQUEADOS -->
+<div id="blockedModal" class="modal">
+  <div class="modalBox">
+    <h2>🚫 Usuarios bloqueados</h2>
+
+    <div id="blockedList" class="blockList"></div>
+
+    <div class="modalRow">
+      <button id="closeBlocked" class="muted">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- HISTORIA -->
+<div id="storyCreateModal" class="modal storyModal">
+  <div class="modalBox">
+
+    <h2>📸 Crear historia</h2>
+
+    <div class="storyTypeRow">
+      <button id="storyTextType" class="active">📝 Texto</button>
+      <button id="storyImageType">🖼️ Foto</button>
+    </div>
+
+    <div class="storyComposer">
+
+      <textarea id="storyText" maxlength="500" placeholder="Escribe algo para tu historia..."></textarea>
+
+      <input id="storyImageFile" class="modalInput hidden" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
+
+      <div id="storyPreview" class="storyPreview">
+        Tu historia aparecerá aquí
+      </div>
+
+      <div id="storyCreateError" class="modalError"></div>
+
+      <div class="modalRow">
+        <button id="cancelStory" class="muted">Cancelar</button>
+        <button id="publishStory" class="primary">Publicar</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- VISOR HISTORIA -->
+<div id="storyViewerModal" class="modal storyModal">
+  <div class="storyViewer">
+
+    <div class="storyProgress">
+      <span id="storyProgressFill"></span>
+    </div>
+
+    <div id="storyMeta" class="storyMeta"></div>
+
+    <button id="closeStoryViewer" class="storyClose">✕</button>
+
+    <div id="storyViewerContent"></div>
+
+    <div class="storyNav">
+      <button id="storyPrev"></button>
+      <button id="storyNext"></button>
+    </div>
+
+    <button id="deleteStoryButton" class="storyDelete hidden">
+      🗑️ Borrar mi historia
+    </button>
+
+  </div>
+</div>
+
+<!-- LLAMADA -->
+<div id="incomingCallModal" class="modal">
+  <div class="modalBox" style="text-align:center">
+
+    <div style="font-size:60px;margin-bottom:10px">📞</div>
+
+    <h2>Llamada entrante</h2>
+
+    <p id="incomingCallText">
+      Alguien te está llamando.
+    </p>
+
+    <div id="callError" class="modalError"></div>
+
+    <div class="modalRow">
+      <button id="rejectCallButton" class="danger">❌ Rechazar</button>
+      <button id="acceptCallButton" class="primary">✅ Aceptar</button>
+    </div>
+
+  </div>
+</div>
+
+
+
+<!-- PANTALLA DE LLAMADA ACTIVA -->
+<div id="activeCallScreen" class="activeCallScreen" aria-hidden="true">
+  <div class="activeCallContent">
+
+    <div class="activeCallTopLabel">Mi Chat · llamada</div>
+
+    <button id="recordCallButton" class="activeCallRecordTop" type="button" aria-label="Grabar llamada">
+      <span id="recordCallIcon" class="activeCallControlIcon">🔴</span>
+      <span id="recordCallText" class="activeCallControlText">Grabar</span>
+    </button>
+
+    <div id="activeCallAvatar" class="activeCallAvatar">
+      <img id="activeCallAvatarImage" src="" alt="" style="display:none">
+      <div id="activeCallAvatarLetter" class="activeCallAvatarLetter">👤</div>
+    </div>
+
+    <div id="activeCallName" class="activeCallName">Usuario</div>
+    <div id="activeCallStatus" class="activeCallStatus">Conectando...</div>
+    <div id="activeCallTimer" class="activeCallTimer">00:00</div>
+    <div id="recordingBanner" class="recordingBanner"><span class="recordingDot"></span>Llamada grabándose</div>
+
+    <div class="activeCallFill"></div>
+
+    <div class="activeCallControls">
+      <button id="muteCallButton" class="activeCallControl" type="button" aria-label="Silenciar micrófono">
+        <span id="muteCallIcon" class="activeCallControlIcon">🎤</span>
+        <span id="muteCallText" class="activeCallControlText">Silenciar</span>
+      </button>
+
+      <button id="speakerCallButton" class="activeCallControl active" type="button" aria-label="Altavoz">
+        <span id="speakerCallIcon" class="activeCallControlIcon">🔊</span>
+        <span id="speakerCallText" class="activeCallControlText">Altavoz</span>
+      </button>
+    </div>
+
+    <button id="activeHangupButton" class="activeCallHangup" type="button" aria-label="Finalizar llamada">📞</button>
+    <div class="activeCallHangupText">Finalizar llamada</div>
+
+  </div>
+</div>
+
+<audio id="remoteAudio" autoplay playsinline></audio>
+
+<script>
+
+"use strict";
+
+const socket = io({autoConnect:false});
+
+let myUsername = "";
+let selectedUser = "";
+let selectedGroupId = "";
+let allUsers = [];
+let allGroups = [];
+let groupUnread = {};
+let authMode = "login";
+let unread = {};
+let conversations = {};
+let pendingContactUser = null;
+let relationshipData = { contacts: [], incoming: [], outgoing: [] };
+
+const $ = id => document.getElementById(id);
+
+const authScreen = $("authScreen");
+const app = $("app");
+const mainLayout = $("layout");
+// Ajuste de la navegación inferior para Android.
+// Los navegadores no exponen de forma fiable el modo de navegación (3 botones/gestos),
+// así que usamos una estimación conservadora del espacio inferior persistente y la limitamos a 32px.
+(function setupAndroidNavInset(){
+  const isAndroid = /Android/i.test(navigator.userAgent || "");
+  if (!isAndroid) return;
+
+  let maxViewportHeight = 0;
+  let lastOffset = -1;
+
+  function readSafeArea(){
+    const probe = document.createElement("div");
+    probe.style.cssText = "position:fixed;left:-9999px;bottom:0;width:1px;height:1px;padding-bottom:env(safe-area-inset-bottom);pointer-events:none;";
+    document.body.appendChild(probe);
+    const value = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
+    probe.remove();
+    return value;
+  }
+
+  function updateAndroidNavInset(){
+    const vv = window.visualViewport;
+    const currentHeight = Math.max(
+      window.innerHeight || 0,
+      document.documentElement.clientHeight || 0,
+      vv ? vv.height : 0
+    );
+    maxViewportHeight = Math.max(maxViewportHeight, currentHeight);
+
+    const safeArea = readSafeArea();
+    const screenGap = Math.max(0, (window.screen && window.screen.height ? window.screen.height : currentHeight) - maxViewportHeight);
+
+    // Solo dejamos un pequeño extra si parece existir una zona inferior permanente.
+    const estimatedSystemNav = screenGap >= 22 ? Math.min(32, screenGap) : 0;
+    const offset = Math.max(safeArea, estimatedSystemNav);
+
+    if (Math.abs(offset - lastOffset) < 1) return;
+    lastOffset = offset;
+    document.documentElement.style.setProperty("--android-nav-offset", offset + "px");
+  }
+
+  updateAndroidNavInset();
+  window.addEventListener("resize", updateAndroidNavInset, {passive:true});
+  window.addEventListener("orientationchange", () => setTimeout(updateAndroidNavInset, 250), {passive:true});
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", updateAndroidNavInset, {passive:true});
+  setTimeout(updateAndroidNavInset, 800);
+})();
+
+const mainTabPages = {
+  chats: $("chatsPage"),
+  news: $("newsPage"),
+  communities: $("communityPage"),
+  calls: $("callsPage"),
+  profile: $("profilePage")
+};
+const mainBottomNav = $("mobileBottomNav");
+let activeMainTab = "chats";
+
+function switchMainTab(tab){
+  const next = ["chats","news","communities","calls","profile"].includes(tab) ? tab : "chats";
+  activeMainTab = next;
+
+  Object.entries(mainTabPages).forEach(([name,page]) => {
+    if(page) page.classList.toggle("hiddenTab", name !== next);
+  });
+
+  if(mainLayout){
+    mainLayout.classList.toggle("mainTabChats", next === "chats");
+    mainLayout.classList.toggle("mainTabNonChat", next !== "chats");
+  }
+
+  document.querySelectorAll("#mobileBottomNav [data-main-tab]").forEach(button => {
+    button.classList.toggle("active", button.dataset.mainTab === next);
+  });
+
+  if(next === "communities") renderGroups();
+  if(next === "calls") renderCallsTab();
+  if(next === "profile") renderProfileTab();
+  if(next === "news") renderStories();
+
+  if(next !== "chats" && layout.classList.contains("mobileChat")){
+    layout.classList.remove("mobileChat");
+  }
+}
+
+function openTopLevelTab(tab){
+  switchMainTab(tab);
+  window.scrollTo?.(0,0);
+}
+
+
+const authUsername = $("authUsername");
+const authPassword = $("authPassword");
+const authEmail = $("authEmail");
+const forgotPasswordButton = $("forgotPasswordButton");
+const authButton = $("authButton");
+const switchAuth = $("switchAuth");
+const authDescription = $("authDescription");
+const authError = $("authError");
+const welcomeModal = $("welcomeModal");
+const closeWelcomeModal = $("closeWelcomeModal");
+
+const usersContainer = $("users");
+const groupList = $("groupList");
+const groupsCount = $("groupsCount");
+const newGroupButton = $("newGroupButton");
+const groupModal = $("groupModal");
+const groupNameInput = $("groupNameInput");
+const groupMemberOptions = $("groupMemberOptions");
+const groupError = $("groupError");
+const groupAvatarInput = $("groupAvatarInput");
+const groupActionsWrap = $("groupActionsWrap");
+const groupActionsToggle = $("groupActionsToggle");
+const groupActionsMenu = $("groupActionsMenu");
+const groupRenameButton = $("groupRenameButton");
+const groupAddMembersButton = $("groupAddMembersButton");
+const groupDeleteButton = $("groupDeleteButton");
+const groupAddModal = $("groupAddModal");
+const groupAddMemberOptions = $("groupAddMemberOptions");
+const groupAddError = $("groupAddError");
+const searchInput = $("searchInput");
+const messagesContainer = $("messages");
+const messageInput = $("messageInput");
+const sendButton = $("sendButton");
+const attachButton = $("attachButton");
+const fileInput = $("fileInput");
+const mediaName = $("mediaName");
+let pendingMedia = null;
+const chatTitle = $("chatTitle");
+const chatSubtitle = $("chatSubtitle");
+const headerAvatar = $("headerAvatar");
+const blockCurrentButton = $("blockCurrentButton");
+let blockedUsersClient = new Set();
+const callButton = $("callButton");
+const hangupButton = $("hangupButton");
+
+const incomingCallModal = $("incomingCallModal");
+const incomingCallText = $("incomingCallText");
+const acceptCallButton = $("acceptCallButton");
+const rejectCallButton = $("rejectCallButton");
+const callError = $("callError");
+const remoteAudio = $("remoteAudio");
+
+const activeCallScreen = $("activeCallScreen");
+const activeCallAvatarImage = $("activeCallAvatarImage");
+const activeCallAvatarLetter = $("activeCallAvatarLetter");
+const activeCallName = $("activeCallName");
+const activeCallStatus = $("activeCallStatus");
+const activeCallTimer = $("activeCallTimer");
+const muteCallButton = $("muteCallButton");
+const muteCallIcon = $("muteCallIcon");
+const muteCallText = $("muteCallText");
+const speakerCallButton = $("speakerCallButton");
+const speakerCallIcon = $("speakerCallIcon");
+const speakerCallText = $("speakerCallText");
+const recordCallButton = $("recordCallButton");
+const recordCallIcon = $("recordCallIcon");
+const recordCallText = $("recordCallText");
+const recordingBanner = $("recordingBanner");
+const activeHangupButton = $("activeHangupButton");
+
+let activeCallTimerInterval = null;
+let activeCallStartTime = null;
+let callMuted = false;
+let callSpeaker = true;
+
+const layout = $("layout");
+document.querySelectorAll("#mobileBottomNav [data-main-tab]").forEach(button => {
+  button.addEventListener("click", () => openTopLevelTab(button.dataset.mainTab));
+});
+
+$("backButton").addEventListener("click", () => { layout.classList.remove("mobileChat"); switchMainTab("chats"); });
+
+$("newsCreateStoryButton").onclick = () => openStoryCreator();
+$("communityCreateButton").onclick = () => {
+  switchMainTab("communities");
+  newGroupButton?.click();
 };
 
-let supabaseAvailable = false;
-let supabaseReadyResolve;
-const supabaseReady = new Promise(resolve => {
-  supabaseReadyResolve = resolve;
-});
-let supabaseWriteQueue = Promise.resolve();
+$("profileEditButton").onclick = () => $("profileModal").style.display = "flex";
+$("profileSettingsButton").onclick = () => $("settingsButton").click();
+$("profileAccountButton").onclick = () => $("settingsAccount").click();
+$("profileBlockedButton").onclick = () => $("settingsBlocked").click();
+$("profileLogoutButton").onclick = () => $("logoutButton").click();
 
-function ensure(file, value) {
-  if (!fs.existsSync(file)) {
-    fs.writeFileSync(file, JSON.stringify(value, null, 2), "utf8");
-  }
+function getMyUser(){
+  return allUsers.find(user => norm(user?.username) === norm(myUsername)) || { username: myUsername, displayName: myUsername };
 }
 
-ensure(USERS_FILE, []);
-ensure(MESSAGES_FILE, []);
-ensure(SESSIONS_FILE, {});
-ensure(PUSH_FILE, []);
-ensure(STORIES_FILE, []);
-ensure(FCM_FILE, {});
-ensure(RECORDINGS_FILE, []);
-ensure(REPORTS_FILE, []);
-ensure(MODERATION_FILE, []);
-ensure(MODERATION_READS_FILE, {});
-ensure(APPEALS_FILE, []);
-ensure(BANS_FILE, []);
-ensure(PASSWORD_RESETS_FILE, []);
-ensure(COMMAND_ACCESS_FILE, []);
-ensure(MESSAGE_LOGGING_FILE, {});
-ensure(ACCESS_BLOCKS_FILE, {});
-ensure(GLOBAL_ACCESS_FILE, { enabled: false, ownerUsername: "", salt: "", passwordHash: "", updatedAt: 0 });
-ensure(ADMIN_ACTIVITY_FILE, []);
-ensure(GROUPS_FILE, []);
-
-function read(file, fallback) {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return fallback;
-  }
+function renderProfileNavAvatar(){
+  const target = $("navProfileAvatar");
+  if(!target) return;
+  const me = getMyUser();
+  target.innerHTML = avatarHtml(me);
+  target.title = me?.displayName ? `Cuenta de ${me.displayName}` : "Mi cuenta";
 }
 
-function stateKey(file) {
-  return path.basename(file);
+function renderProfileTab(){
+  const card = $("profileTabCard");
+  renderProfileNavAvatar();
+  if(!card) return;
+  const me = getMyUser();
+  const displayName = me.displayName || myUsername || "Usuario";
+  card.innerHTML = `
+    <div class="avatar">${avatarHtml(me)}</div>
+    <div>
+      <div class="profileCardName">${esc(displayName)}</div>
+      <div class="profileCardUser">@${esc(myUsername)}</div>
+    </div>
+  `;
 }
 
-async function supabaseRequest(pathname, options = {}) {
-  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
-    throw new Error("SUPABASE_URL/SUPABASE_SECRET_KEY no configuradas.");
-  }
-
-  const response = await fetch(
-    SUPABASE_URL + "/rest/v1/" + pathname,
-    {
-      ...options,
-      headers: {
-        apikey: SUPABASE_SECRET_KEY,
-        Authorization: "Bearer " + SUPABASE_SECRET_KEY,
-        "Content-Type": "application/json",
-        ...(options.headers || {})
-      }
-    }
+function renderCallsTab(){
+  const container = $("callsList");
+  if(!container) return;
+  const contacts = allUsers.filter(user =>
+    user &&
+    norm(user.username) !== norm(myUsername) &&
+    isContact(user.username)
   );
 
-  const text = await response.text();
-  let data = null;
-
-  if (text) {
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = text;
-    }
-  }
-
-  if (!response.ok) {
-    const message =
-      typeof data === "string"
-        ? data
-        : data?.message || data?.hint || JSON.stringify(data);
-
-    throw new Error(
-      `Supabase HTTP ${response.status}: ${message}`
-    );
-  }
-
-  return data;
-}
-
-function queueSupabasePersist(file, data) {
-  const key = stateKey(file);
-
-  supabaseWriteQueue = supabaseWriteQueue
-    .then(async () => {
-      const ready = await supabaseReady;
-      if (!ready) return;
-
-      await supabaseRequest(
-        "michat_state?on_conflict=state_key",
-        {
-          method: "POST",
-          headers: {
-            Prefer: "resolution=merge-duplicates,return=minimal"
-          },
-          body: JSON.stringify([
-            {
-              state_key: key,
-              state_data: data,
-              updated_at: new Date().toISOString()
-            }
-          ])
-        }
-      );
-    })
-    .catch(error => {
-      console.error(
-        `Error guardando ${key} en Supabase:`,
-        error.message
-      );
-    });
-}
-
-function write(file, data) {
-  fs.writeFileSync(
-    file,
-    JSON.stringify(data, null, 2),
-    "utf8"
-  );
-
-  queueSupabasePersist(file, data);
-}
-
-async function initializeDatabase() {
-  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
-    console.log(
-      "SUPABASE_URL/SUPABASE_SECRET_KEY no configuradas. Se usará almacenamiento local temporal."
-    );
-    supabaseReadyResolve(false);
+  container.innerHTML = "";
+  if(!contacts.length){
+    container.innerHTML = '<div class="callsEmpty">Aquí aparecerán tus contactos para realizar llamadas.<br><br>Añade y acepta contactos desde Chats.</div>';
     return;
   }
 
-  try {
-    // La tabla michat_state se crea una vez desde el SQL de configuración.
-    // Aquí solo comprobamos que la Data API puede leerla.
-    const rows = await supabaseRequest(
-      "michat_state?select=state_key,state_data,updated_at"
-    );
-
-    const byKey = new Map(
-      (Array.isArray(rows) ? rows : []).map(row => [
-        row.state_key,
-        row
-      ])
-    );
-
-    for (const [key, fallback] of Object.entries(STATE_FILES)) {
-      const file = path.join(DATA_DIR, key);
-      const local = read(file, fallback);
-      const remote = byKey.get(key);
-
-      if (remote) {
-        fs.writeFileSync(
-          file,
-          JSON.stringify(remote.state_data, null, 2),
-          "utf8"
-        );
-        console.log(`Supabase -> ${key}`);
-      } else {
-        await supabaseRequest(
-          "michat_state?on_conflict=state_key",
-          {
-            method: "POST",
-            headers: {
-              Prefer: "resolution=merge-duplicates,return=minimal"
-            },
-            body: JSON.stringify([
-              {
-                state_key: key,
-                state_data: local,
-                updated_at: new Date().toISOString()
-              }
-            ])
-          }
-        );
-        console.log(`Migrado a Supabase -> ${key}`);
-      }
-    }
-
-    supabaseAvailable = true;
-    supabaseReadyResolve(true);
-    console.log("Supabase conectado y datos persistentes activos.");
-  } catch (error) {
-    supabaseAvailable = false;
-    supabaseReadyResolve(false);
-    console.error("Supabase no disponible:", error.message);
-    console.log("El servidor continuará con almacenamiento local temporal.");
-  }
-}
-
-function users() {
-  return read(USERS_FILE, []);
-}
-
-function saveUsers(v) {
-  write(USERS_FILE, v);
-}
-
-function messages() {
-  return read(MESSAGES_FILE, []);
-}
-
-function saveMessages(v) {
-  write(MESSAGES_FILE, v);
-}
-
-// Filtro básico de moderación automática para mensajes de texto.
-// Se aplica en servidor para que el mensaje no llegue ni se persista
-// aunque el cliente intente saltarse el filtro.
-const AUTO_MODERATION_TERMS = [
-  "puto", "puta", "putas", "putos", "mierda", "joder", "jodete",
-  "cabron", "cabrona", "cabrones", "gilipollas", "imbecil", "idiota",
-  "coño", "cono", "follar", "follando", "follame", "follarte",
-  "polla", "pollas", "pene", "vagina", "tetas", "tetitas", "culo",
-  "porno", "porn", "xxx", "nudes", "desnudos", "desnuda", "masturbar",
-  "masturbacion", "masturbación", "blowjob", "dick", "fuck", "bitch",
-  "nigger", "nigga", "whore"
-];
-
-function moderationNormalize(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[0@]/g, "o")
-    .replace(/[1!|]/g, "i")
-    .replace(/[3]/g, "e")
-    .replace(/[4@]/g, "a")
-    .replace(/[5$]/g, "s")
-    .replace(/[7]/g, "t")
-    .replace(/[\s._\-]+/g, " ")
-    .replace(/[^a-z0-9áéíóúüñ ]+/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function findInappropriateTerm(value) {
-  const text = moderationNormalize(value);
-  if (!text) return null;
-
-  for (const term of AUTO_MODERATION_TERMS) {
-    const needle = moderationNormalize(term);
-    if (!needle) continue;
-    const pattern = new RegExp(`(?:^|\\s)${needle.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}(?=\\s|$)`, "i");
-    if (pattern.test(text)) return term;
-  }
-
-  return null;
-}
-
-function isInappropriateMessage(text, fileName = "") {
-  return findInappropriateTerm(text) || findInappropriateTerm(fileName);
-}
-
-function sessions() {
-  return read(SESSIONS_FILE, {});
-}
-
-function saveSessions(v) {
-  write(SESSIONS_FILE, v);
-}
-
-function pushSubs() {
-  return read(PUSH_FILE, []);
-}
-
-function savePushSubs(v) {
-  write(PUSH_FILE, v);
-}
-
-function allStories() {
-  return read(STORIES_FILE, []);
-}
-
-function saveStories(v) {
-  write(STORIES_FILE, v);
-}
-
-function recordings() {
-  return read(RECORDINGS_FILE, []);
-}
-
-function saveRecordings(v) {
-  write(RECORDINGS_FILE, v);
-}
-
-function reports() {
-  return read(REPORTS_FILE, []);
-}
-
-function saveReports(v) {
-  write(REPORTS_FILE, v);
-}
-
-function moderationNotices() {
-  return read(MODERATION_FILE, []);
-}
-
-function saveModerationNotices(v) {
-  write(MODERATION_FILE, v);
-}
-
-function moderationReads() {
-  return read(MODERATION_READS_FILE, {});
-}
-
-function saveModerationReads(v) {
-  write(MODERATION_READS_FILE, v);
-}
-
-function moderationReadIds(username) {
-  const key = norm(username);
-  if (!key) return new Set();
-  const data = moderationReads();
-  const entry = data?.[key];
-  return new Set(
-    Array.isArray(entry?.ids)
-      ? entry.ids.map(value => String(value))
-      : []
-  );
-}
-
-function ensureModerationReadState(username) {
-  const key = norm(username);
-  if (!key) return;
-  const data = moderationReads();
-  if (Object.prototype.hasOwnProperty.call(data, key)) return;
-
-  // Los avisos que ya existían cuando activamos esta función se consideran históricos.
-  // Los nuevos avisos se marcarán como no leídos y aparecerán normalmente.
-  data[key] = {
-    initializedAt: Date.now(),
-    ids: moderationNotices().map(item => String(item.id))
-  };
-  saveModerationReads(data);
-}
-
-function markModerationNoticeSeen(username, noticeId) {
-  const key = norm(username);
-  const id = String(noticeId || "");
-  if (!key || !id) return;
-
-  const data = moderationReads();
-  const entry = data[key] || {
-    initializedAt: Date.now(),
-    ids: []
-  };
-
-  const ids = Array.isArray(entry.ids) ? entry.ids.map(value => String(value)) : [];
-  if (!ids.includes(id)) {
-    ids.push(id);
-  }
-
-  entry.ids = ids.slice(-2000);
-  data[key] = entry;
-  saveModerationReads(data);
-}
-
-function visibleUnreadModerationNotices(username) {
-  const key = norm(username);
-  if (!key) return [];
-  ensureModerationReadState(key);
-
-  const readIds = moderationReadIds(key);
-  const user = getUser(key);
-  const userCreatedAt = Number(user?.createdAt || 0);
-
-  return moderationNotices()
-    .filter(item => {
-      if (item.target !== "*" && norm(item.target) !== key) return false;
-
-      // Los avisos enviados a "todos" solo deben afectar a las cuentas
-      // que ya existían en el momento del envío. Una cuenta creada después
-      // no debe recibir avisos globales anteriores a su registro.
-      if (item.target === "*" && userCreatedAt > 0) {
-        const noticeCreatedAt = Number(item.createdAt || 0);
-        if (noticeCreatedAt > 0 && noticeCreatedAt < userCreatedAt) {
-          return false;
-        }
-      }
-
-      return !readIds.has(String(item.id));
-    })
-    .slice()
-    .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0))
-    .slice(-20)
-    .map(item => ({
-      id: item.id,
-      title: item.title,
-      message: item.message,
-      createdAt: item.createdAt
-    }));
-}
-
-function appeals() {
-  return read(APPEALS_FILE, []);
-}
-
-function saveAppeals(v) {
-  write(APPEALS_FILE, v);
-}
-
-function bans() {
-  return read(BANS_FILE, []);
-}
-
-function saveBans(v) {
-  write(BANS_FILE, v);
-}
-
-function accessBlocks() {
-  const value = read(ACCESS_BLOCKS_FILE, {});
-  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-}
-
-function saveAccessBlocks(v) {
-  write(ACCESS_BLOCKS_FILE, v);
-}
-
-function activeAccessBlockFor(username) {
-  const target = norm(username);
-  if (!target) return null;
-  const blocks = accessBlocks();
-  const item = blocks[target];
-  return item && item.active !== false ? item : null;
-}
-
-function globalAccessState() {
-  const value = read(GLOBAL_ACCESS_FILE, {
-    enabled: false,
-    ownerUsername: "",
-    salt: "",
-    passwordHash: "",
-    updatedAt: 0
+  contacts.forEach(user => {
+    const row = document.createElement("div");
+    row.className = "callsItem";
+    row.innerHTML = `
+      <div class="avatar">${avatarHtml(user)}</div>
+      <div class="userInfo">
+        <div class="userName">${esc(user.displayName || user.username)}</div>
+        <div class="${user.online ? "online" : "offline"}">${user.online ? "● En línea" : "○ Desconectado"}</div>
+      </div>
+      <button class="toolBtn" type="button" aria-label="Llamar">📞</button>
+    `;
+    row.querySelector("button").onclick = async () => {
+      switchMainTab("chats");
+      openChat(user.username, user.displayName || user.username, !!user.online, user.profileImage || "");
+      setTimeout(() => {
+        if(!callButton.classList.contains("hidden")) callButton.click();
+      }, 80);
+    };
+    container.appendChild(row);
   });
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value
-    : { enabled: false, ownerUsername: "", salt: "", passwordHash: "", updatedAt: 0 };
 }
 
-function saveGlobalAccessState(value) {
-  write(GLOBAL_ACCESS_FILE, value);
-}
+const notifications = $("notifications");
+const requestsButton = $("requestsButton");
+const requestsBadge = $("requestsBadge");
+const quickActionsToggle = $("quickActionsToggle");
+const quickActionsMenu = $("quickActionsMenu");
+const requestsModal = $("requestsModal");
+const requestsList = $("requestsList");
+const commandButton = $("commandButton");
+const commandModal = $("commandModal");
+const commandOutput = $("commandOutput");
+const commandInput = $("commandInput");
+const sendCommandButton = $("sendCommand");
+let commandConsoleEnabled = false;
+let commandConsoleRank = "";
+let commandConsoleRankLabel = "";
+let commandHistory = [];
+let commandHistoryIndex = -1;
+const moderationModal = $("moderationModal");
+const moderationModalTitle = $("moderationModalTitle");
+const moderationModalDate = $("moderationModalDate");
+const moderationModalMessage = $("moderationModalMessage");
+const moderationAppealText = $("moderationAppealText");
+const moderationModalStatus = $("moderationModalStatus");
+const sendModerationAppeal = $("sendModerationAppeal");
+let activeModerationNotice = null;
+const moderationQueue = [];
+let moderationQueueOpen = false;
 
-function globalAccessEnabled() {
-  return globalAccessState().enabled === true;
-}
-
-function globalOwnerUsername() {
-  return norm(globalAccessState().ownerUsername || "");
-}
-
-function globalOwnerCanAccess(username) {
-  const owner = globalOwnerUsername();
-  return !!owner && norm(username) === owner;
-}
-
-function passwordMatchesHash(password, salt, hash) {
-  if (!password || !salt || !hash) return false;
-  try {
-    return validPassword(String(password), String(salt), String(hash));
-  } catch {
-    return false;
+function setCommandConsoleAccess(enabled, rank = "", rankLabel = ""){
+  commandConsoleEnabled = Boolean(enabled);
+  commandConsoleRank = String(rank || "").toLowerCase();
+  commandConsoleRankLabel = rankLabel || (commandConsoleRank === "moderator" ? "Moderador" : commandConsoleRank === "basic" ? "Básico" : "");
+  if(commandButton){
+    commandButton.classList.toggle("hidden", !commandConsoleEnabled);
+  }
+  const badge = document.getElementById("commandRankBadge");
+  if(badge){
+    badge.textContent = commandConsoleEnabled && commandConsoleRankLabel ? commandConsoleRankLabel : "";
+    badge.style.display = commandConsoleEnabled && commandConsoleRankLabel ? "inline-block" : "none";
+  }
+  if(!commandConsoleEnabled){
+    closeCommandModal();
   }
 }
 
-function passwordResets() {
-  return read(PASSWORD_RESETS_FILE, []);
+function appendCommandOutput(text, type = "ok"){
+  if(!commandOutput) return;
+  const line = document.createElement("div");
+  line.className = "commandOutputLine " + (type === "error" ? "commandOutputError" : "commandOutputOk");
+  line.textContent = String(text ?? "");
+  commandOutput.appendChild(line);
+  commandOutput.scrollTop = commandOutput.scrollHeight;
 }
 
-function savePasswordResets(v) {
-  write(PASSWORD_RESETS_FILE, v);
+function printCommandBlock(lines, type = "ok"){
+  const list = Array.isArray(lines) ? lines : [lines];
+  list.forEach(line => appendCommandOutput(line, type));
 }
 
-const COMMAND_RANKS = {
-  BASIC: "basic",
-  MODERATOR: "moderator"
-};
-
-const COMMAND_RANK_LABELS = {
-  basic: "Básico",
-  moderator: "Moderador"
-};
-
-const BASIC_COMMANDS = new Set([
-  "help",
-  "me",
-  "status",
-  "online",
-  "users",
-  "whois",
-  "time",
-  "echo",
-  "clear"
-]);
-
-const MODERATOR_COMMANDS = new Set([
-  "kick",
-  "ban",
-  "unban",
-  "aviso",
-  "warn",
-  "moderacion",
-  "moderación"
-]);
-
-function normalizeCommandRank(value) {
-  const rank = String(value || "").trim().toLowerCase();
-  return rank === COMMAND_RANKS.MODERATOR ? COMMAND_RANKS.MODERATOR
-    : rank === COMMAND_RANKS.BASIC ? COMMAND_RANKS.BASIC
-    : "";
-}
-
-function commandAccessRecords() {
-  const value = read(COMMAND_ACCESS_FILE, []);
-
-  // Compatibilidad con el formato anterior: ["raul", "juan"].
-  if (Array.isArray(value)) {
-    return [...new Map(
-      value.map(username => [norm(username), { username: norm(username), rank: COMMAND_RANKS.MODERATOR }])
-    ).values()].filter(item => item.username);
+function openCommandModal(){
+  if(!commandConsoleEnabled || !commandModal) return;
+  commandModal.style.display = "flex";
+  commandHistoryIndex = commandHistory.length;
+  if(commandOutput && !commandOutput.dataset.ready){
+    commandOutput.dataset.ready = "1";
+    appendCommandOutput("Mi Chat · Consola autorizada", "ok");
+    appendCommandOutput("Usa /help para ver los comandos.", "ok");
   }
-
-  if (value && typeof value === "object") {
-    return Object.entries(value)
-      .map(([username, rank]) => ({
-        username: norm(username),
-        rank: normalizeCommandRank(rank)
-      }))
-      .filter(item => item.username && item.rank);
-  }
-
-  return [];
+  setTimeout(() => commandInput?.focus(), 0);
 }
 
-function saveCommandAccessRecords(records) {
-  const data = {};
-  for (const item of Array.isArray(records) ? records : []) {
-    const username = norm(item?.username);
-    const rank = normalizeCommandRank(item?.rank);
-    if (username && rank) data[username] = rank;
-  }
-  write(COMMAND_ACCESS_FILE, data);
+function closeCommandModal(){
+  if(!commandModal) return;
+  commandModal.style.display = "none";
 }
 
-function messageLoggingSettings() {
-  const value = read(MESSAGE_LOGGING_FILE, {});
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return value;
-}
-
-function saveMessageLoggingSettings(value) {
-  const data = {};
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    for (const [username, enabled] of Object.entries(value)) {
-      const key = norm(username);
-      if (key && enabled === true) data[key] = true;
-    }
-  }
-  write(MESSAGE_LOGGING_FILE, data);
-}
-
-function isAdminMessageLoggingEnabled(username) {
-  const key = norm(username);
-  if (!key) return false;
-  return messageLoggingSettings()[key] === true;
-}
-
-function commandAccessUsers() {
-  return commandAccessRecords().map(item => item.username);
-}
-
-function getCommandRank(username) {
-  const target = norm(username);
-  if (!target) return "";
-  return commandAccessRecords().find(item => item.username === target)?.rank || "";
-}
-
-function hasCommandAccess(username) {
-  return !!getCommandRank(username);
-}
-
-function commandRankLabel(rank) {
-  return COMMAND_RANK_LABELS[normalizeCommandRank(rank)] || "Sin rango";
-}
-
-function emitCommandAccessUpdate(username) {
-  const target = norm(username);
-  if (!target) return;
-  const rank = getCommandRank(target);
-  const enabled = !!rank;
-  for (const [socketId, name] of online.entries()) {
-    if (norm(name) === target) {
-      io.to(socketId).emit("commandAccessUpdated", {
-        enabled,
-        rank: rank || null,
-        rankLabel: commandRankLabel(rank)
-      });
-    }
-  }
-}
-
-function commandHelpLines(rank) {
-  const lines = [
-    "/help — muestra esta ayuda",
-    "/me — muestra tu usuario y nombre",
-    "/status — estado general de Mi Chat",
-    "/online — usuarios conectados ahora",
-    "/users [límite] — lista de usuarios registrados",
-    "/whois @usuario — información básica de un usuario",
-    "/time — fecha y hora del servidor",
-    "/echo texto — repite un texto",
-    "/clear — limpia esta consola"
-  ];
-
-  if (normalizeCommandRank(rank) === COMMAND_RANKS.MODERATOR) {
-    lines.push(
-      "/kick @usuario [motivo] — desconecta a un usuario",
-      "/ban @usuario <duración> [motivo] — banea por tiempo o permanentemente",
-      "/unban @usuario — quita un baneo activo",
-      "/aviso @usuario [título] | mensaje — envía un aviso de moderación"
-    );
-  }
-
-  return lines;
-}
-
-function commandAllowed(rank, command) {
-  const normalizedRank = normalizeCommandRank(rank);
-  const name = String(command || "").toLowerCase();
-  if (normalizedRank === COMMAND_RANKS.MODERATOR) {
-    return BASIC_COMMANDS.has(name) || MODERATOR_COMMANDS.has(name);
-  }
-  if (normalizedRank === COMMAND_RANKS.BASIC) {
-    return BASIC_COMMANDS.has(name);
+function executeClientCommand(raw){
+  const value = String(raw || "").trim();
+  if(/^\/?clear(?:\s*)$/i.test(value)){
+    if(commandOutput) commandOutput.innerHTML = "";
+    appendCommandOutput("Consola limpiada.", "ok");
+    return true;
   }
   return false;
 }
 
-function commandKick(username, args) {
-  const parts = String(args || "").trim().split(/\s+/).filter(Boolean);
-  const target = norm((parts.shift() || "").replace(/^@+/, ""));
-  const reason = parts.join(" ").slice(0, 500);
-
-  if (!target) return { ok: false, output: ["Uso: /kick @usuario [motivo]"] };
-  if (target === norm(username)) return { ok: false, output: ["No puedes expulsarte a ti mismo."] };
-
-  const user = getUser(target);
-  if (!user) return { ok: false, output: [`No existe @${target}.`] };
-
-  let disconnected = false;
-  for (const [socketId, name] of online.entries()) {
-    if (norm(name) !== target) continue;
-    const targetSocket = io.sockets.sockets.get(socketId);
-    if (targetSocket) {
-      targetSocket.emit("kicked", { reason, kickedBy: username, createdAt: Date.now() });
-      targetSocket.disconnect(true);
-      disconnected = true;
-    }
-  }
-
-  addAdminActivity(`@${username} expulsó a @${user.username} desde la consola${reason ? `: ${reason}` : "."}`);
-  return {
-    ok: true,
-    output: [disconnected ? `@${user.username} ha sido expulsado.` : `@${user.username} está desconectado; no había una sesión activa para expulsar.`, ...(reason ? [`Motivo: ${reason}`] : [])]
-  };
+function sendCommand(){
+  if(!commandConsoleEnabled || !socket.connected || !commandInput) return;
+  const raw = commandInput.value.trim();
+  if(!raw) return;
+  appendCommandOutput(`mi-chat> ${raw}`, "ok");
+  commandHistory.push(raw);
+  if(commandHistory.length > 50) commandHistory.shift();
+  commandHistoryIndex = commandHistory.length;
+  commandInput.value = "";
+  if(executeClientCommand(raw)) return;
+  socket.emit("command", raw);
 }
 
-function commandBan(username, args) {
-  const parts = String(args || "").trim().split(/\s+/).filter(Boolean);
-  const target = norm((parts.shift() || "").replace(/^@+/, ""));
-  const durationInput = parts.shift() || "";
-  const reason = parts.join(" ").slice(0, 500);
-
-  if (!target || !durationInput) return { ok: false, output: ["Uso: /ban @usuario <duración> [motivo]", "Ejemplos: /ban @juan 30m spam · /ban @juan 7d insultos · /ban @juan 0 permanente"] };
-  if (target === norm(username)) return { ok: false, output: ["No puedes banearte a ti mismo."] };
-
-  const user = getUser(target);
-  if (!user) return { ok: false, output: [`No existe @${target}.`] };
-
-  const duration = parseBanDuration(durationInput);
-  if (!duration) return { ok: false, output: ["Duración inválida. Usa 30m, 2h, 7d, 1w o 0/permanente."] };
-
-  const now = Date.now();
-  const list = bans();
-  const existing = activeBanFor(target);
-  if (existing) {
-    existing.revokedAt = now;
-    existing.revokedBy = username;
-    existing.status = "revoked";
+commandButton?.addEventListener("click", openCommandModal);
+$("closeCommandModal")?.addEventListener("click", closeCommandModal);
+commandModal?.addEventListener("click", event => {
+  if(event.target === commandModal) closeCommandModal();
+});
+sendCommandButton?.addEventListener("click", sendCommand);
+commandInput?.addEventListener("keydown", event => {
+  if(event.key === "Enter"){
+    event.preventDefault();
+    sendCommand();
+  }else if(event.key === "ArrowUp"){
+    if(!commandHistory.length) return;
+    commandHistoryIndex = Math.max(0, commandHistoryIndex - 1);
+    commandInput.value = commandHistory[commandHistoryIndex] || "";
+    event.preventDefault();
+  }else if(event.key === "ArrowDown"){
+    if(!commandHistory.length) return;
+    commandHistoryIndex = Math.min(commandHistory.length, commandHistoryIndex + 1);
+    commandInput.value = commandHistoryIndex === commandHistory.length ? "" : (commandHistory[commandHistoryIndex] || "");
+    event.preventDefault();
   }
+});
+document.addEventListener("keydown", event => {
+  if(event.key === "Escape" && commandModal?.style.display === "flex") closeCommandModal();
+});
 
-  const ban = {
-    id: now + "-" + crypto.randomBytes(5).toString("hex"),
-    username: norm(user.username),
-    displayName: user.displayName || user.username,
-    reason,
-    createdAt: now,
-    expiresAt: duration.expiresAt,
-    createdBy: username,
-    status: "active"
-  };
-
-  list.push(ban);
-  if (list.length > 2000) list.splice(0, list.length - 2000);
-  saveBans(list);
-
-  let disconnected = false;
-  for (const [socketId, name] of online.entries()) {
-    if (norm(name) !== target) continue;
-    const targetSocket = io.sockets.sockets.get(socketId);
-    if (targetSocket) {
-      online.delete(socketId);
-      targetSocket.emit("banned", {
-        reason: ban.reason,
-        expiresAt: ban.expiresAt,
-        createdAt: ban.createdAt
-      });
-      targetSocket.disconnect(true);
-      disconnected = true;
+// Cierre de emergencia para el aviso de moderación.
+window.addEventListener("click", event => {
+  const id = event.target?.id;
+  if(id === "closeModerationModal" || id === "closeModerationModalBottom") {
+    event.preventDefault();
+    event.stopPropagation();
+    if(moderationModal){
+      moderationModal.classList.remove("open");
+      moderationModal.setAttribute("aria-hidden", "true");
+      moderationModal.style.display = "none";
     }
+    moderationQueueOpen = false;
+    activeModerationNotice = null;
+    return;
   }
+  if(event.target === moderationModal){
+    moderationModal.classList.remove("open");
+    moderationModal.setAttribute("aria-hidden", "true");
+    moderationModal.style.display = "none";
+    moderationQueueOpen = false;
+    activeModerationNotice = null;
+  }
+}, true);
+window.addEventListener("keydown", event => {
+  if(event.key === "Escape" && moderationModal?.classList.contains("open")){
+    event.preventDefault();
+    moderationModal.classList.remove("open");
+    moderationModal.setAttribute("aria-hidden", "true");
+    moderationModal.style.display = "none";
+    moderationQueueOpen = false;
+    activeModerationNotice = null;
+  }
+}, true);
 
-  sendUserList();
-  addAdminActivity(`@${username} baneó a @${user.username} desde la consola${duration.label === "Permanente" ? " permanentemente" : ` durante ${duration.minutes} minutos`}${reason ? `: ${reason}` : "."}`);
+let peerConnection = null;
+let localStream = null;
+let callPeer = "";
+let callState = "idle";
+let pendingOffer = null;
+let queuedIceCandidates = [];
+let callRecorder = null;
+let callRecordingChunks = [];
+let callRecordingStartedAt = 0;
+let callRecordingMimeType = "audio/webm";
+let callRecordingPeer = "";
+let callRecordingAudioContext = null;
+let callRecordingDestination = null;
+let automaticRecordingRetryTimer = null;
+let automaticRecordingRetryCount = 0;
 
-  const until = duration.expiresAt ? ` hasta ${new Date(duration.expiresAt).toLocaleString("es-ES")}` : " permanentemente";
-  return {
-    ok: true,
-    output: [
-      `@${user.username} ha sido baneado${until}.`,
-      ...(reason ? [`Motivo: ${reason}`] : []),
-      ...(disconnected ? ["La sesión activa fue desconectada."] : ["El baneo se aplicará al próximo intento de conexión."])
-    ]
-  };
+function esc(value){
+  const d = document.createElement("div");
+  d.textContent = String(value ?? "");
+  return d.innerHTML;
 }
 
-function commandUnban(username, args) {
-  const target = norm(String(args || "").trim().replace(/^@+/, ""));
-  if (!target) return { ok: false, output: ["Uso: /unban @usuario"] };
-
-  const user = getUser(target);
-  if (!user) return { ok: false, output: [`No existe @${target}.`] };
-
-  const list = bans();
-  const now = Date.now();
-  let changed = false;
-  for (const item of list) {
-    if (norm(item.username) === target && !item.revokedAt && (!item.expiresAt || Number(item.expiresAt) > now)) {
-      item.revokedAt = now;
-      item.revokedBy = username;
-      item.status = "revoked";
-      changed = true;
-    }
-  }
-  if (changed) saveBans(list);
-
-  addAdminActivity(`@${username} quitó el baneo de @${user.username} desde la consola.`);
-  return { ok: true, output: [changed ? `Baneo de @${user.username} retirado.` : `@${user.username} no tiene un baneo activo.`] };
+function norm(value){
+  return String(value || "").trim().normalize("NFC").toLowerCase();
 }
 
-function commandModerationNotice(username, args) {
-  const raw = String(args || "").trim();
-  const targetMatch = raw.match(/^(\*|@?[a-zA-Z0-9_.-]+)/);
-  if (!targetMatch) return { ok: false, output: ["Uso: /aviso @usuario [título] | mensaje", "Usa /aviso * [título] | mensaje para enviarlo a todos."] };
-
-  const targetToken = targetMatch[1];
-  const target = targetToken === "*" ? "*" : norm(targetToken.replace(/^@+/, ""));
-  let remainder = raw.slice(targetMatch[0].length).trim();
-  let title = "Aviso de moderación";
-  let message = remainder;
-
-  if (remainder.includes("|")) {
-    const parts = remainder.split("|");
-    title = String(parts.shift() || "Aviso de moderación").trim() || "Aviso de moderación";
-    message = parts.join("|").trim();
+function avatarHtml(user){
+  if(user && user.profileImage){
+    return `<img src="${esc(user.profileImage)}" alt="">`;
   }
 
-  if (!message) return { ok: false, output: ["Escribe el mensaje del aviso.", "Ejemplo: /aviso @juan Reglas | Recuerda respetar las normas."] };
-  if (title.length > 120) return { ok: false, output: ["El título no puede superar 120 caracteres."] };
-  if (message.length > 2000) return { ok: false, output: ["El aviso no puede superar 2000 caracteres."] };
+  return esc(
+    (
+      user?.displayName ||
+      user?.username ||
+      "?"
+    ).charAt(0).toUpperCase()
+  );
+}
 
-  let recipients = [];
-  if (target === "*") {
-    recipients = users().map(u => norm(u.username)).filter(Boolean);
+/* =====================================================
+   AUTENTICACIÓN
+===================================================== */
+
+switchAuth.onclick = () => {
+
+  authError.textContent = "";
+
+  authMode =
+    authMode === "login"
+      ? "register"
+      : "login";
+
+  authDescription.textContent =
+    authMode === "login"
+      ? "Inicia sesión para entrar."
+      : "Crea una cuenta.";
+
+  authButton.textContent =
+    authMode === "login"
+      ? "Iniciar sesión"
+      : "Crear cuenta";
+
+  authEmail.style.display = authMode === "register" ? "block" : "none";
+  const authPhone = $("authPhone");
+  if(authPhone) authPhone.style.display = authMode === "register" ? "block" : "none";
+  const authEmailHint = $("authEmailHint");
+  if(authEmailHint) authEmailHint.style.display = authMode === "register" ? "block" : "none";
+  forgotPasswordButton.style.display = authMode === "login" ? "inline-block" : "none";
+  authEmail.required = false;
+  authUsername.placeholder = authMode === "login"
+    ? "Usuario o correo electrónico"
+    : "Nombre de usuario";
+  authUsername.maxLength = authMode === "login" ? 254 : 24;
+  authUsername.autocomplete = authMode === "login" ? "username email" : "username";
+  authEmail.autocomplete = "email";
+
+  if (authMode === "register") {
+    authPassword.autocomplete = "new-password";
+    authEmail.value = "";
+    const authPhone = $("authPhone");
+    if (authPhone) authPhone.value = "";
   } else {
-    const user = getUser(target);
-    if (!user) return { ok: false, output: [`No existe @${target}.`] };
-    recipients = [norm(user.username)];
+    authPassword.autocomplete = "current-password";
   }
 
-  const notice = {
-    id: Date.now() + "-" + crypto.randomBytes(5).toString("hex"),
-    title,
-    message,
-    target: target === "*" ? "*" : recipients[0],
-    createdAt: Date.now(),
-    createdBy: username
-  };
+  switchAuth.textContent =
+    authMode === "login"
+      ? "Crear una cuenta"
+      : "Ya tengo una cuenta";
+};
 
-  const list = moderationNotices();
-  list.push(notice);
-  if (list.length > 1000) list.splice(0, list.length - 1000);
-  saveModerationNotices(list);
+authButton.onclick = authenticate;
 
-  const payload = {
-    type: "moderation",
-    title: notice.title,
-    from: "Moderación",
-    body: notice.message,
-    message: notice.message,
-    username: ""
-  };
+authPassword.onkeydown = e => {
+  if(e.key === "Enter"){
+    authenticate();
+  }
+};
 
-  for (const recipient of recipients) {
-    const sid = socketIdFor(recipient);
-    if (sid) {
-      io.to(sid).emit("moderationNotice", {
-        id: notice.id,
-        title: notice.title,
-        message: notice.message,
-        createdAt: notice.createdAt
-      });
-    }
-    sendPushToUser(recipient, payload);
+const passwordRecoveryModal = $("passwordRecoveryModal");
+const recoveryIdentifier = $("recoveryIdentifier");
+const recoveryCode = $("recoveryCode");
+const recoveryNewPassword = $("recoveryNewPassword");
+const recoveryNewPassword2 = $("recoveryNewPassword2");
+const recoveryStep1 = $("recoveryStep1");
+const recoveryStep2 = $("recoveryStep2");
+const recoveryMessage = $("recoveryMessage");
+const recoveryResetMessage = $("recoveryResetMessage");
+
+forgotPasswordButton.onclick = () => {
+  recoveryIdentifier.value = authUsername.value.trim();
+  recoveryCode.value = "";
+  recoveryNewPassword.value = "";
+  recoveryNewPassword2.value = "";
+  recoveryMessage.textContent = "";
+  recoveryResetMessage.textContent = "";
+  recoveryStep1.style.display = "block";
+  recoveryStep2.style.display = "none";
+  passwordRecoveryModal.style.display = "flex";
+};
+
+function closeRecoveryModal(){
+  passwordRecoveryModal.style.display = "none";
+  recoveryMessage.textContent = "";
+  recoveryResetMessage.textContent = "";
+}
+
+$("closeRecovery").onclick = closeRecoveryModal;
+$("closeRecovery2").onclick = closeRecoveryModal;
+
+passwordRecoveryModal.addEventListener("click", event => {
+  if(event.target === passwordRecoveryModal) closeRecoveryModal();
+});
+
+$("sendRecoveryCode").onclick = async () => {
+  const identifier = recoveryIdentifier.value.trim();
+  recoveryMessage.textContent = "";
+  if(!identifier){
+    recoveryMessage.textContent = "Escribe tu usuario o correo electrónico.";
+    return;
   }
 
-  addAdminActivity(`@${username} envió un aviso de moderación desde la consola${target === "*" ? " a todos los usuarios" : " a @" + recipients[0]}.`);
-  return { ok: true, output: [`Aviso enviado a ${recipients.length} usuario${recipients.length === 1 ? "" : "s"}.`, `Título: ${title}`] };
-}
+  const button = $("sendRecoveryCode");
+  button.disabled = true;
+  recoveryMessage.style.color = "#777";
+  recoveryMessage.textContent = "Enviando código…";
 
-function executeCommand(username, rawInput) {
-  const input = String(rawInput || "").trim();
-  const rank = getCommandRank(username);
-  if (!rank) {
-    return { ok: false, output: ["No tienes acceso a la consola de comandos."] };
-  }
-  if (!input) {
-    return { ok: false, output: ["Escribe un comando. Usa /help para ver los comandos disponibles."] };
-  }
-
-  const match = input.match(/^\/?([a-zA-Z][a-zA-Z0-9_-]*)(?:\s+([\s\S]*))?$/);
-  if (!match) {
-    return { ok: false, output: ["Comando no válido. Usa /help."] };
-  }
-
-  const command = match[1].toLowerCase();
-  const args = String(match[2] || "").trim();
-
-  if (!commandAllowed(rank, command)) {
-    return {
-      ok: false,
-      output: [`El rango ${commandRankLabel(rank)} no puede usar /${command}.`, `Usa /help para ver los comandos de tu rango.`]
-    };
-  }
-
-  switch (command) {
-    case "help":
-      return { ok: true, output: commandHelpLines(rank) };
-
-    case "me": {
-      const user = getUser(username);
-      return {
-        ok: true,
-        output: [
-          `Usuario: @${user?.username || username}`,
-          `Nombre: ${user?.displayName || user?.username || username}`
-        ]
-      };
-    }
-
-    case "status": {
-      const activeStories = cleanExpiredStories().length;
-      return {
-        ok: true,
-        output: [
-          "Mi Chat — estado",
-          `Usuarios: ${users().length}`,
-          `Conectados: ${new Set([...online.values()].map(norm)).size}`,
-          `Mensajes: ${messages().length}`,
-          `Historias activas: ${activeStories}`,
-          `Persistencia: ${supabaseAvailable ? "Supabase activa" : "local temporal"}`,
-          `Uptime: ${Math.floor(process.uptime())} s`
-        ]
-      };
-    }
-
-    case "online": {
-      const list = [...new Set([...online.values()].map(norm))].sort();
-      return {
-        ok: true,
-        output: list.length
-          ? [`Conectados (${list.length}):`, ...list.map(name => `@${name}`)]
-          : ["No hay usuarios conectados."]
-      };
-    }
-
-    case "users": {
-      let limit = Number(args || 50);
-      if (!Number.isFinite(limit)) limit = 50;
-      limit = Math.max(1, Math.min(Math.floor(limit), 50));
-      const list = users()
-        .map(user => ({
-          username: String(user.username || ""),
-          displayName: String(user.displayName || user.username || "")
-        }))
-        .filter(user => user.username)
-        .sort((a, b) => a.username.localeCompare(b.username))
-        .slice(0, limit);
-      return {
-        ok: true,
-        output: list.length
-          ? [`Usuarios (${list.length}${users().length > list.length ? ` de ${users().length}` : ""}):`, ...list.map(user => `@${user.username} — ${user.displayName}`)]
-          : ["No hay usuarios registrados."]
-      };
-    }
-
-    case "whois": {
-      const target = norm(args.replace(/^@+/, ""));
-      if (!target) return { ok: false, output: ["Uso: /whois @usuario"] };
-      const user = getUser(target);
-      if (!user) return { ok: false, output: [`No existe @${target}.`] };
-      const onlineNow = [...online.values()].some(name => norm(name) === target);
-      return {
-        ok: true,
-        output: [
-          `Usuario: @${user.username}`,
-          `Nombre: ${user.displayName || user.username}`,
-          `Estado: ${onlineNow ? "Online" : "Offline"}`,
-          `Contactos: ${Array.isArray(user.contacts) ? user.contacts.length : 0}`,
-          `Registrado: ${user.createdAt ? new Date(Number(user.createdAt)).toLocaleString("es-ES") : "Desconocido"}`
-        ]
-      };
-    }
-
-    case "kick":
-      return commandKick(username, args);
-
-    case "ban":
-      return commandBan(username, args);
-
-    case "unban":
-      return commandUnban(username, args);
-
-    case "aviso":
-    case "warn":
-    case "moderacion":
-    case "moderación":
-      return commandModerationNotice(username, args);
-
-    case "time":
-      return { ok: true, output: [new Date().toLocaleString("es-ES", { dateStyle: "full", timeStyle: "medium" })] };
-
-    case "echo":
-      return { ok: true, output: [args ? args.slice(0, 1000) : ""] };
-
-    case "clear":
-      return { ok: true, output: ["Usa el botón Limpiar para vaciar la consola."] };
-
-    default:
-      return { ok: false, output: [`Comando desconocido: /${command}`, "Usa /help para ver los comandos disponibles."] };
-  }
-}
-
-function normalizeEmail(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function normalizePhone(value) {
-  let phone = String(value || "").trim();
-  phone = phone.replace(/[^0-9]/g, "");
-  if (phone.startsWith("00")) phone = phone.slice(2);
-  return phone;
-}
-
-function validPhone(value) {
-  const phone = normalizePhone(value);
-  return /^\d{7,15}$/.test(phone);
-}
-
-function validEmail(value) {
-  const email = normalizeEmail(value);
-  return email.length >= 5 && email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
-}
-
-const PASSWORD_RESET_SECRET = String(
-  process.env.PASSWORD_RESET_SECRET ||
-  process.env.SESSION_SECRET ||
-  "CAMBIA-ESTA-CLAVE-DE-RECUPERACION-EN-RENDER"
-);
-const PASSWORD_RESET_TTL = 10 * 60 * 1000;
-const PASSWORD_RESET_RESEND_COOLDOWN = 60 * 1000;
-const PASSWORD_RESET_MAX_ATTEMPTS = 5;
-
-function hashResetCode(username, resetId, code) {
-  return crypto
-    .createHmac("sha256", PASSWORD_RESET_SECRET)
-    .update(`${norm(username)}|${resetId}|${code}`)
-    .digest("hex");
-}
-
-function prunePasswordResets() {
-  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-  const list = passwordResets().filter(item => Number(item.createdAt || 0) >= cutoff);
-  if (list.length !== passwordResets().length) savePasswordResets(list);
-  return list;
-}
-
-function smtpConfig() {
-  const user = String(process.env.SMTP_USER || "").trim();
-  // Google muestra las contraseñas de aplicación separadas por espacios.
-  // Los quitamos para evitar un AUTH LOGIN inválido si se pega tal cual.
-  const pass = String(process.env.SMTP_PASS || "").replace(/\s+/g, "");
-  const host = String(process.env.SMTP_HOST || "smtp.gmail.com").trim();
-  const port = Number(process.env.SMTP_PORT || 465);
-  const secure = String(process.env.SMTP_SECURE || (port === 465 ? "true" : "false"))
-    .trim().toLowerCase() !== "false";
-  const from = String(process.env.SMTP_FROM || user).trim();
-  return { user, pass, host, port, secure, from };
-}
-
-function extractEmailAddress(value) {
-  const raw = String(value || "").trim();
-  const match = raw.match(/<\s*([^<>\s]+@[^<>\s]+)\s*>/);
-  return normalizeEmail(match ? match[1] : raw);
-}
-
-function smtpReadResponse(socket) {
-  return new Promise((resolve, reject) => {
-    let buffer = "";
-    let finished = false;
-
-    const cleanup = () => {
-      clearTimeout(timer);
-      socket.off("data", onData);
-      socket.off("error", onError);
-      socket.off("close", onClose);
-      socket.off("end", onClose);
-    };
-
-    const fail = error => {
-      if (finished) return;
-      finished = true;
-      cleanup();
-      reject(error);
-    };
-
-    const succeed = text => {
-      if (finished) return;
-      finished = true;
-      cleanup();
-      resolve(text);
-    };
-
-    const onData = chunk => {
-      buffer += chunk.toString("utf8");
-      const lines = buffer.split(/\r?\n/);
-      buffer = lines.pop() || "";
-
-      const complete = lines.filter(Boolean);
-      if (!complete.length) return;
-
-      const last = complete[complete.length - 1];
-      const match = last.match(/^(\d{3})([ -])(.*)$/);
-      if (!match || match[2] !== " ") return;
-
-      const code = Number(match[1]);
-      const response = complete.join("\n");
-      if (code >= 200 && code < 400) {
-        succeed(response);
-      } else {
-        fail(new Error(`SMTP ${code}: ${match[3] || last}`));
-      }
-    };
-
-    const onError = error => fail(error);
-    const onClose = () => fail(new Error("Conexión SMTP cerrada antes de completar la respuesta."));
-    const timer = setTimeout(() => fail(new Error("Tiempo de espera SMTP agotado.")), 20000);
-
-    socket.on("data", onData);
-    socket.on("error", onError);
-    socket.on("close", onClose);
-    socket.on("end", onClose);
-  });
-}
-
-async function smtpCommand(socket, command) {
-  socket.write(command + "\r\n");
-  return smtpReadResponse(socket);
-}
-
-async function smtpStartTls(socket, cfg) {
-  await smtpCommand(socket, `EHLO ${cfg.host}`);
-  await smtpCommand(socket, "STARTTLS");
-
-  const secureSocket = tls.connect({
-    socket,
-    servername: cfg.host,
-    rejectUnauthorized: true
-  });
-
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Tiempo de espera de TLS SMTP agotado.")), 20000);
-    secureSocket.once("secureConnect", () => {
-      clearTimeout(timer);
-      resolve();
-    });
-    secureSocket.once("error", error => {
-      clearTimeout(timer);
-      reject(error);
-    });
-  });
-
-  return secureSocket;
-}
-
-async function sendPasswordResetEmail(to, username, code) {
-  const cfg = smtpConfig();
-  const envelopeFrom = extractEmailAddress(cfg.from);
-
-  if (!cfg.user || !cfg.pass) {
-    throw new Error("SMTP_USER/SMTP_PASS no configurados.");
-  }
-  if (!validEmail(cfg.user)) {
-    throw new Error("SMTP_USER no es un correo válido.");
-  }
-  if (!envelopeFrom || !validEmail(envelopeFrom)) {
-    throw new Error("SMTP_FROM no es un correo válido.");
-  }
-  if (!validEmail(to)) {
-    throw new Error("Correo de destino no válido.");
-  }
-  if (![465, 587].includes(cfg.port)) {
-    throw new Error("SMTP_PORT debe ser 465 o 587 para Gmail.");
-  }
-
-  console.log(`SMTP recuperación: intentando envío a ${normalizeEmail(to)} desde ${envelopeFrom} usando ${cfg.host}:${cfg.port} secure=${cfg.secure}`);
-
-  let socket;
-  let activeSocket;
   try {
-    if (cfg.port === 465 || cfg.secure) {
-      socket = tls.connect({
-        host: cfg.host,
-        port: cfg.port,
-        servername: cfg.host,
-        rejectUnauthorized: true
-      });
-      activeSocket = socket;
-      await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("Tiempo de espera de conexión SMTP agotado.")), 20000);
-        socket.once("secureConnect", () => {
-          clearTimeout(timer);
-          resolve();
-        });
-        socket.once("error", error => {
-          clearTimeout(timer);
-          reject(error);
-        });
-      });
-      await smtpReadResponse(socket);
-      await smtpCommand(socket, `EHLO ${cfg.host}`);
-    } else {
-      const plainSocket = net.createConnection({ host: cfg.host, port: cfg.port });
-      await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("Tiempo de espera de conexión SMTP agotado.")), 20000);
-        plainSocket.once("connect", () => {
-          clearTimeout(timer);
-          resolve();
-        });
-        plainSocket.once("error", error => {
-          clearTimeout(timer);
-          reject(error);
-        });
-      });
-      await smtpReadResponse(plainSocket);
-      activeSocket = await smtpStartTls(plainSocket, cfg);
-      await smtpCommand(activeSocket, `EHLO ${cfg.host}`);
-    }
-
-    await smtpCommand(activeSocket, "AUTH LOGIN");
-    await smtpCommand(activeSocket, Buffer.from(cfg.user, "utf8").toString("base64"));
-    await smtpCommand(activeSocket, Buffer.from(cfg.pass, "utf8").toString("base64"));
-    await smtpCommand(activeSocket, `MAIL FROM:<${envelopeFrom}>`);
-    await smtpCommand(activeSocket, `RCPT TO:<${normalizeEmail(to)}>`);
-    await smtpCommand(activeSocket, "DATA");
-
-    const subject = "Código de recuperación de Mi Chat";
-    const body = [
-      "Hola,",
-      "",
-      `Hemos recibido una solicitud para restablecer la contraseña de @${username}.`,
-      "",
-      `Tu código de recuperación es: ${code}`,
-      "",
-      "Este código caduca en 10 minutos y solo puede utilizarse una vez.",
-      "Si no has solicitado este cambio, puedes ignorar este mensaje.",
-      "",
-      "Mi Chat"
-    ].join("\r\n");
-
-    const headers = [
-      `From: Mi Chat <${envelopeFrom}>`,
-      `To: <${normalizeEmail(to)}>`,
-      `Subject: ${subject}`,
-      "Date: " + new Date().toUTCString(),
-      "MIME-Version: 1.0",
-      "Content-Type: text/plain; charset=UTF-8",
-      "Content-Transfer-Encoding: 8bit",
-      "",
-      body
-    ].join("\r\n").replace(/(^|\r\n)\./g, "$1..");
-
-    activeSocket.write(headers + "\r\n.\r\n");
-    await smtpReadResponse(activeSocket);
-    await smtpCommand(activeSocket, "QUIT");
-    console.log(`SMTP recuperación: correo enviado correctamente a ${normalizeEmail(to)}.`);
-  } catch (error) {
-    console.error(`SMTP recuperación: fallo para ${normalizeEmail(to)}:`, error.message);
-    throw error;
+    const response = await fetch("/api/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier })
+    });
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.error || "No se pudo enviar el código.");
+    recoveryMessage.style.color = "#087f23";
+    recoveryMessage.textContent = data.message || "Si la cuenta existe y tiene correo, recibirás un código.";
+    recoveryStep1.style.display = "none";
+    recoveryStep2.style.display = "block";
+  } catch(error) {
+    recoveryMessage.style.color = "#c00";
+    recoveryMessage.textContent = error.message;
   } finally {
-    try { activeSocket?.end(); } catch {}
-    if (socket && socket !== activeSocket) {
-      try { socket.end(); } catch {}
-    }
+    button.disabled = false;
   }
-}
-function activeBanFor(username) {
-  const target = norm(username);
-  if (!target) return null;
+};
 
-  const now = Date.now();
-  const list = bans();
-  return list
-    .filter(item =>
-      norm(item.username) === target &&
-      !item.revokedAt &&
-      (!item.expiresAt || Number(item.expiresAt) > now)
-    )
-    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))[0] || null;
-}
+$("resetPasswordButton").onclick = async () => {
+  const identifier = recoveryIdentifier.value.trim();
+  const code = recoveryCode.value.trim();
+  const p1 = recoveryNewPassword.value;
+  const p2 = recoveryNewPassword2.value;
+  recoveryResetMessage.textContent = "";
 
-function parseBanDuration(value) {
-  const raw = String(value || "").trim().toLowerCase();
-  if (!raw) return null;
-  if (raw === "0" || raw === "permanente" || raw === "permanent") {
-    return { minutes: null, expiresAt: null, label: "Permanente" };
+  if(!/^\d{6}$/.test(code)) {
+    recoveryResetMessage.textContent = "El código debe tener 6 dígitos.";
+    return;
+  }
+  if(p1.length < 6) {
+    recoveryResetMessage.textContent = "La nueva contraseña debe tener al menos 6 caracteres.";
+    return;
+  }
+  if(p1 !== p2) {
+    recoveryResetMessage.textContent = "Las contraseñas no coinciden.";
+    return;
   }
 
-  const match = raw.match(/^(\d+(?:\.\d+)?)\s*(m|min|minutos?|h|horas?|d|d[ií]as?|w|semanas?|s|semanas?)$/i);
-  if (!match) return null;
-
-  const amount = Number(match[1]);
-  const unit = match[2];
-  if (!Number.isFinite(amount) || amount <= 0) return null;
-
-  let multiplier = 1;
-  if (/^h|hora/i.test(unit)) multiplier = 60;
-  else if (/^d|d[ií]a/i.test(unit)) multiplier = 1440;
-  else if (/^w|sem/i.test(unit)) multiplier = 10080;
-
-  const minutes = Math.round(amount * multiplier);
-  if (minutes < 1 || minutes > 525600) return null;
-
-  return {
-    minutes,
-    expiresAt: Date.now() + minutes * 60 * 1000,
-    label: `${minutes} minuto${minutes === 1 ? "" : "s"}`
-  };
-}
-
-function fcmTokens() {
-  return read(FCM_FILE, {});
-}
-
-function saveFcmTokens(v) {
-  write(FCM_FILE, v);
-}
-
-function cleanExpiredStories() {
-  const now = Date.now();
-  const active = allStories().filter(s => Number(s.expiresAt) > now);
-  saveStories(active);
-  return active;
-}
-
-function norm(v) {
-  return String(v || "").trim().normalize("NFC").toLowerCase();
-}
-
-function getUser(username) {
-  const u = norm(username);
-  return users().find(x => norm(x.username) === u);
-}
-
-function passwordHash(password) {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
-  return { salt, hash };
-}
-
-function validPassword(password, salt, hash) {
-  try {
-    const got = crypto.scryptSync(password, salt, 64).toString("hex");
-    return crypto.timingSafeEqual(
-      Buffer.from(got, "hex"),
-      Buffer.from(hash, "hex")
-    );
-  } catch {
-    return false;
-  }
-}
-
-// =====================================================
-// SESIONES
-// =====================================================
-//
-// Las sesiones nuevas usan un token firmado para que una
-// recarga/reinicio del servicio de Render no invalide la
-// sesión por depender de sessions.json.
-// Se mantiene compatibilidad con los tokens antiguos.
-
-const SESSION_SECRET =
-  process.env.SESSION_SECRET ||
-  "michat-session-secret-change-this-in-render";
-
-function createSessionToken(username) {
-  const payload = Buffer
-    .from(JSON.stringify({
-      username: norm(username),
-      createdAt: Date.now()
-    }))
-    .toString("base64url");
-
-  const signature = crypto
-    .createHmac("sha256", SESSION_SECRET)
-    .update(payload)
-    .digest("base64url");
-
-  return payload + "." + signature;
-}
-
-function verifySessionToken(token) {
-  if (!token || typeof token !== "string") {
-    return null;
-  }
-
-  const parts = token.split(".");
-
-  if (parts.length !== 2) {
-    return null;
-  }
-
-  const [payload, signature] = parts;
-
-  const expected = crypto
-    .createHmac("sha256", SESSION_SECRET)
-    .update(payload)
-    .digest("base64url");
-
-  const a = Buffer.from(signature);
-  const b = Buffer.from(expected);
-
-  if (a.length !== b.length) {
-    return null;
-  }
+  const button = $("resetPasswordButton");
+  button.disabled = true;
+  recoveryResetMessage.style.color = "#777";
+  recoveryResetMessage.textContent = "Cambiando contraseña…";
 
   try {
-    if (!crypto.timingSafeEqual(a, b)) {
-      return null;
-    }
-  } catch {
-    return null;
-  }
-
-  try {
-    const data = JSON.parse(
-      Buffer.from(payload, "base64url").toString("utf8")
-    );
-
-    if (!data || !data.username) {
-      return null;
-    }
-
-    const account = getUser(data.username);
-    if (!account) return null;
-    if (Number(account.passwordChangedAt || 0) > Number(data.createdAt || 0)) {
-      return null;
-    }
-
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-function newSession(username) {
-  return createSessionToken(username);
-}
-
-function sessionUserRaw(token) {
-  if (!token) return null;
-
-  // Tokens nuevos: no dependen de sessions.json.
-  const signed = verifySessionToken(token);
-
-  if (signed) {
-    return getUser(signed.username);
-  }
-
-  // Compatibilidad con sesiones antiguas ya creadas.
-  const legacy = sessions()[token];
-
-  if (!legacy) return null;
-
-  return getUser(legacy.username);
-}
-
-function sessionUser(token) {
-  const user = sessionUserRaw(token);
-  if (!user) return null;
-  if (activeBanFor(user.username)) return null;
-  if (activeAccessBlockFor(user.username)) return null;
-  if (globalAccessEnabled() && !globalOwnerCanAccess(user.username)) return null;
-  return user;
-}
-
-function deleteSession(token) {
-  // Los tokens nuevos no se almacenan en disco.
-  // Borramos también los antiguos por compatibilidad.
-  if (!token) return;
-
-  const data = sessions();
-
-  if (Object.prototype.hasOwnProperty.call(data, token)) {
-    delete data[token];
-    saveSessions(data);
-  }
-}
-
-function authToken(req) {
-  const a = req.headers.authorization || "";
-  return a.startsWith("Bearer ") ? a.slice(7) : "";
-}
-
-app.use(express.json({ limit: "12mb" }));
-app.use(express.static(path.join(__dirname, "public")));
-
-const online = new Map();
-
-// =====================================================
-// GRABACIONES DE LLAMADAS (VISIBLES Y CON CONSENTIMIENTO)
-// =====================================================
-
-function requireUser(req, res, next) {
-  const user = sessionUser(authToken(req));
-  if (!user) {
-    return res.status(401).json({ error: "Sesión no válida." });
-  }
-  req.user = user;
-  next();
-}
-
-app.post(
-  "/api/call-recordings",
-  express.raw({ type: ["audio/webm", "audio/ogg", "audio/mp4"], limit: "8mb" }),
-  requireUser,
-  (req, res) => {
-    const to = norm(req.query.to || "");
-    const startedAt = Number(req.query.startedAt || Date.now());
-    const duration = Math.max(0, Math.min(15 * 60, Number(req.query.duration || 0)));
-
-    if (!to || !getUser(to)) {
-      return res.status(400).json({ error: "Destinatario de la llamada inválido." });
-    }
-
-    if (to === norm(req.user.username)) {
-      return res.status(400).json({ error: "Destinatario inválido." });
-    }
-
-    if (!Buffer.isBuffer(req.body) || !req.body.length) {
-      return res.status(400).json({ error: "La grabación está vacía." });
-    }
-
-    const id = crypto.randomBytes(16).toString("hex");
-    const mimeType = String(req.headers["content-type"] || "audio/webm").split(";")[0].toLowerCase();
-    const extension = mimeType === "audio/mp4" ? ".m4a" : mimeType === "audio/ogg" ? ".ogg" : ".webm";
-    const fileName = id + extension;
-    const filePath = path.join(RECORDINGS_DIR, fileName);
-
-    try {
-      fs.writeFileSync(filePath, req.body);
-    } catch (error) {
-      console.error("No se pudo guardar la grabación:", error);
-      return res.status(500).json({ error: "No se pudo guardar la grabación." });
-    }
-
-    const item = {
-      id,
-      from: norm(req.user.username),
-      fromDisplay: req.user.displayName || req.user.username,
-      to,
-      toDisplay: getUser(to)?.displayName || to,
-      startedAt: Number.isFinite(startedAt) ? startedAt : Date.now(),
-      duration,
-      size: req.body.length,
-      mimeType: req.headers["content-type"] || "audio/webm",
-      fileName,
-      createdAt: Date.now()
-    };
-
-    const list = recordings();
-    list.push(item);
-    if (list.length > 100) {
-      const removed = list.splice(0, list.length - 100);
-      for (const old of removed) {
-        try { fs.unlinkSync(path.join(RECORDINGS_DIR, old.fileName)); } catch {}
-      }
-    }
-    saveRecordings(list);
-
-    addAdminActivity(
-      `${item.fromDisplay} ha guardado una grabación de llamada con ${item.toDisplay}.`
-    );
-
-    res.json({ success: true, id });
-  }
-);
-
-// El participante puede avisar al otro de que ha empezado/terminado una grabación.
-
-// =====================================================
-// REPORTES DE USUARIOS
-// =====================================================
-
-app.post("/api/reports", requireUser, (req, res) => {
-  const text = String(req.body?.text || "").trim();
-  const category = String(req.body?.category || "Otro").trim().slice(0, 50);
-
-  if (text.length < 5) {
-    return res.status(400).json({ error: "El reporte debe tener al menos 5 caracteres." });
-  }
-
-  if (text.length > 2000) {
-    return res.status(400).json({ error: "El reporte no puede superar los 2000 caracteres." });
-  }
-
-  const report = {
-    id: Date.now() + "-" + crypto.randomBytes(5).toString("hex"),
-    username: req.user.username,
-    displayName: req.user.displayName || req.user.username,
-    category,
-    text,
-    status: "open",
-    createdAt: Date.now()
-  };
-
-  const list = reports();
-  list.push(report);
-  if (list.length > 500) list.splice(0, list.length - 500);
-  saveReports(list);
-
-  addAdminActivity(`${report.displayName} (@${report.username}) envió un reporte: ${category}.`);
-
-  res.json({ success: true, id: report.id });
-});
-
-// =====================================================
-// MI CHAT ADMIN
-// =====================================================
-
-const ADMIN_USERNAME = String(process.env.ADMIN_USERNAME || "admin").trim();
-const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || "").trim();
-const ADMIN_SESSION_SECRET = String(
-  process.env.ADMIN_SESSION_SECRET || "CAMBIA-ESTA-CLAVE-ADMIN-EN-RENDER"
-);
-const ADMIN_SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
-
-// Terminal de actividad del administrador.
-// Se persiste también en Supabase mediante admin-activity.json para que
-// la consola no se vacíe al reiniciar o volver a desplegar el servicio.
-let adminActivity = [];
-
-function loadAdminActivity() {
-  const saved = read(ADMIN_ACTIVITY_FILE, []);
-  adminActivity = Array.isArray(saved) ? saved : [];
-  return adminActivity;
-}
-
-
-function groups() { return read(GROUPS_FILE, []); }
-function saveGroups(v) { write(GROUPS_FILE, v); }
-function getGroup(groupId) {
-  const id = String(groupId || "").trim();
-  return groups().find(group => String(group.id) === id) || null;
-}
-function isGroupMember(group, username) {
-  return !!group && Array.isArray(group.members) && group.members.some(name => norm(name) === norm(username));
-}
-function groupSummary(group) {
-  return {
-    id: String(group.id),
-    name: String(group.name || "Grupo"),
-    createdBy: norm(group.createdBy || ""),
-    createdAt: group.createdAt || null,
-    members: Array.isArray(group.members) ? group.members.map(norm) : [],
-    admins: Array.isArray(group.admins) ? group.admins.map(norm) : [],
-    memberCount: Array.isArray(group.members) ? group.members.length : 0,
-    avatar: group.avatar || ""
-  };
-}
-function groupsForUser(username) {
-  return groups().filter(group => isGroupMember(group, username)).map(groupSummary);
-}
-function emitGroupsData(socket, username) {
-  socket.emit("groupsData", groupsForUser(username));
-}
-function groupUnreadCountsFor(username) {
-  const counts = {};
-  const me = norm(username);
-  for (const message of messages()) {
-    const groupId = String(message.groupId || "");
-    if (!groupId || norm(message.from) === me || message.read) continue;
-    const group = getGroup(groupId);
-    if (!group || !isGroupMember(group, me)) continue;
-    counts[groupId] = (counts[groupId] || 0) + 1;
-  }
-  return counts;
-}
-function emitGroupUnread(socket, username) {
-  if (socket) socket.emit("groupUnreadCounts", groupUnreadCountsFor(username));
-}
-function emitGroupUnreadToMembers(group) {
-  if (!group) return;
-  for (const username of group.members || []) {
-    const sid = socketIdFor(username);
-    if (sid) emitGroupUnread(io.sockets.sockets.get(sid), username);
-  }
-}
-
-function removeGroupPermanently(groupId, actorText = "Admin") {
-  const id = String(groupId || "").trim();
-  if (!id) return null;
-
-  const list = groups();
-  const index = list.findIndex(group => String(group.id) === id);
-  if (index < 0) return null;
-
-  const group = list[index];
-  list.splice(index, 1);
-  saveGroups(list);
-
-  const messageList = messages().filter(message => String(message.groupId || "") !== id);
-  saveMessages(messageList);
-
-  addAdminActivity(`${actorText} eliminó el grupo «${group.name || "Grupo"}».`);
-
-  for (const username of group.members || []) {
-    const sid = socketIdFor(username);
-    if (sid) {
-      io.to(sid).emit("groupRemoved", { id, reason: "El grupo ha sido eliminado." });
-    }
-  }
-
-  return group;
-}
-
-function addAdminActivity(text) {
-  const line = {
-    id: Date.now() + "-" + crypto.randomBytes(4).toString("hex"),
-    time: new Date().toISOString(),
-    text: String(text || "")
-  };
-
-  adminActivity = [...loadAdminActivity(), line];
-
-  if (adminActivity.length > 2000) {
-    adminActivity.splice(0, adminActivity.length - 2000);
-  }
-
-  write(ADMIN_ACTIVITY_FILE, adminActivity);
-}
-
-function addAdminMessageActivity(username, text) {
-  const key = norm(username);
-  if (!key || !isAdminMessageLoggingEnabled(key)) return;
-
-  const line = {
-    id: Date.now() + "-" + crypto.randomBytes(4).toString("hex"),
-    time: new Date().toISOString(),
-    kind: "message",
-    username: key,
-    text: String(text || "")
-  };
-
-  adminActivity = [...loadAdminActivity(), line];
-  if (adminActivity.length > 2000) {
-    adminActivity.splice(0, adminActivity.length - 2000);
-  }
-  write(ADMIN_ACTIVITY_FILE, adminActivity);
-}
-
-function createAdminToken() {
-  const payload = Buffer.from(JSON.stringify({
-    username: ADMIN_USERNAME,
-    createdAt: Date.now()
-  })).toString("base64url");
-
-  const signature = crypto
-    .createHmac("sha256", ADMIN_SESSION_SECRET)
-    .update(payload)
-    .digest("base64url");
-
-  return payload + "." + signature;
-}
-
-function verifyAdminToken(token) {
-  if (!token || typeof token !== "string") return null;
-
-  const parts = token.split(".");
-  if (parts.length !== 2) return null;
-
-  const [payload, signature] = parts;
-
-  const expected = crypto
-    .createHmac("sha256", ADMIN_SESSION_SECRET)
-    .update(payload)
-    .digest("base64url");
-
-  const a = Buffer.from(signature);
-  const b = Buffer.from(expected);
-
-  if (a.length !== b.length) return null;
-
-  try {
-    if (!crypto.timingSafeEqual(a, b)) return null;
-  } catch {
-    return null;
-  }
-
-  try {
-    const data = JSON.parse(
-      Buffer.from(payload, "base64url").toString("utf8")
-    );
-
-    if (!data || data.username !== ADMIN_USERNAME) return null;
-
-    if (
-      !data.createdAt ||
-      Date.now() - Number(data.createdAt) > ADMIN_SESSION_MAX_AGE
-    ) {
-      return null;
-    }
-
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-function adminToken(req) {
-  const authorization = req.headers.authorization || "";
-  return authorization.startsWith("Bearer ")
-    ? authorization.slice(7)
-    : "";
-}
-
-function requireAdmin(req, res, next) {
-  const admin = verifyAdminToken(adminToken(req));
-
-  if (!admin) {
-    return res.status(401).json({
-      error: "Sesión de administrador no válida."
+    const response = await fetch("/api/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier, code, newPassword: p1 })
     });
-  }
-
-  req.admin = admin;
-  next();
-}
-
-app.post("/api/admin/login", (req, res) => {
-  const username = String(req.body?.username || "").trim();
-  const password = String(req.body?.password || "");
-
-  if (!ADMIN_PASSWORD) {
-    console.error("ADMIN_PASSWORD no está configurada en Render.");
-    return res.status(500).json({
-      error: "El administrador no está configurado en el servidor."
-    });
-  }
-
-  if (
-    username !== ADMIN_USERNAME ||
-    password !== ADMIN_PASSWORD
-  ) {
-    return res.status(401).json({
-      error: "Usuario o contraseña de administrador incorrectos."
-    });
-  }
-
-  res.json({
-    success: true,
-    token: createAdminToken(),
-    username: ADMIN_USERNAME
-  });
-});
-
-app.get("/api/admin/me", requireAdmin, (req, res) => {
-  res.json({
-    loggedIn: true,
-    username: req.admin.username
-  });
-});
-
-app.post("/api/admin/logout", requireAdmin, (req, res) => {
-  res.json({ success: true });
-});
-
-app.get("/api/admin/global-access", requireAdmin, (req, res) => {
-  const state = globalAccessState();
-  res.json({
-    enabled: state.enabled === true,
-    ownerUsername: norm(state.ownerUsername || ""),
-    updatedAt: Number(state.updatedAt || 0) || null
-  });
-});
-
-app.put("/api/admin/global-access", requireAdmin, (req, res) => {
-  const enabled = req.body?.enabled === true;
-  const current = globalAccessState();
-
-  if (!enabled) {
-    saveGlobalAccessState({
-      ...current,
-      enabled: false,
-      updatedAt: Date.now()
-    });
-    addAdminActivity(`@${req.admin.username} desbloqueó el acceso global al chat.`);
-    return res.json({ success: true, enabled: false });
-  }
-
-  const ownerUsername = norm(req.body?.ownerUsername || "");
-  const password = String(req.body?.password || "");
-  const owner = getUser(ownerUsername);
-
-  if (!owner) {
-    return res.status(400).json({ error: "La cuenta del propietario no existe." });
-  }
-
-  if (password.length < 6) {
-    return res.status(400).json({ error: "La contraseña de acceso debe tener al menos 6 caracteres." });
-  }
-
-  const hash = passwordHash(password);
-  saveGlobalAccessState({
-    enabled: true,
-    ownerUsername: norm(owner.username),
-    salt: hash.salt,
-    passwordHash: hash.hash,
-    updatedAt: Date.now(),
-    updatedBy: req.admin.username
-  });
-
-  // Las sesiones conservan su token. Para impedir que sigan usando el chat
-  // mientras el bloqueo está activo, cerramos únicamente la conexión Socket.IO
-  // y avisamos al cliente para mostrar el mensaje. Al desbloquear, el cliente
-  // recuperará automáticamente la sesión con el mismo token.
-  let disconnected = 0;
-  for (const [sid, username] of online.entries()) {
-    if (norm(username) === norm(owner.username)) continue;
-    const targetSocket = io.sockets.sockets.get(sid);
-    if (!targetSocket) continue;
-    targetSocket.emit("globalAccessLocked", {
-      message: "No tienes acceso a este servicio."
-    });
-    targetSocket.disconnect(true);
-    disconnected++;
-  }
-
-  addAdminActivity(`@${req.admin.username} activó el bloqueo global del chat; solo @${owner.username} puede acceder.`);
-
-  res.json({
-    success: true,
-    enabled: true,
-    ownerUsername: owner.username,
-    disconnected
-  });
-});
-
-app.post("/api/global-unlock", (req, res) => {
-  const state = globalAccessState();
-  if (state.enabled !== true) {
-    return res.status(400).json({ error: "El acceso global no está bloqueado." });
-  }
-
-  const password = String(req.body?.password || "");
-  if (!passwordMatchesHash(password, state.salt, state.passwordHash)) {
-    return res.status(401).json({
-      error: "Contraseña de acceso incorrecta.",
-      globalLock: true
-    });
-  }
-
-  const username = norm(state.ownerUsername || "");
-  const user = getUser(username);
-  if (!user) {
-    return res.status(500).json({ error: "La cuenta propietaria ya no existe." });
-  }
-
-  const accessBlock = activeAccessBlockFor(user.username);
-  if (accessBlock) {
-    return res.status(403).json({ error: accessBlock.reason || "Tu acceso a Mi Chat está bloqueado.", accessBlocked: true });
-  }
-
-  const ban = activeBanFor(user.username);
-  if (ban) {
-    return res.status(403).json({
-      error: ban.expiresAt
-        ? `Tu cuenta está baneada hasta ${new Date(Number(ban.expiresAt)).toLocaleString("es-ES")}.`
-        : "Tu cuenta está baneada permanentemente.",
-      banned: true
-    });
-  }
-
-  const token = newSession(user.username);
-  addAdminActivity(`@${user.username} accedió al chat mediante la contraseña de acceso global.`);
-
-  res.json({
-    success: true,
-    username: user.displayName,
-    token
-  });
-});
-
-app.get("/api/global-access/status", (req, res) => {
-  const state = globalAccessState();
-  res.json({
-    locked: state.enabled === true
-  });
-});
-
-app.get("/api/admin/stats", requireAdmin, (req, res) => {
-  const userList = users();
-  const messageList = messages();
-  const storyList = cleanExpiredStories();
-  const onlineUsers = new Set(
-    [...online.values()].map(name => norm(name))
-  );
-
-  res.json({
-    users: userList.length,
-    messages: messageList.length,
-    stories: storyList.length,
-    online: onlineUsers.size,
-    reports: reports().filter(r => r.status !== "resolved").length
-  });
-});
-
-app.get("/api/admin/contact-requests", requireAdmin, (req, res) => {
-  const list = users();
-  const result = [];
-
-  for (const recipient of list) {
-    ensureContactRequests(recipient);
-    for (const senderName of recipient.contactRequests.incoming) {
-      const sender = getUser(senderName);
-      if (!sender) continue;
-      result.push({
-        recipientUsername: norm(recipient.username),
-        recipientDisplayName: recipient.displayName || recipient.username,
-        senderUsername: norm(sender.username),
-        senderDisplayName: sender.displayName || sender.username
-      });
-    }
-  }
-
-  result.sort((a, b) =>
-    String(a.recipientUsername).localeCompare(String(b.recipientUsername)) ||
-    String(a.senderUsername).localeCompare(String(b.senderUsername))
-  );
-
-  res.json(result);
-});
-
-app.post("/api/admin/contact-requests/accept", requireAdmin, (req, res) => {
-  const recipient = norm(req.body?.recipientUsername);
-  const sender = norm(req.body?.senderUsername);
-
-  if (!recipient || !sender || recipient === sender) {
-    return res.status(400).json({ error: "Solicitud inválida." });
-  }
-
-  const list = users();
-  const recipientIdx = list.findIndex(u => norm(u.username) === recipient);
-  const senderIdx = list.findIndex(u => norm(u.username) === sender);
-
-  if (recipientIdx < 0 || senderIdx < 0) {
-    return res.status(404).json({ error: "Usuario no encontrado." });
-  }
-
-  ensureContactRequests(list[recipientIdx]);
-  ensureContactRequests(list[senderIdx]);
-
-  if (areContacts(recipient, sender)) {
-    return res.status(409).json({ error: "Ya sois contactos." });
-  }
-
-  if (isEitherBlocked(recipient, sender)) {
-    return res.status(400).json({ error: "No se puede aceptar la solicitud mientras exista un bloqueo entre las cuentas." });
-  }
-
-  const pending = list[recipientIdx].contactRequests.incoming.some(
-    x => norm(x) === sender
-  );
-
-  if (!pending) {
-    return res.status(404).json({ error: "La solicitud ya no está pendiente." });
-  }
-
-  list[recipientIdx].contactRequests.incoming = list[recipientIdx].contactRequests.incoming.filter(
-    x => norm(x) !== sender
-  );
-  list[senderIdx].contactRequests.outgoing = list[senderIdx].contactRequests.outgoing.filter(
-    x => norm(x) !== recipient
-  );
-
-  if (!list[recipientIdx].contacts.some(x => norm(x) === sender)) {
-    list[recipientIdx].contacts.push(sender);
-  }
-  if (!list[senderIdx].contacts.some(x => norm(x) === recipient)) {
-    list[senderIdx].contacts.push(recipient);
-  }
-
-  saveUsers(list);
-  emitRelationshipToUser(recipient);
-  emitRelationshipToUser(sender);
-
-  const recipientSid = socketIdFor(recipient);
-  const senderSid = socketIdFor(sender);
-  const recipientInfo = {
-    username: recipient,
-    displayName: list[recipientIdx].displayName || list[recipientIdx].username,
-    profileImage: list[recipientIdx].profileImage || "",
-    online: Boolean(recipientSid)
-  };
-  const senderInfo = {
-    username: sender,
-    displayName: list[senderIdx].displayName || list[senderIdx].username,
-    profileImage: list[senderIdx].profileImage || "",
-    online: Boolean(senderSid)
-  };
-
-  if (recipientSid) io.to(recipientSid).emit("contactRequestAccepted", senderInfo);
-  if (senderSid) io.to(senderSid).emit("contactRequestAccepted", recipientInfo);
-
-  sendPushToUser(sender, {
-    type: "contact_request_accepted",
-    title: "✅ Solicitud aceptada",
-    from: recipientInfo.displayName,
-    username: recipient,
-    sender: recipient,
-    body: `@${recipient} ha aceptado tu solicitud de contacto.`,
-    message: `@${recipient} ha aceptado tu solicitud de contacto.`
-  });
-
-  addAdminActivity(`Administrador aceptó la solicitud de @${sender} para @${recipient}.`);
-
-  res.json({ success: true, recipient, sender });
-});
-
-app.post("/api/admin/contact-requests/reject", requireAdmin, (req, res) => {
-  const recipient = norm(req.body?.recipientUsername);
-  const sender = norm(req.body?.senderUsername);
-
-  if (!recipient || !sender || recipient === sender) {
-    return res.status(400).json({ error: "Solicitud inválida." });
-  }
-
-  const list = users();
-  const recipientIdx = list.findIndex(u => norm(u.username) === recipient);
-  const senderIdx = list.findIndex(u => norm(u.username) === sender);
-
-  if (recipientIdx < 0 || senderIdx < 0) {
-    return res.status(404).json({ error: "Usuario no encontrado." });
-  }
-
-  ensureContactRequests(list[recipientIdx]);
-  ensureContactRequests(list[senderIdx]);
-
-  const pending = list[recipientIdx].contactRequests.incoming.some(
-    x => norm(x) === sender
-  );
-
-  if (!pending) {
-    return res.status(404).json({ error: "La solicitud ya no está pendiente." });
-  }
-
-  list[recipientIdx].contactRequests.incoming = list[recipientIdx].contactRequests.incoming.filter(
-    x => norm(x) !== sender
-  );
-  list[senderIdx].contactRequests.outgoing = list[senderIdx].contactRequests.outgoing.filter(
-    x => norm(x) !== recipient
-  );
-
-  saveUsers(list);
-  emitRelationshipToUser(recipient);
-  emitRelationshipToUser(sender);
-
-  const senderSid = socketIdFor(sender);
-  if (senderSid) {
-    io.to(senderSid).emit("contactRequestRejected", { username: recipient });
-  }
-
-  sendPushToUser(sender, {
-    type: "contact_request_rejected",
-    title: "Solicitud de contacto rechazada",
-    from: recipient,
-    username: recipient,
-    sender: recipient,
-    body: `@${recipient} ha rechazado tu solicitud de contacto.`,
-    message: `@${recipient} ha rechazado tu solicitud de contacto.`
-  });
-
-  addAdminActivity(`Administrador rechazó la solicitud de @${sender} para @${recipient}.`);
-
-  res.json({ success: true, recipient, sender });
-});
-
-app.get("/api/admin/groups", requireAdmin, (req, res) => {
-  const userList = users();
-  const byUsername = new Map(userList.map(user => [norm(user.username), user]));
-
-  const result = groups().map(group => {
-    const members = Array.isArray(group.members) ? group.members.map(norm) : [];
-    const admins = Array.isArray(group.admins) ? group.admins.map(norm) : [];
-    return {
-      id: String(group.id),
-      name: String(group.name || "Grupo"),
-      createdBy: norm(group.createdBy || ""),
-      createdByDisplay: byUsername.get(norm(group.createdBy || ""))?.displayName || norm(group.createdBy || ""),
-      createdAt: group.createdAt || null,
-      avatar: group.avatar || "",
-      members: members.map(username => ({username, displayName: byUsername.get(username)?.displayName || username})),
-      admins: admins.map(username => ({username, displayName: byUsername.get(username)?.displayName || username}))
-    };
-  });
-
-  result.sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
-  res.json(result);
-});
-
-app.delete("/api/admin/groups/:groupId", requireAdmin, (req, res) => {
-  const groupId = String(req.params.groupId || "").trim();
-  if (!getGroup(groupId)) return res.status(404).json({error:"Ese grupo no existe."});
-  const removed = removeGroupPermanently(groupId, "El administrador");
-  if (!removed) return res.status(404).json({error:"Ese grupo no existe."});
-  res.json({success:true,id:groupId});
-});
-
-
-app.get("/api/admin/chat-people", requireAdmin, (req, res) => {
-  const userList = users();
-  const counts = new Map();
-  const latest = new Map();
-
-  for (const message of messages()) {
-    if (message.groupId) continue;
-    const from = norm(message.from || "");
-    if (!from || !isAdminMessageLoggingEnabled(from)) continue;
-    const createdAt = Number(message.createdAt || Date.parse(message.time || "") || 0) || 0;
-    counts.set(from, (counts.get(from) || 0) + 1);
-    if (createdAt >= (latest.get(from) || 0)) latest.set(from, createdAt);
-  }
-
-  const result = userList
-    .map(user => ({
-      username: user.username,
-      displayName: user.displayName || user.username,
-      messageLogging: isAdminMessageLoggingEnabled(user.username),
-      messageCount: counts.get(norm(user.username)) || 0,
-      lastAt: latest.get(norm(user.username)) || 0
-    }))
-    .sort((a, b) => String(a.displayName).localeCompare(String(b.displayName), "es", { sensitivity: "base" }));
-
-  res.json(result);
-});
-
-app.get("/api/admin/chats/by-user/:username", requireAdmin, (req, res) => {
-  const username = norm(req.params.username || "");
-  const user = getUser(username);
-  if (!user) return res.status(404).json({ error: "Usuario no encontrado." });
-
-  const byUsername = new Map(users().map(item => [norm(item.username), item]));
-  const conversationMap = new Map();
-
-  for (const message of messages()) {
-    if (message.groupId) continue;
-    if (!isAdminMessageLoggingEnabled(message.from)) continue;
-
-    const from = norm(message.from || "");
-    const to = norm(message.to || "");
-    if (!from || !to) continue;
-    if (from !== username && to !== username) continue;
-
-    const partner = from === username ? to : from;
-    if (!partner || partner === username) continue;
-
-    const key = partner;
-    const createdAt = Number(message.createdAt || Date.parse(message.time || "") || 0) || 0;
-    const preview = String(
-      message.message ||
-      (message.fileName ? "📎 " + message.fileName : "Archivo multimedia") ||
-      ""
-    ).slice(0, 220);
-
-    const current = conversationMap.get(key) || {
-      username: partner,
-      displayName: byUsername.get(partner)?.displayName || partner,
-      count: 0,
-      lastAt: 0,
-      lastPreview: "",
-      lastFrom: "",
-      lastFromDisplay: ""
-    };
-
-    current.count += 1;
-    if (createdAt >= current.lastAt) {
-      current.lastAt = createdAt;
-      current.lastPreview = preview;
-      current.lastFrom = from;
-      current.lastFromDisplay = message.fromDisplay || byUsername.get(from)?.displayName || from;
-    }
-    conversationMap.set(key, current);
-  }
-
-  res.json([...conversationMap.values()].sort((a, b) => Number(b.lastAt || 0) - Number(a.lastAt || 0)));
-});
-
-app.get("/api/admin/chats/thread/:userA/:userB", requireAdmin, (req, res) => {
-  const userA = norm(req.params.userA || "");
-  const userB = norm(req.params.userB || "");
-  if (!userA || !userB || userA === userB) {
-    return res.status(400).json({ error: "Conversación inválida." });
-  }
-  if (!getUser(userA) || !getUser(userB)) {
-    return res.status(404).json({ error: "Usuario no encontrado." });
-  }
-
-  const visible = messages()
-    .filter(message => !message.groupId)
-    .filter(message => isAdminMessageLoggingEnabled(message.from))
-    .filter(message => {
-      const from = norm(message.from || "");
-      const to = norm(message.to || "");
-      return (from === userA && to === userB) || (from === userB && to === userA);
-    })
-    .map(message => ({
-      ...message,
-      createdAt: Number(message.createdAt || Date.parse(message.time || "") || 0) || 0
-    }))
-    .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
-
-  res.json({
-    userA: userA,
-    userADisplay: getUser(userA)?.displayName || userA,
-    userB: userB,
-    userBDisplay: getUser(userB)?.displayName || userB,
-    messages: visible
-  });
-});
-
-app.get("/api/admin/chats", requireAdmin, (req, res) => {
-  const userList = users();
-  const byUsername = new Map(userList.map(user => [norm(user.username), user]));
-  const privateMap = new Map();
-  const groupMap = new Map();
-
-  for (const message of messages()) {
-    if (!isAdminMessageLoggingEnabled(message.from)) continue;
-    const createdAt = Number(message.createdAt || 0) || 0;
-    const preview = String(
-      message.message ||
-      (message.fileName ? "📎 " + message.fileName : "Archivo multimedia") ||
-      ""
-    ).slice(0, 180);
-
-    if (message.groupId) {
-      const groupId = String(message.groupId);
-      const group = getGroup(groupId);
-      const current = groupMap.get(groupId) || {
-        type: "group",
-        id: groupId,
-        name: group?.name || "Grupo eliminado",
-        count: 0,
-        lastAt: 0,
-        lastPreview: ""
-      };
-      current.count += 1;
-      if (createdAt >= current.lastAt) {
-        current.lastAt = createdAt;
-        current.lastPreview = preview;
-      }
-      groupMap.set(groupId, current);
-      continue;
-    }
-
-    const from = norm(message.from || "");
-    const to = norm(message.to || "");
-    if (!from || !to || from === to) continue;
-    const [a, b] = [from, to].sort();
-    const key = `${a}|${b}`;
-    const current = privateMap.get(key) || {
-      type: "private",
-      id: key,
-      userA: a,
-      userADisplay: byUsername.get(a)?.displayName || a,
-      userB: b,
-      userBDisplay: byUsername.get(b)?.displayName || b,
-      count: 0,
-      lastAt: 0,
-      lastPreview: ""
-    };
-    current.count += 1;
-    if (createdAt >= current.lastAt) {
-      current.lastAt = createdAt;
-      current.lastPreview = preview;
-    }
-    privateMap.set(key, current);
-  }
-
-  const result = [...privateMap.values(), ...groupMap.values()]
-    .sort((a, b) => Number(b.lastAt || 0) - Number(a.lastAt || 0));
-
-  res.json(result);
-});
-
-app.delete("/api/admin/chats/private/:userA/:userB", requireAdmin, (req, res) => {
-  const a = norm(req.params.userA || "");
-  const b = norm(req.params.userB || "");
-  if (!a || !b || a === b) {
-    return res.status(400).json({ error: "Conversación inválida." });
-  }
-
-  const before = messages().length;
-  const remaining = messages().filter(message => {
-    if (message.groupId) return true;
-    if (!isAdminMessageLoggingEnabled(message.from)) return true;
-    const from = norm(message.from || "");
-    const to = norm(message.to || "");
-    return !((from === a && to === b) || (from === b && to === a));
-  });
-
-  const removed = before - remaining.length;
-  saveMessages(remaining);
-  addAdminActivity(`Administrador eliminó ${removed} mensaje${removed === 1 ? "" : "s"} del chat privado entre @${a} y @${b}.`);
-  res.json({ success: true, removed });
-});
-
-app.delete("/api/admin/chats/group/:groupId/messages", requireAdmin, (req, res) => {
-  const groupId = String(req.params.groupId || "").trim();
-  const group = getGroup(groupId);
-  if (!group) return res.status(404).json({ error: "Ese grupo no existe." });
-
-  const before = messages().length;
-  const remaining = messages().filter(message => {
-    if (String(message.groupId || "") !== groupId) return true;
-    return !isAdminMessageLoggingEnabled(message.from);
-  });
-  const removed = before - remaining.length;
-  saveMessages(remaining);
-  addAdminActivity(`Administrador eliminó ${removed} mensaje${removed === 1 ? "" : "s"} del grupo «${group.name || "Grupo"}».`);
-
-  for (const username of group.members || []) {
-    const sid = socketIdFor(username);
-    if (sid) io.to(sid).emit("groupMessagesCleared", { groupId, name: group.name || "Grupo" });
-  }
-
-  res.json({ success: true, removed });
-});
-
-app.delete("/api/admin/chats/user/:username", requireAdmin, (req, res) => {
-  const username = norm(req.params.username || "");
-  const user = getUser(username);
-  if (!user) return res.status(404).json({ error: "Usuario no encontrado." });
-
-  const before = messages().length;
-  const remaining = messages().filter(message => {
-    if (message.groupId) return true;
-    if (!isAdminMessageLoggingEnabled(message.from)) return true;
-    return norm(message.from || "") !== username && norm(message.to || "") !== username;
-  });
-  const removed = before - remaining.length;
-  saveMessages(remaining);
-  addAdminActivity(`Administrador eliminó ${removed} mensaje${removed === 1 ? "" : "s"} de chats privados de @${user.username}.`);
-  res.json({ success: true, removed, username: user.username });
-});
-
-app.get("/api/admin/users", requireAdmin, (req, res) => {
-  const onlineUsers = new Set(
-    [...online.values()].map(name => norm(name))
-  );
-
-  const result = users().map(user => ({
-    username: user.username,
-    displayName: user.displayName || user.username,
-    email: normalizeEmail(user.email || ""),
-    phone: normalizePhone(user.phone || ""),
-    profileImage: user.profileImage || "",
-    online: onlineUsers.has(norm(user.username)),
-    createdAt: user.createdAt || null,
-    contacts: Array.isArray(user.contacts)
-      ? user.contacts.length
-      : 0,
-    ban: activeBanFor(user.username),
-    banActive: Boolean(activeBanFor(user.username)),
-    banUntil: activeBanFor(user.username)?.expiresAt || null,
-    banReason: activeBanFor(user.username)?.reason || "",
-    messageLogging: isAdminMessageLoggingEnabled(user.username),
-    accessBlocked: Boolean(activeAccessBlockFor(user.username)),
-    accessBlockReason: activeAccessBlockFor(user.username)?.reason || ""
-  }));
-
-  result.sort((a, b) => {
-    if (a.online && !b.online) return -1;
-    if (!a.online && b.online) return 1;
-    return String(a.username).localeCompare(
-      String(b.username)
-    );
-  });
-
-  res.json(result);
-});
-
-app.delete("/api/admin/users/:username", requireAdmin, (req, res) => {
-  const username = norm(req.params.username);
-
-  if (!username) {
-    return res.status(400).json({
-      error: "Usuario inválido."
-    });
-  }
-
-  const list = users();
-  const index = list.findIndex(
-    u => norm(u.username) === username
-  );
-
-  if (index < 0) {
-    return res.status(404).json({
-      error: "Usuario no encontrado."
-    });
-  }
-
-  const removed = list[index];
-  list.splice(index, 1);
-  saveUsers(list);
-
-  // Eliminar sus sesiones antiguas.
-  const sessionData = sessions();
-  let sessionChanged = false;
-
-  for (const [token, value] of Object.entries(sessionData)) {
-    if (norm(value?.username) === username) {
-      delete sessionData[token];
-      sessionChanged = true;
-    }
-  }
-
-  if (sessionChanged) {
-    saveSessions(sessionData);
-  }
-
-  const accessBlockMap = accessBlocks();
-  if (Object.prototype.hasOwnProperty.call(accessBlockMap, username)) {
-    delete accessBlockMap[username];
-    saveAccessBlocks(accessBlockMap);
-  }
-
-  // Quitar al usuario de contactos y bloqueos de los demás.
-  const updatedUsers = users();
-  let usersChanged = false;
-
-  for (const user of updatedUsers) {
-    const oldContacts = Array.isArray(user.contacts)
-      ? user.contacts
-      : [];
-    const oldBlocked = Array.isArray(user.blockedUsers)
-      ? user.blockedUsers
-      : [];
-
-    const newContacts = oldContacts.filter(
-      name => norm(name) !== username
-    );
-    const newBlocked = oldBlocked.filter(
-      name => norm(name) !== username
-    );
-
-    if (
-      newContacts.length !== oldContacts.length ||
-      newBlocked.length !== oldBlocked.length
-    ) {
-      user.contacts = newContacts;
-      user.blockedUsers = newBlocked;
-      usersChanged = true;
-    }
-  }
-
-  if (usersChanged) {
-    saveUsers(updatedUsers);
-  }
-
-  // Eliminar mensajes relacionados con la cuenta.
-  const remainingMessages = messages().filter(
-    message =>
-      norm(message.from) !== username &&
-      norm(message.to) !== username
-  );
-  saveMessages(remainingMessages);
-
-  // Eliminar también la preferencia de registro de mensajes.
-  const messageLogging = messageLoggingSettings();
-  if (Object.prototype.hasOwnProperty.call(messageLogging, username)) {
-    delete messageLogging[username];
-    saveMessageLoggingSettings(messageLogging);
-  }
-
-  // Eliminar estados de la cuenta.
-  const remainingStories = allStories().filter(
-    story => norm(story.username) !== username
-  );
-  saveStories(remainingStories);
-
-  // Eliminar grabaciones en las que participe la cuenta.
-  const recordingList = recordings();
-  const remainingRecordings = recordingList.filter(item => {
-    const belongs =
-      norm(item.from) === username ||
-      norm(item.to) === username;
-    if (belongs) {
-      try { fs.unlinkSync(path.join(RECORDINGS_DIR, item.fileName)); } catch {}
-    }
-    return !belongs;
-  });
-  saveRecordings(remainingRecordings);
-
-  // Eliminar sus suscripciones Web Push.
-  const remainingPush = pushSubs().filter(
-    item => norm(item.username) !== username
-  );
-  savePushSubs(remainingPush);
-
-  // Eliminar avisos de moderación dirigidos exclusivamente a la cuenta.
-  const remainingModeration = moderationNotices().filter(
-    item => item.target === "*" || norm(item.target) !== username
-  );
-  saveModerationNotices(remainingModeration);
-
-  // Eliminar su estado de lectura de avisos.
-  const moderationReadState = moderationReads();
-  if (Object.prototype.hasOwnProperty.call(moderationReadState, username)) {
-    delete moderationReadState[username];
-    saveModerationReads(moderationReadState);
-  }
-
-  // Eliminar las apelaciones enviadas por la cuenta y las asociadas a sus avisos.
-  const remainingAppeals = appeals().filter(item =>
-    norm(item.username) !== username &&
-    norm(item.noticeTarget) !== username
-  );
-  saveAppeals(remainingAppeals);
-
-  // Eliminar sus tokens FCM.
-  const fcmData = fcmTokens();
-  if (Object.prototype.hasOwnProperty.call(fcmData, username)) {
-    delete fcmData[username];
-    saveFcmTokens(fcmData);
-  }
-
-  const commandAccess = commandAccessRecords().filter(item => norm(item.username) !== username);
-  saveCommandAccessRecords(commandAccess);
-
-  // Desconectar cualquier sesión Socket.IO activa.
-  for (const [socketId, name] of online.entries()) {
-    if (norm(name) === username) {
-      online.delete(socketId);
-      const targetSocket = io.sockets.sockets.get(socketId);
-      if (targetSocket) {
-        targetSocket.disconnect(true);
-      }
-    }
-  }
-
-  sendUserList();
-
-  console.log(
-    `Administrador eliminó la cuenta ${username}.`
-  );
-
-  res.json({
-    success: true,
-    username: removed.username
-  });
-});
-
-app.post("/api/admin/users/:username/reset-password", requireAdmin, (req, res) => {
-  const username = norm(req.params.username);
-  const newPassword = String(req.body?.password || "");
-
-  if (!username) {
-    return res.status(400).json({
-      error: "Usuario inválido."
-    });
-  }
-
-  if (newPassword.length < 6) {
-    return res.status(400).json({
-      error: "La nueva contraseña debe tener al menos 6 caracteres."
-    });
-  }
-
-  const list = users();
-  const index = list.findIndex(
-    u => norm(u.username) === username
-  );
-
-  if (index < 0) {
-    return res.status(404).json({
-      error: "Usuario no encontrado."
-    });
-  }
-
-  const p = passwordHash(newPassword);
-
-  list[index].salt = p.salt;
-  list[index].passwordHash = p.hash;
-
-  saveUsers(list);
-
-  console.log(
-    `Administrador restableció la contraseña de ${username}.`
-  );
-
-  res.json({
-    success: true,
-    username: list[index].username
-  });
-});
-
-app.put("/api/admin/users/:username/email", requireAdmin, (req, res) => {
-  const username = norm(req.params.username);
-  const email = normalizeEmail(req.body?.email || "");
-
-  if (!username) {
-    return res.status(400).json({
-      error: "Usuario inválido."
-    });
-  }
-
-  if (email && !validEmail(email)) {
-    return res.status(400).json({
-      error: "El correo electrónico no es válido."
-    });
-  }
-
-  const list = users();
-  const index = list.findIndex(
-    u => norm(u.username) === username
-  );
-
-  if (index < 0) {
-    return res.status(404).json({
-      error: "Usuario no encontrado."
-    });
-  }
-
-  if (email && list.some((u, userIndex) =>
-    userIndex !== index && normalizeEmail(u.email || "") === email
-  )) {
-    return res.status(409).json({
-      error: "Ese correo ya está asociado a otra cuenta."
-    });
-  }
-
-  const oldEmail = normalizeEmail(list[index].email || "");
-  list[index].email = email;
-  saveUsers(list);
-
-  // Cualquier código de recuperación anterior deja de ser válido
-  // cuando un administrador cambia el correo de la cuenta.
-  const now = Date.now();
-  const resetList = passwordResets();
-  let resetChanged = false;
-  for (const entry of resetList) {
-    if (norm(entry.username) === username && !entry.usedAt && !entry.invalidatedAt) {
-      entry.invalidatedAt = now;
-      resetChanged = true;
-    }
-  }
-  if (resetChanged) savePasswordResets(resetList);
-
-  addAdminActivity(
-    `Administrador cambió el correo de @${list[index].username}${oldEmail ? ` (${oldEmail})` : ""}${email ? ` a ${email}` : " y lo dejó sin correo"}.`
-  );
-
-  res.json({
-    success: true,
-    username: list[index].username,
-    email
-  });
-});
-
-app.post("/api/admin/users/:username/ban", requireAdmin, (req, res) => {
-  const username = norm(req.params.username);
-  const reason = String(req.body?.reason || "").trim().slice(0, 500);
-  const duration = parseBanDuration(req.body?.duration);
-
-  if (!username) {
-    return res.status(400).json({ error: "Usuario inválido." });
-  }
-
-  const user = getUser(username);
-  if (!user) {
-    return res.status(404).json({ error: "Usuario no encontrado." });
-  }
-
-  if (!duration) {
-    return res.status(400).json({
-      error: "Duración inválida. Usa formatos como 30m, 2h, 7d o 0 para permanente."
-    });
-  }
-
-  const now = Date.now();
-  const list = bans();
-  const existing = activeBanFor(username);
-  if (existing) {
-    existing.revokedAt = now;
-    existing.revokedBy = req.admin.username;
-  }
-
-  const ban = {
-    id: now + "-" + crypto.randomBytes(5).toString("hex"),
-    username: norm(user.username),
-    displayName: user.displayName || user.username,
-    reason,
-    createdAt: now,
-    expiresAt: duration.expiresAt,
-    createdBy: req.admin.username,
-    status: "active"
-  };
-
-  list.push(ban);
-  if (list.length > 2000) list.splice(0, list.length - 2000);
-  saveBans(list);
-
-  for (const [socketId, name] of online.entries()) {
-    if (norm(name) !== username) continue;
-    online.delete(socketId);
-    const targetSocket = io.sockets.sockets.get(socketId);
-    if (targetSocket) {
-      targetSocket.emit("banned", {
-        reason: ban.reason,
-        expiresAt: ban.expiresAt,
-        createdAt: ban.createdAt
-      });
-      targetSocket.disconnect(true);
-    }
-  }
-
-  sendUserList();
-  addAdminActivity(
-    `Administrador baneó a @${user.username} ${duration.label === "Permanente" ? "permanentemente" : `durante ${duration.minutes} minutos`}.`
-  );
-
-  res.json({ success: true, ban });
-});
-
-app.post("/api/admin/users/:username/unban", requireAdmin, (req, res) => {
-  const username = norm(req.params.username);
-  const user = getUser(username);
-
-  if (!user) {
-    return res.status(404).json({ error: "Usuario no encontrado." });
-  }
-
-  const list = bans();
-  let changed = false;
-  const now = Date.now();
-  for (const item of list) {
-    if (norm(item.username) === username && !item.revokedAt && (!item.expiresAt || Number(item.expiresAt) > now)) {
-      item.revokedAt = now;
-      item.revokedBy = req.admin.username;
-      item.status = "revoked";
-      changed = true;
-    }
-  }
-
-  if (changed) saveBans(list);
-  addAdminActivity(`Administrador quitó el baneo de @${user.username}.`);
-  res.json({ success: true, changed });
-});
-
-app.get("/api/admin/bans", requireAdmin, (req, res) => {
-  const now = Date.now();
-  const list = bans().slice().sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
-  res.json(list.slice(0, 200).map(item => ({
-    ...item,
-    active: !item.revokedAt && (!item.expiresAt || Number(item.expiresAt) > now)
-  })));
-});
-
-app.post("/api/admin/users/:username/access-block", requireAdmin, (req, res) => {
-  const username = norm(req.params.username || "");
-  const user = getUser(username);
-  if (!user) return res.status(404).json({ error: "Usuario no encontrado." });
-
-  const reason = String(req.body?.reason || "").trim().slice(0, 500);
-  const blocks = accessBlocks();
-  blocks[username] = {
-    username: user.username,
-    active: true,
-    reason,
-    createdAt: Date.now(),
-    createdBy: req.admin.username
-  };
-  saveAccessBlocks(blocks);
-
-  for (const [socketId, name] of online.entries()) {
-    if (norm(name) !== username) continue;
-    online.delete(socketId);
-    const targetSocket = io.sockets.sockets.get(socketId);
-    if (targetSocket) {
-      targetSocket.emit("accessBlocked", {
-        reason: reason || "Tu acceso a Mi Chat ha sido bloqueado por un administrador."
-      });
-      targetSocket.disconnect(true);
-    }
-  }
-
-  addAdminActivity(`Administrador bloqueó el acceso al chat de @${user.username}.`);
-  sendUserList();
-  res.json({ success: true, username: user.username, accessBlocked: true, reason });
-});
-
-app.post("/api/admin/users/:username/access-unblock", requireAdmin, (req, res) => {
-  const username = norm(req.params.username || "");
-  const user = getUser(username);
-  if (!user) return res.status(404).json({ error: "Usuario no encontrado." });
-
-  const blocks = accessBlocks();
-  if (Object.prototype.hasOwnProperty.call(blocks, username)) {
-    delete blocks[username];
-    saveAccessBlocks(blocks);
-  }
-
-  addAdminActivity(`Administrador desbloqueó el acceso al chat de @${user.username}.`);
-  sendUserList();
-  res.json({ success: true, username: user.username, accessBlocked: false });
-});
-
-app.get("/api/admin/access-blocks", requireAdmin, (req, res) => {
-  res.json(accessBlocks());
-});
-
-app.get("/api/admin/message-logging", requireAdmin, (req, res) => {
-  const onlineUsers = new Set([...online.values()].map(name => norm(name)));
-  const settings = messageLoggingSettings();
-
-  const result = users()
-    .map(user => ({
-      username: user.username,
-      displayName: user.displayName || user.username,
-      online: onlineUsers.has(norm(user.username)),
-      enabled: settings[norm(user.username)] === true
-    }))
-    .sort((a, b) => String(a.username).localeCompare(String(b.username)));
-
-  res.json(result);
-});
-
-app.get("/api/account/message-logging", requireUser, (req, res) => {
-  res.json({
-    enabled: isAdminMessageLoggingEnabled(req.user.username)
-  });
-});
-
-app.put("/api/admin/message-logging/:username", requireAdmin, (req, res) => {
-  const username = norm(req.params.username);
-  const user = getUser(username);
-  if (!user) return res.status(404).json({ error: "Usuario no encontrado." });
-
-  const enabled = req.body?.enabled === true;
-  const settings = messageLoggingSettings();
-
-  if (enabled) settings[username] = true;
-  else delete settings[username];
-
-  saveMessageLoggingSettings(settings);
-
-  addAdminActivity(
-    `Administrador ${enabled ? "permitió" : "desactivó"} que se registren los mensajes de @${user.username}.`
-  );
-
-  res.json({
-    success: true,
-    username: user.username,
-    enabled
-  });
-});
-
-app.put("/api/account/message-logging", requireUser, (req, res) => {
-  const username = norm(req.user.username);
-  if (!username) return res.status(400).json({ error: "Cuenta no válida." });
-
-  const enabled = req.body?.enabled === true;
-  const settings = messageLoggingSettings();
-
-  if (enabled) settings[username] = true;
-  else delete settings[username];
-
-  saveMessageLoggingSettings(settings);
-
-  addAdminActivity(
-    `@${req.user.username} ${enabled ? "permitió" : "desactivó"} que el administrador vea sus mensajes.`
-  );
-
-  res.json({
-    success: true,
-    enabled
-  });
-});
-
-app.get("/api/admin/command-access", requireAdmin, (req, res) => {
-  const onlineUsers = new Set([...online.values()].map(name => norm(name)));
-  const result = commandAccessRecords()
-    .map(record => {
-      const user = getUser(record.username);
-      if (!user) return null;
-      return {
-        username: user.username,
-        displayName: user.displayName || user.username,
-        online: onlineUsers.has(norm(user.username)),
-        rank: record.rank,
-        rankLabel: commandRankLabel(record.rank)
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => String(a.username).localeCompare(String(b.username)));
-
-  res.json(result);
-});
-
-app.put("/api/admin/command-access/:username", requireAdmin, (req, res) => {
-  const username = norm(req.params.username);
-  const user = getUser(username);
-  if (!user) return res.status(404).json({ error: "Usuario no encontrado." });
-
-  const rank = normalizeCommandRank(req.body?.rank || COMMAND_RANKS.BASIC);
-  if (!rank) {
-    return res.status(400).json({ error: "Rango no válido. Usa basic o moderator." });
-  }
-
-  const records = commandAccessRecords().filter(item => item.username !== username);
-  records.push({ username, rank });
-  saveCommandAccessRecords(records);
-
-  emitCommandAccessUpdate(username);
-  addAdminActivity(`Administrador asignó el rango ${commandRankLabel(rank)} a @${user.username} para la consola.`);
-  res.json({ success: true, username: user.username, enabled: true, rank, rankLabel: commandRankLabel(rank) });
-});
-
-app.delete("/api/admin/command-access/:username", requireAdmin, (req, res) => {
-  const username = norm(req.params.username);
-  const user = getUser(username);
-  if (!user) return res.status(404).json({ error: "Usuario no encontrado." });
-
-  const before = commandAccessRecords();
-  const after = before.filter(item => item.username !== username);
-  saveCommandAccessRecords(after);
-
-  emitCommandAccessUpdate(username);
-  addAdminActivity(`Administrador quitó el acceso a la consola a @${user.username}.`);
-  res.json({ success: true, username: user.username, enabled: false, rank: null, changed: before.length !== after.length });
-});
-
-app.get("/api/admin/moderation", requireAdmin, (req, res) => {
-  const list = moderationNotices()
-    .slice()
-    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
-
-  res.json(list.slice(0, 100));
-});
-
-app.delete("/api/admin/moderation/:id", requireAdmin, (req, res) => {
-  const id = String(req.params.id || "").trim();
-  if (!id) return res.status(400).json({ error: "Aviso no válido." });
-
-  const list = moderationNotices();
-  const index = list.findIndex(item => String(item.id || "") === id);
-  if (index === -1) return res.status(404).json({ error: "Aviso no encontrado." });
-
-  const removed = list[index];
-  list.splice(index, 1);
-  saveModerationNotices(list);
-
-  const readState = moderationReads();
-  for (const username of Object.keys(readState)) {
-    const entry = readState[username];
-    if (entry && Array.isArray(entry.ids)) {
-      entry.ids = entry.ids.filter(noticeId => String(noticeId) !== id);
-    }
-  }
-  saveModerationReads(readState);
-
-  addAdminActivity(`Administrador eliminó el aviso de moderación «${String(removed.title || "Aviso de moderación").slice(0, 120)}».`);
-  res.json({ success: true, id });
-});
-
-app.post("/api/admin/moderation", requireAdmin, (req, res) => {
-  const target = String(req.body?.username || "").trim();
-  const title = String(req.body?.title || "Aviso de moderación").trim();
-  const message = String(req.body?.message || "").trim();
-
-  if (!target) {
-    return res.status(400).json({ error: "Debes seleccionar un usuario." });
-  }
-
-  if (!message) {
-    return res.status(400).json({ error: "Escribe el texto del aviso." });
-  }
-
-  if (message.length > 2000) {
-    return res.status(400).json({ error: "El aviso no puede superar 2000 caracteres." });
-  }
-
-  if (title.length > 120) {
-    return res.status(400).json({ error: "El título no puede superar 120 caracteres." });
-  }
-
-  let recipients = [];
-
-  if (target === "*") {
-    recipients = users().map(u => norm(u.username)).filter(Boolean);
-  } else {
-    const user = getUser(target);
-    if (!user) {
-      return res.status(404).json({ error: "Usuario no encontrado." });
-    }
-    recipients = [norm(user.username)];
-  }
-
-  const notice = {
-    id: Date.now() + "-" + crypto.randomBytes(5).toString("hex"),
-    title: title || "Aviso de moderación",
-    message,
-    target: target === "*" ? "*" : recipients[0],
-    createdAt: Date.now(),
-    createdBy: req.admin.username
-  };
-
-  const list = moderationNotices();
-  list.push(notice);
-  if (list.length > 1000) {
-    list.splice(0, list.length - 1000);
-  }
-  saveModerationNotices(list);
-
-  const payload = {
-    type: "moderation",
-    title: notice.title,
-    from: "Moderación",
-    body: notice.message,
-    message: notice.message,
-    username: ""
-  };
-
-  for (const username of recipients) {
-    const sid = socketIdFor(username);
-    if (sid) {
-      io.to(sid).emit("moderationNotice", {
-        id: notice.id,
-        title: notice.title,
-        message: notice.message,
-        createdAt: notice.createdAt
-      });
-    }
-    sendPushToUser(username, payload);
-  }
-
-  addAdminActivity(
-    `Administrador envió un aviso de moderación${target === "*" ? " a todos los usuarios" : " a @" + recipients[0]}.`
-  );
-
-  res.json({
-    success: true,
-    notice,
-    recipients: recipients.length
-  });
-});
-
-app.get("/api/admin/recordings", requireAdmin, (req, res) => {
-  res.json(
-    recordings()
-      .slice()
-      .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
-      .map(item => ({ ...item }))
-  );
-});
-
-app.get("/api/admin/recordings/:id", (req, res) => {
-  const token = adminToken(req) || String(req.query.token || "");
-  const admin = verifyAdminToken(token);
-  if (!admin) {
-    return res.status(401).send("Sesión de administrador no válida.");
-  }
-
-  const item = recordings().find(x => String(x.id) === String(req.params.id));
-  if (!item) return res.status(404).send("Grabación no encontrada.");
-
-  const filePath = path.join(RECORDINGS_DIR, item.fileName);
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send("El archivo de la grabación ya no está disponible en el servidor.");
-  }
-
-  res.type(item.mimeType || "audio/webm");
-  fs.createReadStream(filePath).pipe(res);
-});
-
-app.delete("/api/admin/recordings/:id", requireAdmin, (req, res) => {
-  const list = recordings();
-  const index = list.findIndex(x => String(x.id) === String(req.params.id));
-  if (index < 0) return res.status(404).json({ error: "Grabación no encontrada." });
-
-  const removed = list.splice(index, 1)[0];
-  saveRecordings(list);
-  try { fs.unlinkSync(path.join(RECORDINGS_DIR, removed.fileName)); } catch {}
-
-  addAdminActivity(`Administrador eliminó una grabación de ${removed.fromDisplay} con ${removed.toDisplay}.`);
-  res.json({ success: true });
-});
-
-app.get("/api/admin/users/:username/stories", requireAdmin, (req, res) => {
-  const username = norm(req.params.username);
-
-  if (!getUser(username)) {
-    return res.status(404).json({
-      error: "Usuario no encontrado."
-    });
-  }
-
-  res.json(
-    cleanExpiredStories().filter(
-      story => norm(story.username) === username
-    )
-  );
-});
-
-app.get("/api/admin/stories", requireAdmin, (req, res) => {
-  const list = cleanExpiredStories();
-
-  list.sort(
-    (a, b) =>
-      Number(b.createdAt || 0) -
-      Number(a.createdAt || 0)
-  );
-
-  res.json(list);
-});
-
-app.delete("/api/admin/stories/:id", requireAdmin, (req, res) => {
-  const id = String(req.params.id || "");
-
-  if (!id) {
-    return res.status(400).json({
-      error: "ID de estado inválido."
-    });
-  }
-
-  const list = cleanExpiredStories();
-  const index = list.findIndex(
-    story => String(story.id) === id
-  );
-
-  if (index < 0) {
-    return res.status(404).json({
-      error: "Estado no encontrado."
-    });
-  }
-
-  const removed = list.splice(index, 1)[0];
-  saveStories(list);
-
-  broadcastStoryDeleted(removed);
-
-  console.log(
-    "Administrador eliminó el estado " +
-    removed.id +
-    " de " +
-    removed.username
-  );
-
-  res.json({ success: true });
-});
-
-app.get("/api/appeals", requireUser, (req, res) => {
-  const username = norm(req.user.username);
-  res.json(appeals()
-    .filter(item => norm(item.username) === username)
-    .slice()
-    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
-    .slice(0, 50));
-});
-
-app.post("/api/appeals", requireUser, (req, res) => {
-  const noticeId = String(req.body?.noticeId || "").trim();
-  const text = String(req.body?.text || "").trim();
-
-  if (!noticeId) return res.status(400).json({ error: "Aviso de moderación no válido." });
-  if (text.length < 5) return res.status(400).json({ error: "La apelación debe tener al menos 5 caracteres." });
-  if (text.length > 3000) return res.status(400).json({ error: "La apelación no puede superar 3000 caracteres." });
-
-  const username = norm(req.user.username);
-  const notice = moderationNotices().find(item => String(item.id) === noticeId);
-  if (!notice || (notice.target !== "*" && norm(notice.target) !== username)) {
-    return res.status(404).json({ error: "Ese aviso no está disponible para tu cuenta." });
-  }
-
-  const list = appeals();
-  const existing = list.find(item => norm(item.username) === username && String(item.noticeId) === noticeId);
-  if (existing) {
-    return res.status(409).json({ error: "Ya has enviado una apelación para este aviso.", appeal: existing });
-  }
-
-  const appeal = {
-    id: Date.now() + "-" + crypto.randomBytes(5).toString("hex"),
-    noticeId,
-    noticeTitle: notice.title || "Aviso de moderación",
-    noticeMessage: notice.message || "",
-    noticeTarget: notice.target || "",
-    username: req.user.username,
-    displayName: req.user.displayName || req.user.username,
-    text,
-    status: "pending",
-    createdAt: Date.now(),
-    updatedAt: Date.now()
-  };
-
-  list.push(appeal);
-  if (list.length > 1000) list.splice(0, list.length - 1000);
-  saveAppeals(list);
-  addAdminActivity(`@${appeal.username} envió una apelación sobre un aviso de moderación.`);
-  res.json({ success: true, appeal });
-});
-
-app.get("/api/admin/appeals", requireAdmin, (req, res) => {
-  res.json(appeals().slice().sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)).slice(0, 200));
-});
-
-app.patch("/api/admin/appeals/:id", requireAdmin, (req, res) => {
-  const id = String(req.params.id || "");
-  const status = String(req.body?.status || "").trim().toLowerCase();
-  if (!["pending", "approved", "rejected"].includes(status)) {
-    return res.status(400).json({ error: "Estado de apelación inválido." });
-  }
-
-  const list = appeals();
-  const item = list.find(x => String(x.id) === id);
-  if (!item) return res.status(404).json({ error: "Apelación no encontrada." });
-
-  item.status = status;
-  item.updatedAt = Date.now();
-  item.reviewedBy = req.admin.username;
-  saveAppeals(list);
-  addAdminActivity(`Administrador marcó la apelación de @${item.username} como ${status}.`);
-
-  const sid = socketIdFor(item.username);
-  if (sid) io.to(sid).emit("appealStatus", { id:item.id, noticeId:item.noticeId, status:item.status, updatedAt:item.updatedAt });
-
-  res.json({ success: true, appeal: item });
-});
-
-app.get("/api/admin/activity", requireAdmin, (req, res) => {
-  loadAdminActivity();
-  const visible = adminActivity
-    .filter(item => item?.kind !== "message" || isAdminMessageLoggingEnabled(item?.username))
-    .slice(-100)
-    .reverse();
-  res.json(visible);
-});
-
-app.get("/api/admin/reports", requireAdmin, (req, res) => {
-  res.json(reports().slice().reverse());
-});
-
-app.patch("/api/admin/reports/:id", requireAdmin, (req, res) => {
-  const id = String(req.params.id || "");
-  const status = String(req.body?.status || "").trim().toLowerCase();
-
-  if (!["open", "resolved"].includes(status)) {
-    return res.status(400).json({ error: "Estado de reporte inválido." });
-  }
-
-  const list = reports();
-  const item = list.find(r => String(r.id) === id);
-  if (!item) return res.status(404).json({ error: "Reporte no encontrado." });
-
-  item.status = status;
-  item.resolvedAt = status === "resolved" ? Date.now() : null;
-  saveReports(list);
-  addAdminActivity(`Administrador marcó el reporte de @${item.username} como ${status === "resolved" ? "resuelto" : "abierto"}.`);
-
-  res.json({ success: true });
-});
-
-app.delete("/api/admin/reports/:id", requireAdmin, (req, res) => {
-  const id = String(req.params.id || "");
-  const list = reports();
-  const index = list.findIndex(r => String(r.id) === id);
-  if (index < 0) return res.status(404).json({ error: "Reporte no encontrado." });
-
-  const removed = list[index];
-  list.splice(index, 1);
-  saveReports(list);
-  addAdminActivity(`Administrador eliminó el reporte de @${removed.username}.`);
-  res.json({ success: true });
-});
-
-app.get("/api/admin/messages", requireAdmin, (req, res) => {
-  let limit = Number(req.query.limit || 100);
-
-  if (!Number.isFinite(limit)) limit = 100;
-
-  limit = Math.max(1, Math.min(limit, 500));
-
-  res.json(
-    messages()
-      .filter(message => isAdminMessageLoggingEnabled(message.from))
-      .slice(-limit)
-      .reverse()
-  );
-});
-
-app.get("/admin", (req, res) => {
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-  res.sendFile(
-    path.join(__dirname, "public", "admin", "index.html")
-  );
-});
-
-app.get("/admin/", (req, res) => {
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-  res.sendFile(
-    path.join(__dirname, "public", "admin", "index.html")
-  );
-});
-
-// =====================================================
-// PUSH / FIREBASE
-// =====================================================
-
-const vapidPublic = process.env.VAPID_PUBLIC_KEY || "";
-const vapidPrivate = process.env.VAPID_PRIVATE_KEY || "";
-const vapidSubject =
-  process.env.VAPID_SUBJECT || "mailto:admin@example.com";
-
-if (vapidPublic && vapidPrivate) {
-  webpush.setVapidDetails(
-    vapidSubject,
-    vapidPublic,
-    vapidPrivate
-  );
-}
-
-let firebaseReady = false;
-
-try {
-  if (!getApps().length) {
-    let raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "";
-
-    // Render Secret Files
-    if (!raw) {
-      const secretPaths = [
-        "/etc/secrets/firebase-service-account.json",
-        path.join(__dirname, "firebase-service-account.json")
-      ];
-
-      for (const secretPath of secretPaths) {
-        if (fs.existsSync(secretPath)) {
-          raw = fs.readFileSync(secretPath, "utf8");
-          break;
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.error || "No se pudo cambiar la contraseña.");
+    recoveryResetMessage.style.color = "#087f23";
+    recoveryResetMessage.textContent = data.message || "Contraseña cambiada correctamente.";
+    localStorage.removeItem("chatToken");
+    setTimeout(() => {
+      closeRecoveryModal();
+      authPassword.value = "";
+      authError.style.color = "#087f23";
+      authError.textContent = "Contraseña cambiada. Ya puedes iniciar sesión.";
+    }, 900);
+  } catch(error) {
+    recoveryResetMessage.style.color = "#c00";
+    recoveryResetMessage.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+};
+
+async function loadIdentity(){
+
+  const token = localStorage.getItem("chatToken");
+
+  if(!token) return;
+
+  try{
+
+    const response =
+      await fetch("/api/profile",{
+        headers:{
+          Authorization:"Bearer " + token
         }
-      }
+      });
+
+    if(!response.ok) return;
+
+    const data = await response.json();
+
+    if(data.username){
+      myUsername = data.username;
     }
 
-    if (!raw) {
+  }catch{}
+}
+
+function openWelcomeModal(){
+  if(!welcomeModal) return;
+  welcomeModal.classList.add("open");
+  welcomeModal.style.display = "flex";
+  welcomeModal.setAttribute("aria-hidden", "false");
+}
+
+function closeWelcome(){
+  if(!welcomeModal) return;
+  welcomeModal.classList.remove("open");
+  welcomeModal.style.display = "none";
+  welcomeModal.setAttribute("aria-hidden", "true");
+}
+
+closeWelcomeModal?.addEventListener("click", closeWelcome);
+welcomeModal?.addEventListener("click", event => {
+  if(event.target === welcomeModal) closeWelcome();
+});
+document.addEventListener("keydown", event => {
+  if(event.key === "Escape" && welcomeModal?.classList.contains("open")) closeWelcome();
+});
+
+let globalAccessWatchTimer = null;
+
+function startGlobalAccessWatch(){
+  if(globalAccessWatchTimer) return;
+  globalAccessWatchTimer = setInterval(async () => {
+    const token = localStorage.getItem("chatToken");
+    if(!token) return;
+    try{
+      const response = await fetch("/api/global-access/status", {cache:"no-store"});
+      const data = await response.json().catch(() => ({}));
+      if(!data.locked){
+        clearInterval(globalAccessWatchTimer);
+        globalAccessWatchTimer = null;
+        await checkSession();
+      }
+    }catch{}
+  }, 2000);
+}
+
+function stopGlobalAccessWatch(){
+  if(!globalAccessWatchTimer) return;
+  clearInterval(globalAccessWatchTimer);
+  globalAccessWatchTimer = null;
+}
+
+function showAccessBlockedModal(options = {}){
+  const modal = $("accessBlockedModal");
+  if(!modal) return;
+  const globalLock = options.globalLock === true;
+  const text = $("accessBlockedText");
+  const fields = $("globalUnlockFields");
+  const error = $("globalUnlockError");
+  if(text) text.textContent = globalLock ? "El acceso al chat está bloqueado para todos excepto el propietario." : (options.message || "Tu acceso a Mi Chat ha sido bloqueado.");
+  if(fields) fields.style.display = globalLock ? "block" : "none";
+  if(error) error.textContent = "";
+  const pass = $("globalUnlockPassword");
+  if(pass) pass.value = "";
+  modal.style.display = "flex";
+  modal.setAttribute("aria-hidden", "false");
+  if(globalLock) startGlobalAccessWatch();
+}
+
+function hideAccessBlockedModal(){
+  const modal = $("accessBlockedModal");
+  if(!modal) return;
+  stopGlobalAccessWatch();
+  modal.style.display = "none";
+  modal.setAttribute("aria-hidden", "true");
+}
+
+async function tryGlobalUnlock(){
+  const pass = String($("globalUnlockPassword")?.value || "");
+  const error = $("globalUnlockError");
+  if(!pass){ if(error) error.textContent = "Escribe la contraseña de acceso."; return; }
+  const button = $("globalUnlockButton");
+  if(button) button.disabled = true;
+  if(error) error.textContent = "";
+  try{
+    const response = await fetch("/api/global-unlock", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({password:pass})
+    });
+    const data = await response.json().catch(() => ({}));
+    if(!response.ok) throw new Error(data.error || "No se pudo acceder.");
+    localStorage.setItem("chatToken", data.token);
+    myUsername = data.username || myUsername;
+    hideAccessBlockedModal();
+    await loadIdentity();
+    enterApp();
+  }catch(errorObj){
+    if(error) error.textContent = errorObj.message || "No se pudo acceder.";
+  }finally{
+    if(button) button.disabled = false;
+  }
+}
+
+async function authenticate(){
+
+  const username =
+    authUsername.value.trim();
+
+  const password =
+    authPassword.value;
+
+  const email = authEmail.value.trim();
+  const phone = $("authPhone") ? $("authPhone").value.trim() : "";
+
+  authError.textContent = "";
+
+  if(!username || !password){
+    authError.textContent =
+      "Completa todos los campos.";
+    return;
+  }
+
+  const wasRegistering = authMode === "register";
+  authButton.disabled = true;
+
+  try{
+
+    const response =
+      await fetch(
+        authMode === "login"
+          ? "/api/login"
+          : "/api/register",
+        {
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json"
+          },
+          body:JSON.stringify({
+            username,
+            password,
+            ...(authMode === "register" ? { email, phone } : {})
+          })
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if(!response.ok){
+      if(data.globalLock){
+        localStorage.removeItem("chatToken");
+        authError.textContent = "";
+        showAccessBlockedModal({globalLock:true});
+        return;
+      }
+      if(data.accessBlocked){
+        localStorage.removeItem("chatToken");
+        authError.textContent = "";
+        showAccessBlockedModal({message:data.error});
+        return;
+      }
       throw new Error(
-        "No se encontró la credencial de Firebase. Usa FIREBASE_SERVICE_ACCOUNT_JSON o /etc/secrets/firebase-service-account.json."
+        data.error || "Error"
       );
     }
 
-    const serviceAccount = JSON.parse(raw);
-
-    initializeApp({
-      credential: cert(serviceAccount)
-    });
-
-    firebaseReady = true;
-    console.log("Firebase Admin listo para FCM.");
-  } else {
-    firebaseReady = true;
-  }
-} catch (error) {
-  firebaseReady = false;
-  console.error("FCM init error:", error.message);
-}
-
-async function sendFcmToUser(username, payload) {
-  if (!firebaseReady) {
-    console.error("FCM no está disponible.");
-    return;
-  }
-
-  const data = fcmTokens();
-  const key = norm(username);
-
-  const tokens = Array.isArray(data[key])
-    ? data[key].filter(Boolean)
-    : [];
-
-  if (!tokens.length) {
-    console.log(`No hay tokens FCM registrados para ${key}.`);
-    return;
-  }
-
-  const title = String(
-    payload?.title ||
-    payload?.from ||
-    "Mi Chat"
-  );
-
-  const body = String(
-    payload?.body ||
-    payload?.message ||
-    ""
-  );
-
-  const type = String(payload?.type || "message");
-
-  const message = {
-    tokens,
-    data: {
-      type,
-      username: String(payload?.username || ""),
-      sender: String(payload?.sender || payload?.from || ""),
-      body,
-      message: body
-    },
-    android: {
-      priority: "high"
-    }
-  };
-
-  // Las llamadas se envían como data-only para que
-  // MyFirebaseMessagingService controle el tono y los botones
-  // Contestar / Colgar incluso con la app cerrada.
-  if (type !== "call") {
-    message.notification = {
-      title,
-      body
-    };
-
-    message.android.notification = {
-      channelId: "michat_messages",
-      sound: "default"
-    };
-  }
-
-  try {
-    console.log(`Enviando FCM a ${key}. Tokens: ${tokens.length}`);
-
-    const result = await getMessaging().sendEachForMulticast(message);
-
-    console.log(
-      `FCM enviado a ${key}: éxito=${result.successCount}, errores=${result.failureCount}`
+    localStorage.setItem(
+      "chatToken",
+      data.token
     );
 
-    if (result.failureCount > 0) {
-      const invalid = new Set();
+    myUsername =
+      data.username;
 
-      result.responses.forEach((response, index) => {
-        if (response.success) {
-          console.log(`FCM OK [${index}] para ${key}`);
-          return;
-        }
+    await loadIdentity();
 
-        const error = response.error;
-        const code = error?.code || "sin-código";
-        const messageText = error?.message || "sin-mensaje";
+    enterApp();
 
-        console.error(`ERROR FCM DETALLADO [${index}] para ${key}:`);
-        console.error(`Código: ${code}`);
-        console.error(`Mensaje: ${messageText}`);
-
-        if (error?.details) {
-          console.error("Detalles:", error.details);
-        }
-
-        if (
-          code === "messaging/registration-token-not-registered" ||
-          code === "messaging/invalid-registration-token"
-        ) {
-          invalid.add(tokens[index]);
-        }
-      });
-
-      if (invalid.size > 0) {
-        data[key] = tokens.filter(token => !invalid.has(token));
-        saveFcmTokens(data);
-
-        console.log(
-          `Se eliminaron ${invalid.size} tokens inválidos de ${key}.`
-        );
-      }
+    if(wasRegistering){
+      setTimeout(openWelcomeModal, 80);
     }
-  } catch (error) {
-    console.error("FCM send error:");
-    console.error("Código:", error?.code || "sin-código");
-    console.error("Mensaje:", error?.message || error);
-    if (error?.stack) {
-      console.error(error.stack);
-    }
+
+  }catch(error){
+
+    authError.textContent =
+      error.message;
+
+  }finally{
+
+    authButton.disabled = false;
   }
 }
 
-function sendPushToUser(username, payload) {
-  // Push web
-  if (vapidPublic && vapidPrivate) {
-    for (const item of pushSubs()) {
-      if (
-        norm(item.username) !== norm(username)
-      ) {
-        continue;
-      }
-
-      webpush
-        .sendNotification(
-          item.subscription,
-          JSON.stringify(payload)
-        )
-        .catch(() => {});
-    }
-  }
-
-  // Android / Firebase
-  sendFcmToUser(
-    username,
-    payload
-  ).catch(() => {});
-}
-
-// =====================================================
-// USUARIOS
-// =====================================================
-
-function sendUserList() {
-  const all = users();
-  const onlineUsers = new Set(
-    [...online.values()].map(name => norm(name))
-  );
-
-  // Cada usuario recibe una lista personalizada: el estado de presencia
-  // solo se revela para contactos aceptados. Para los demás, el estado
-  // queda en null y nunca se envía como online/offline.
-  for (const [socketId, viewerName] of online.entries()) {
-    const socket = io.sockets.sockets.get(socketId);
-    if (!socket) continue;
-
-    const viewer = getUser(viewerName);
-    const list = all.map(u => ({
-      username: u.username,
-      displayName: u.displayName || u.username,
-      profileImage: u.profileImage || "",
-      online: areContacts(viewerName, u.username)
-        ? onlineUsers.has(norm(u.username))
-        : null
-    }));
-
-    socket.emit("userList", list);
-  }
-}
-
-function getContactList(username) {
-  const me = getUser(username);
-
-  if (!me) return [];
-
-  const contacts = Array.isArray(me.contacts)
-    ? me.contacts
-    : [];
-
-  return contacts
-    .map(name => getUser(name))
-    .filter(Boolean)
-    .filter(
-      u => !isEitherBlocked(
-        username,
-        u.username
-      )
-    )
-    .map(u => ({
-      username: u.username,
-      displayName:
-        u.displayName || u.username,
-      profileImage:
-        u.profileImage || "",
-      online: [...online.values()].some(
-        x => norm(x) === norm(u.username)
-      )
-    }));
-}
-
-function canViewStory(viewerUsername, storyOwnerUsername) {
-  const viewer = norm(viewerUsername);
-  const owner = norm(storyOwnerUsername);
-
-  if (!viewer || !owner) return false;
-  if (viewer === owner) return true;
-
-  return areContacts(viewer, owner);
-}
-
-function visibleStoriesFor(username) {
-  return cleanExpiredStories().filter(
-    story => canViewStory(username, story.username)
-  );
-}
-
-function emitStoriesToSocket(socketId, username) {
-  io.to(socketId).emit(
-    "storiesUpdated",
-    visibleStoriesFor(username)
-  );
-}
-
-function broadcastVisibleStories() {
-  for (const [socketId, username] of online.entries()) {
-    emitStoriesToSocket(socketId, username);
-  }
-}
-
-function broadcastStoryCreated(story) {
-  for (const [socketId, username] of online.entries()) {
-    if (canViewStory(username, story.username)) {
-      io.to(socketId).emit("storyCreated", story);
-      emitStoriesToSocket(socketId, username);
-    }
-  }
-}
-
-function broadcastStoryDeleted(story) {
-  for (const [socketId, username] of online.entries()) {
-    if (canViewStory(username, story.username)) {
-      io.to(socketId).emit("storyDeleted", { id: story.id });
-      emitStoriesToSocket(socketId, username);
-    }
-  }
-}
-
-function ensureContactRequests(user) {
-  if (!user || typeof user !== "object") return;
-
-  if (!Array.isArray(user.contacts)) user.contacts = [];
-
-  if (!user.contactRequests || typeof user.contactRequests !== "object") {
-    user.contactRequests = { incoming: [], outgoing: [] };
-  }
-
-  if (!Array.isArray(user.contactRequests.incoming)) user.contactRequests.incoming = [];
-  if (!Array.isArray(user.contactRequests.outgoing)) user.contactRequests.outgoing = [];
-}
-
-function areContacts(a, b) {
-  const userA = getUser(a);
-  const target = norm(b);
-
-  if (!userA || !target) return false;
-  ensureContactRequests(userA);
-
-  return userA.contacts.some(name => norm(name) === target) && !isEitherBlocked(a, b);
-}
-
-function relationshipBetween(a, b) {
-  const me = getUser(a);
-  const target = getUser(b);
-
-  if (!me || !target) return "none";
-  ensureContactRequests(me);
-  ensureContactRequests(target);
-
-  if (isEitherBlocked(a, b)) return "blocked";
-  if (areContacts(a, b)) return "accepted";
-
-  const other = norm(b);
-  if (me.contactRequests.outgoing.some(x => norm(x) === other)) return "outgoing";
-  if (me.contactRequests.incoming.some(x => norm(x) === other)) return "incoming";
-
-  return "none";
-}
-
-function getRelationshipData(username) {
-  const me = getUser(username);
-  if (!me) return { contacts: [], incoming: [], outgoing: [] };
-  ensureContactRequests(me);
-
-  return {
-    contacts: me.contacts.map(norm),
-    incoming: me.contactRequests.incoming.map(norm),
-    outgoing: me.contactRequests.outgoing.map(norm)
-  };
-}
-
-function emitRelationshipData(socket, username) {
-  socket.emit("relationshipData", getRelationshipData(username));
-}
-
-function emitRelationshipToUser(username) {
-  const sid = socketIdFor(username);
-  if (!sid) return;
-  const targetSocket = io.sockets.sockets.get(sid);
-  if (targetSocket) {
-    emitRelationshipData(targetSocket, username);
-    emitStoriesToSocket(sid, username);
-  }
-}
-
-function socketIdFor(username) {
-  for (const [sid, name] of online.entries()) {
-    if (norm(name) === norm(username)) {
-      return sid;
-    }
-  }
-
-  return null;
-}
-
-app.post("/api/register", (req, res) => {
-  if (globalAccessEnabled()) {
-    return res.status(403).json({
-      error: "No tienes acceso a este servicio.",
-      globalLock: true
-    });
-  }
-
-  const displayName =
-    String(req.body.username || "").trim();
-
-  const password =
-    String(req.body.password || "");
-
-  const email = normalizeEmail(req.body.email);
-  const phone = normalizePhone(req.body.phone);
-
-  if (
-    displayName.length < 3 ||
-    displayName.length > 24
-  ) {
-    return res.status(400).json({
-      error:
-        "El nombre debe tener entre 3 y 24 caracteres."
-    });
-  }
-
-  // Permitimos letras Unicode (incluidas tildes/ñ), mayúsculas, números y _.
-  // No se permiten espacios ni símbolos para mantener el @usuario limpio.
-  if (!/^[\p{L}\p{M}0-9_]+$/u.test(displayName)) {
-    return res.status(400).json({
-      error:
-        "Usa solo letras (incluidas tildes y ñ), números y _."
-    });
-  }
-
-  if (password.length < 6) {
-    return res.status(400).json({
-      error:
-        "La contraseña debe tener al menos 6 caracteres."
-    });
-  }
-
-  // El correo es opcional al registrarse. Si se proporciona, debe ser válido.
-  if (email && !validEmail(email)) {
-    return res.status(400).json({
-      error: "Introduce un correo electrónico válido."
-    });
-  }
-
-  if (phone && !validPhone(phone)) {
-    return res.status(400).json({
-      error: "Introduce un número de teléfono válido (7 a 15 dígitos)."
-    });
-  }
-
-  const username = norm(displayName);
-  const list = users();
-
-  // Comprobación de nombre robusta: ignora entradas antiguas sin username
-  // y compara siempre el valor normalizado.
-  const existingUser = list.find(
-    item => norm(item?.username) && norm(item.username) === username
-  );
-
-  console.log(`Registro solicitado: @${displayName}`);
-
-  if (existingUser) {
-    return res.status(400).json({
-      error: "Ese usuario ya existe."
-    });
-  }
-
-  if (email && list.some(u => normalizeEmail(u.email) === email)) {
-    return res.status(400).json({
-      error: "Ese correo electrónico ya está vinculado a otra cuenta."
-    });
-  }
-
-  if (phone && list.some(u => normalizePhone(u.phone) === phone)) {
-    return res.status(400).json({
-      error: "Ese número de teléfono ya está vinculado a otra cuenta."
-    });
-  }
-
-  const p = passwordHash(password);
-
-  list.push({
-    username,
-    displayName,
-    salt: p.salt,
-    passwordHash: p.hash,
-    email: email || "",
-    phone: phone || "",
-    profileImage: "",
-    blockedUsers: [],
-    contacts: [],
-    contactRequests: { incoming: [], outgoing: [] },
-    createdAt: Date.now()
-  });
-
-  saveUsers(list);
-
-  addAdminActivity(
-    `${displayName} (@${username}) se ha registrado.`
-  );
-
-  // La cuenta recién creada usa directamente su username normalizado.
-  const token = newSession(username);
-
-  sendUserList();
-
-  res.json({
-    success: true,
-    username: displayName,
-    token
-  });
+$("accessBlockedLogout")?.addEventListener("click", () => {
+  hideAccessBlockedModal();
+  localStorage.removeItem("chatToken");
+  authScreen.style.display = "flex";
+});
+$("globalUnlockButton")?.addEventListener("click", tryGlobalUnlock);
+$("globalUnlockPassword")?.addEventListener("keydown", event => {
+  if(event.key === "Enter") tryGlobalUnlock();
 });
 
-app.post("/api/forgot-password", async (req, res) => {
-  const identifier = String(req.body?.identifier || "").trim();
-  const lookup = norm(identifier);
-  const emailLookup = normalizeEmail(identifier);
-  const list = users();
-  const user = list.find(u => norm(u.username) === lookup || normalizeEmail(u.email) === emailLookup);
-
-  // Respuesta neutra para no revelar si existe una cuenta.
-  const generic = {
-    success: true,
-    message: "Si la cuenta existe y tiene un correo asociado, recibirás un código en unos instantes."
-  };
-
-  if (!user || !validEmail(user.email)) {
-    return res.json(generic);
-  }
-
-  const now = Date.now();
-  let resets = prunePasswordResets();
-  const recent = resets
-    .filter(item => norm(item.username) === norm(user.username))
-    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
-
-  if (recent[0] && now - Number(recent[0].createdAt || 0) < PASSWORD_RESET_RESEND_COOLDOWN) {
-    return res.json(generic);
-  }
-
-  const lastHour = recent.filter(item => now - Number(item.createdAt || 0) < 60 * 60 * 1000).length;
-  if (lastHour >= 5) {
-    return res.json(generic);
-  }
-
-  const code = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
-  const resetId = crypto.randomBytes(16).toString("hex");
-  const item = {
-    id: resetId,
-    username: norm(user.username),
-    email: normalizeEmail(user.email),
-    codeHash: hashResetCode(user.username, resetId, code),
-    createdAt: now,
-    expiresAt: now + PASSWORD_RESET_TTL,
-    attempts: 0,
-    usedAt: null
-  };
-
-  // Invalida códigos anteriores de la misma cuenta.
-  resets = resets.map(entry =>
-    norm(entry.username) === norm(user.username)
-      ? { ...entry, usedAt: entry.usedAt || now, invalidatedAt: now }
-      : entry
-  );
-  resets.push(item);
-  if (resets.length > 500) resets.splice(0, resets.length - 500);
-  savePasswordResets(resets);
-
-  try {
-    await sendPasswordResetEmail(user.email, user.username, code);
-    addAdminActivity(`Se envió un código de recuperación a @${user.username}.`);
-    return res.json(generic);
-  } catch (error) {
-    console.error("No se pudo enviar el correo de recuperación:", error.message);
-    // No dejamos un código válido guardado si el correo no pudo salir.
-    const current = passwordResets().map(entry =>
-      entry.id === resetId ? { ...entry, usedAt: Date.now(), mailError: true } : entry
-    );
-    savePasswordResets(current);
-    return res.status(503).json({
-      error: "No se pudo enviar el correo de recuperación. El servicio de correo no está configurado correctamente."
-    });
-  }
-});
-
-app.post("/api/reset-password", (req, res) => {
-  const identifier = String(req.body?.identifier || "").trim();
-  const code = String(req.body?.code || "").replace(/\D/g, "").slice(0, 6);
-  const newPassword = String(req.body?.newPassword || "");
-
-  if (!identifier || !/^\d{6}$/.test(code)) {
-    return res.status(400).json({ error: "Introduce el usuario/correo y el código de 6 dígitos." });
-  }
-
-  if (newPassword.length < 6) {
-    return res.status(400).json({ error: "La nueva contraseña debe tener al menos 6 caracteres." });
-  }
-
-  const list = users();
-  const lookup = norm(identifier);
-  const emailLookup = normalizeEmail(identifier);
-  const userIndex = list.findIndex(u => norm(u.username) === lookup || normalizeEmail(u.email) === emailLookup);
-  if (userIndex < 0) {
-    return res.status(400).json({ error: "Código no válido o caducado." });
-  }
-
-  const username = norm(list[userIndex].username);
-  const now = Date.now();
-  let resets = prunePasswordResets();
-  const reset = resets
-    .filter(item => norm(item.username) === username && !item.usedAt && !item.invalidatedAt)
-    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))[0];
-
-  if (!reset || Number(reset.expiresAt || 0) <= now || Number(reset.attempts || 0) >= PASSWORD_RESET_MAX_ATTEMPTS) {
-    return res.status(400).json({ error: "Código no válido o caducado." });
-  }
-
-  const expected = hashResetCode(username, reset.id, code);
-  const a = Buffer.from(String(reset.codeHash || ""), "hex");
-  const b = Buffer.from(expected, "hex");
-  let matches = a.length === b.length;
-  try {
-    if (matches) matches = crypto.timingSafeEqual(a, b);
-  } catch {
-    matches = false;
-  }
-
-  if (!matches) {
-    reset.attempts = Number(reset.attempts || 0) + 1;
-    if (reset.attempts >= PASSWORD_RESET_MAX_ATTEMPTS) reset.invalidatedAt = now;
-    savePasswordResets(resets);
-    return res.status(400).json({ error: "Código no válido o caducado." });
-  }
-
-  const p = passwordHash(newPassword);
-  list[userIndex].salt = p.salt;
-  list[userIndex].passwordHash = p.hash;
-  list[userIndex].passwordChangedAt = now;
-  saveUsers(list);
-
-  reset.usedAt = now;
-  savePasswordResets(resets);
-
-  // Invalida también las sesiones legacy almacenadas en sessions.json.
-  const legacySessions = sessions();
-  let changed = false;
-  for (const [token, session] of Object.entries(legacySessions)) {
-    if (norm(session?.username) === username) {
-      delete legacySessions[token];
-      changed = true;
-    }
-  }
-  if (changed) saveSessions(legacySessions);
-
-  addAdminActivity(`@${username} ha restablecido su contraseña mediante recuperación por correo.`);
-
-  res.json({ success: true, message: "Contraseña cambiada correctamente. Ya puedes iniciar sesión." });
-});
-
-app.post("/api/login", (req, res) => {
-  const identifier =
-    String(req.body?.username || req.body?.identifier || "").trim();
-
-  const password =
-    String(req.body.password || "");
-
-  const usernameLookup = norm(identifier);
-  const emailLookup = normalizeEmail(identifier);
-  const phoneLookup = normalizePhone(identifier);
-  const phoneIsValid = validPhone(phoneLookup);
-  const u = users().find(item =>
-    norm(item.username) === usernameLookup ||
-    normalizeEmail(item.email) === emailLookup ||
-    (phoneIsValid && normalizePhone(item.phone) === phoneLookup)
-  );
-
-  if (
-    !u ||
-    !validPassword(
-      password,
-      u.salt,
-      u.passwordHash
-    )
-  ) {
-    return res.status(401).json({
-      error:
-        "Usuario o contraseña incorrectos."
-    });
-  }
-
-  if (globalAccessEnabled() && !globalOwnerCanAccess(u.username)) {
-    return res.status(403).json({
-      error: "No tienes acceso a este servicio.",
-      globalLock: true
-    });
-  }
-
-  const accessBlock = activeAccessBlockFor(u.username);
-  if (accessBlock) {
-    return res.status(403).json({
-      error: accessBlock.reason || "Tu acceso a Mi Chat está bloqueado por un administrador.",
-      accessBlocked: true
-    });
-  }
-
-  const ban = activeBanFor(u.username);
-  if (ban) {
-    return res.status(403).json({
-      error: ban.expiresAt
-        ? `Tu cuenta está baneada hasta ${new Date(Number(ban.expiresAt)).toLocaleString("es-ES")}.`
-        : "Tu cuenta está baneada permanentemente.",
-      banned: true,
-      banUntil: ban.expiresAt || null,
-      banReason: ban.reason || ""
-    });
-  }
-
-  const list = users();
-
-  const idx = list.findIndex(
-    x => norm(x.username) ===
-      norm(u.username)
-  );
-
-  if (idx >= 0) {
-    if (!Array.isArray(list[idx].contacts)) {
-      list[idx].contacts = [];
-    }
-
-    ensureContactRequests(list[idx]);
-
-    if (!Array.isArray(list[idx].blockedUsers)) {
-      list[idx].blockedUsers = [];
-    }
-
-    saveUsers(list);
-  }
-
-  const token = newSession(u.username);
-
-  addAdminActivity(
-    `@${u.username} ha iniciado sesión.`
-  );
-
-  res.json({
-    success: true,
-    username: u.displayName,
-    token
-  });
-});
-
-app.get("/api/session", (req, res) => {
-  const token = authToken(req);
-  const rawUser = sessionUserRaw(token);
-  const accessBlock = rawUser ? activeAccessBlockFor(rawUser.username) : null;
-  const ban = rawUser ? activeBanFor(rawUser.username) : null;
-
-  if (rawUser && globalAccessEnabled() && !globalOwnerCanAccess(rawUser.username)) {
-    // El bloqueo global no destruye la sesión. El token se conserva para
-    // que el usuario pueda volver al chat automáticamente al desbloquear.
-    return res.status(403).json({
-      loggedIn: false,
-      globalLock: true,
-      error: "No tienes acceso a este servicio."
-    });
-  }
-
-  if (!rawUser) {
-    return res.status(401).json({
-      loggedIn: false
-    });
-  }
-
-  if (accessBlock) {
-    return res.status(403).json({
-      loggedIn: false,
-      accessBlocked: true,
-      error: accessBlock.reason || "Tu acceso a Mi Chat está bloqueado por un administrador."
-    });
-  }
-
-  if (ban) {
-    return res.status(403).json({
-      loggedIn: false,
-      banned: true,
-      banUntil: ban.expiresAt || null,
-      banReason: ban.reason || "",
-      error: ban.expiresAt
-        ? `Tu cuenta está baneada hasta ${new Date(Number(ban.expiresAt)).toLocaleString("es-ES")}.`
-        : "Tu cuenta está baneada permanentemente."
-    });
-  }
-
-  const u = rawUser;
-
-  res.json({
-    loggedIn: true,
-    username: u.username,
-    displayName: u.displayName,
-    email: u.email || "",
-    profileImage:
-      u.profileImage || ""
-  });
-});
-
-app.post("/api/logout", (req, res) => {
-  deleteSession(
-    authToken(req)
-  );
-
-  res.json({
-    success: true
-  });
-});
-
-
-function replaceUsernameInArray(values, oldUsername, newUsername) {
-  if (!Array.isArray(values)) return false;
-  let changed = false;
-  for (let i = 0; i < values.length; i++) {
-    if (norm(values[i]) === oldUsername) {
-      values[i] = newUsername;
-      changed = true;
-    }
-  }
-  return changed;
-}
-
-function migrateUsernameReferences(oldUsername, newUsername) {
-  const oldName = norm(oldUsername);
-  const newName = norm(newUsername);
-
-  // Usuarios, contactos, bloqueos y solicitudes.
-  const userList = users();
-  for (const item of userList) {
-    if (norm(item?.username) === oldName) item.username = newName;
-    ensureContactRequests(item);
-    replaceUsernameInArray(item.contacts, oldName, newName);
-    replaceUsernameInArray(item.blockedUsers, oldName, newName);
-    replaceUsernameInArray(item.contactRequests.incoming, oldName, newName);
-    replaceUsernameInArray(item.contactRequests.outgoing, oldName, newName);
-  }
-  saveUsers(userList);
-
-  // Mensajes: mantenemos las conversaciones aunque cambie el @usuario.
-  const messageList = messages();
-  let messagesChanged = false;
-  for (const item of messageList) {
-    if (norm(item?.from) === oldName) { item.from = newName; messagesChanged = true; }
-    if (norm(item?.to) === oldName) { item.to = newName; messagesChanged = true; }
-  }
-  if (messagesChanged) saveMessages(messageList);
-
-  // Sesiones antiguas.
-  const legacySessions = sessions();
-  let sessionsChanged = false;
-  for (const value of Object.values(legacySessions)) {
-    if (norm(value?.username) === oldName) {
-      value.username = newName;
-      sessionsChanged = true;
-    }
-  }
-  if (sessionsChanged) saveSessions(legacySessions);
-
-  // Push / historias / grabaciones / reportes si existen.
-  const pushList = pushSubs();
-  let pushChanged = false;
-  for (const item of pushList) {
-    if (norm(item?.username) === oldName) { item.username = newName; pushChanged = true; }
-  }
-  if (pushChanged) savePushSubs(pushList);
-
-  const storyList = allStories();
-  let storiesChanged = false;
-  for (const item of storyList) {
-    if (norm(item?.username) === oldName) { item.username = newName; storiesChanged = true; }
-  }
-  if (storiesChanged) saveStories(storyList);
-
-  const recordingList = recordings();
-  let recordingsChanged = false;
-  for (const item of recordingList) {
-    for (const field of ["username", "from", "to", "owner"]) {
-      if (norm(item?.[field]) === oldName) { item[field] = newName; recordingsChanged = true; }
-    }
-    if (Array.isArray(item?.participants)) {
-      if (replaceUsernameInArray(item.participants, oldName, newName)) recordingsChanged = true;
-    }
-  }
-  if (recordingsChanged) saveRecordings(recordingList);
-
-  const reportList = reports();
-  let reportsChanged = false;
-  for (const item of reportList) {
-    if (norm(item?.username) === oldName) { item.username = newName; reportsChanged = true; }
-  }
-  if (reportsChanged) saveReports(reportList);
-
-  const moderationList = moderationNotices();
-  let moderationChanged = false;
-  for (const item of moderationList) {
-    if (norm(item?.target) === oldName) { item.target = newName; moderationChanged = true; }
-    if (norm(item?.createdBy) === oldName) { item.createdBy = newName; moderationChanged = true; }
-  }
-  if (moderationChanged) saveModerationNotices(moderationList);
-
-  const moderationReadState = moderationReads();
-  if (Object.prototype.hasOwnProperty.call(moderationReadState, oldName)) {
-    moderationReadState[newName] = moderationReadState[oldName];
-    delete moderationReadState[oldName];
-    saveModerationReads(moderationReadState);
-  }
-
-  const appealList = appeals();
-  let appealsChanged = false;
-  for (const item of appealList) {
-    if (norm(item?.username) === oldName) { item.username = newName; appealsChanged = true; }
-    if (norm(item?.noticeTarget) === oldName) { item.noticeTarget = newName; appealsChanged = true; }
-  }
-  if (appealsChanged) saveAppeals(appealList);
-
-  const banList = bans();
-  let bansChanged = false;
-  for (const item of banList) {
-    for (const field of ["username", "createdBy", "revokedBy"]) {
-      if (norm(item?.[field]) === oldName) { item[field] = newName; bansChanged = true; }
-    }
-  }
-  if (bansChanged) saveBans(banList);
-
-  // Recuperaciones pendientes: las invalidamos porque el identificador de cuenta cambió.
-  const resetList = passwordResets();
-  let resetsChanged = false;
-  const now = Date.now();
-  for (const item of resetList) {
-    if (norm(item?.username) === oldName && !item.usedAt && !item.invalidatedAt) {
-      item.invalidatedAt = now;
-      resetsChanged = true;
-    }
-  }
-  if (resetsChanged) savePasswordResets(resetList);
-
-  // Permisos de consola.
-  const commandList = commandAccessRecords();
-  let commandChanged = false;
-  for (const item of commandList) {
-    if (norm(item?.username) === oldName) { item.username = newName; commandChanged = true; }
-  }
-  if (commandChanged) saveCommandAccessRecords(commandList);
-
-  const accessBlockMap = accessBlocks();
-  if (Object.prototype.hasOwnProperty.call(accessBlockMap, oldName)) {
-    accessBlockMap[newName] = accessBlockMap[oldName];
-    accessBlockMap[newName].username = newName;
-    delete accessBlockMap[oldName];
-    saveAccessBlocks(accessBlockMap);
-  }
-
-  // Preferencia de registro de mensajes.
-  const messageLogging = messageLoggingSettings();
-  if (Object.prototype.hasOwnProperty.call(messageLogging, oldName)) {
-    messageLogging[newName] = messageLogging[oldName] === true;
-    delete messageLogging[oldName];
-    saveMessageLoggingSettings(messageLogging);
-  }
-
-  // Tokens FCM: el identificador es la propia clave.
-  const tokenMap = fcmTokens();
-  if (tokenMap && typeof tokenMap === "object" && !Array.isArray(tokenMap)) {
-    if (Object.prototype.hasOwnProperty.call(tokenMap, oldName)) {
-      tokenMap[newName] = tokenMap[oldName];
-      delete tokenMap[oldName];
-      saveFcmTokens(tokenMap);
-    }
-  }
-}
-
-app.post("/api/account/username", requireUser, (req, res) => {
-  const currentPassword = String(req.body?.currentPassword || "");
-  const requested = String(req.body?.username || "").trim();
-  const newUsername = norm(requested);
-  const oldUsername = norm(req.user.username);
-
-  if (!currentPassword) {
-    return res.status(400).json({ error: "Introduce tu contraseña actual." });
-  }
-  if (!validPassword(currentPassword, req.user.salt, req.user.passwordHash)) {
-    return res.status(401).json({ error: "La contraseña actual no es correcta." });
-  }
-  if (newUsername.length < 3 || newUsername.length > 24) {
-    return res.status(400).json({ error: "El @usuario debe tener entre 3 y 24 caracteres." });
-  }
-  if (!/^[a-zA-Z0-9_]+$/.test(requested)) {
-    return res.status(400).json({ error: "El @usuario solo puede contener letras, números y _." });
-  }
-  if (newUsername === oldUsername) {
-    return res.status(400).json({ error: "El nuevo @usuario es igual al actual." });
-  }
-  if (getUser(newUsername)) {
-    return res.status(409).json({ error: "Ese @usuario ya está en uso." });
-  }
-
-  migrateUsernameReferences(oldUsername, newUsername);
-
-  for (const [sid, name] of online.entries()) {
-    if (norm(name) === oldUsername) online.set(sid, newUsername);
-  }
-
-  const token = newSession(newUsername);
-  sendUserList();
-
-  for (const [, name] of online.entries()) {
-    emitRelationshipToUser(name);
-  }
-
-  io.emit("usernameChanged", {
-    oldUsername,
-    newUsername,
-    displayName: req.user.displayName || newUsername
-  });
-
-  const sid = socketIdFor(newUsername);
-  if (sid) {
-    io.to(sid).emit("accountUpdated", {
-      username: newUsername,
-      token
-    });
-  }
-
-  addAdminActivity(`@${oldUsername} cambió su @usuario a @${newUsername}.`);
-
-  res.json({ success: true, username: newUsername, token });
-});
-
-app.post("/api/account/password", requireUser, (req, res) => {
-  const currentPassword = String(req.body?.currentPassword || "");
-  const newPassword = String(req.body?.newPassword || "");
-
-  if (!currentPassword) {
-    return res.status(400).json({ error: "Introduce tu contraseña actual." });
-  }
-  if (!validPassword(currentPassword, req.user.salt, req.user.passwordHash)) {
-    return res.status(401).json({ error: "La contraseña actual no es correcta." });
-  }
-  if (newPassword.length < 6) {
-    return res.status(400).json({ error: "La nueva contraseña debe tener al menos 6 caracteres." });
-  }
-  if (newPassword === currentPassword) {
-    return res.status(400).json({ error: "La nueva contraseña debe ser diferente." });
-  }
-
-  const list = users();
-  const idx = list.findIndex(item => norm(item.username) === norm(req.user.username));
-  if (idx < 0) return res.status(404).json({ error: "Usuario no encontrado." });
-
-  const p = passwordHash(newPassword);
-  list[idx].salt = p.salt;
-  list[idx].passwordHash = p.hash;
-  list[idx].passwordChangedAt = Date.now();
-  saveUsers(list);
-
-  const legacySessions = sessions();
-  for (const token of Object.keys(legacySessions)) {
-    if (norm(legacySessions[token]?.username) === norm(req.user.username)) delete legacySessions[token];
-  }
-  saveSessions(legacySessions);
-
-  addAdminActivity(`@${list[idx].username} cambió su contraseña desde Configuración.`);
-
-  res.json({ success: true, token: newSession(list[idx].username) });
-});
-
-app.get("/api/profile", (req, res) => {
-  const u = sessionUser(
-    authToken(req)
-  );
-
-  if (!u) {
-    return res.status(401).json({
-      error: "No autorizado"
-    });
-  }
-
-  res.json({
-    username: u.username,
-    displayName: u.displayName,
-    email: normalizeEmail(u.email || ""),
-    phone: normalizePhone(u.phone || ""),
-    profileImage:
-      u.profileImage || ""
-  });
-});
-
-app.post("/api/profile", (req, res) => {
-  const u = sessionUser(
-    authToken(req)
-  );
-
-  if (!u) {
-    return res.status(401).json({
-      error: "No autorizado"
-    });
-  }
-
-  const displayName = String(
-    req.body.displayName ||
-    u.displayName
-  ).trim();
-
-  const email = normalizeEmail(req.body.email || u.email || "");
-  const phone = normalizePhone(req.body.phone || u.phone || "");
-
-  const profileImage = String(
-    req.body.profileImage || ""
-  );
-
-  if (
-    displayName.length < 3 ||
-    displayName.length > 24
-  ) {
-    return res.status(400).json({
-      error: "Nombre inválido."
-    });
-  }
-
-  if (profileImage.length > 800000) {
-    return res.status(400).json({
-      error:
-        "La imagen es demasiado grande."
-    });
-  }
-
-  if (email && !validEmail(email)) {
-    return res.status(400).json({ error: "Correo electrónico inválido." });
-  }
-
-  if (phone && !validPhone(phone)) {
-    return res.status(400).json({ error: "Número de teléfono inválido (7 a 15 dígitos)." });
-  }
-
-  const list = users();
-
-  const idx = list.findIndex(
-    x => norm(x.username) ===
-      norm(u.username)
-  );
-
-  if (idx < 0) {
-    return res.status(404).json({
-      error:
-        "Usuario no encontrado."
-    });
-  }
-
-  if (email && list.some((item, itemIndex) => itemIndex !== idx && normalizeEmail(item.email) === email)) {
-    return res.status(400).json({ error: "Ese correo electrónico ya está vinculado a otra cuenta." });
-  }
-
-  if (phone && list.some((item, itemIndex) => itemIndex !== idx && normalizePhone(item.phone) === phone)) {
-    return res.status(400).json({ error: "Ese número de teléfono ya está vinculado a otra cuenta." });
-  }
-
-  list[idx].displayName =
-    displayName;
-
-  list[idx].email = email;
-  list[idx].phone = phone;
-
-  list[idx].profileImage =
-    profileImage;
-
-  saveUsers(list);
-  sendUserList();
-
-  res.json({
-    success: true,
-    displayName,
-    email,
-    phone,
-    profileImage
-  });
-});
-
-// =====================================================
-// CONTACTOS
-// =====================================================
-
-app.get("/api/contacts", (req, res) => {
-  const u = sessionUser(
-    authToken(req)
-  );
-
-  if (!u) {
-    return res.status(401).json({
-      error: "No autorizado"
-    });
-  }
-
-  res.json(
-    getContactList(u.username)
-  );
-});
-
-app.post("/api/contacts/add", (req, res) => {
-  const u = sessionUser(authToken(req));
-  if (!u) return res.status(401).json({ error: "No autorizado" });
-
-  const target = norm(req.body.username);
-  const targetUser = getUser(target);
-
-  if (!target) return res.status(400).json({ error: "Escribe un nombre de usuario." });
-  if (target === norm(u.username)) return res.status(400).json({ error: "No puedes añadirte a ti mismo." });
-  if (!targetUser) return res.status(404).json({ error: "Ese usuario no existe." });
-  if (isEitherBlocked(u.username, target)) return res.status(400).json({ error: "No puedes añadir a este usuario." });
-
-  const list = users();
-  const meIdx = list.findIndex(x => norm(x.username) === norm(u.username));
-  const targetIdx = list.findIndex(x => norm(x.username) === target);
-  if (meIdx < 0 || targetIdx < 0) return res.status(404).json({ error: "Usuario no encontrado." });
-
-  ensureContactRequests(list[meIdx]);
-  ensureContactRequests(list[targetIdx]);
-
-  if (areContacts(u.username, target)) return res.status(409).json({ error: "Ya sois contactos." });
-  if (list[meIdx].contactRequests.outgoing.some(x => norm(x) === target)) {
-    return res.status(409).json({ error: "Ya has enviado una solicitud a este usuario." });
-  }
-  if (list[meIdx].contactRequests.incoming.some(x => norm(x) === target)) {
-    return res.status(409).json({ error: "Este usuario ya te ha enviado una solicitud. Acéptala desde Solicitudes." });
-  }
-
-  list[meIdx].contactRequests.outgoing.push(target);
-  list[targetIdx].contactRequests.incoming.push(norm(u.username));
-  saveUsers(list);
-
-  emitRelationshipToUser(u.username);
-  emitRelationshipToUser(target);
-
-  const targetSid = socketIdFor(target);
-  if (targetSid) {
-    io.to(targetSid).emit("contactRequestReceived", {
-      username: norm(u.username),
-      displayName: list[meIdx].displayName || list[meIdx].username,
-      profileImage: list[meIdx].profileImage || "",
-      online: true
-    });
-  }
-
-  sendPushToUser(target, {
-    type: "contact_request",
-    title: "📥 Nueva solicitud de contacto",
-    from: list[meIdx].displayName || list[meIdx].username,
-    sender: norm(u.username),
-    username: norm(u.username),
-    body: `@${list[meIdx].username} te ha enviado una solicitud de contacto.`,
-    message: `@${list[meIdx].username} te ha enviado una solicitud de contacto.`
-  });
-
-  res.json({ success: true, status: "outgoing" });
-});
-
-app.post("/api/contacts/remove", (req, res) => {
-  const u = sessionUser(authToken(req));
-  if (!u) return res.status(401).json({ error: "No autorizado" });
-
-  const target = norm(req.body.username);
-  const list = users();
-  const idx = list.findIndex(x => norm(x.username) === norm(u.username));
-
-  if (idx < 0) return res.status(404).json({ error: "Usuario no encontrado." });
-
-  ensureContactRequests(list[idx]);
-  list[idx].contacts = list[idx].contacts.filter(x => norm(x) !== target);
-  list[idx].contactRequests.incoming = list[idx].contactRequests.incoming.filter(x => norm(x) !== target);
-  list[idx].contactRequests.outgoing = list[idx].contactRequests.outgoing.filter(x => norm(x) !== target);
-
-  const targetIdx = list.findIndex(x => norm(x.username) === target);
-  if (targetIdx >= 0) {
-    ensureContactRequests(list[targetIdx]);
-    list[targetIdx].contacts = list[targetIdx].contacts.filter(x => norm(x) !== norm(u.username));
-    list[targetIdx].contactRequests.incoming = list[targetIdx].contactRequests.incoming.filter(x => norm(x) !== norm(u.username));
-    list[targetIdx].contactRequests.outgoing = list[targetIdx].contactRequests.outgoing.filter(x => norm(x) !== norm(u.username));
-  }
-
-  saveUsers(list);
-  emitRelationshipToUser(u.username);
-  emitRelationshipToUser(target);
-
-  res.json({ success: true });
-});
-
-// =====================================================
-// PUSH WEB
-// =====================================================
-
-app.post("/api/push/subscribe", (req, res) => {
-  const u = sessionUser(
-    authToken(req)
-  );
-
-  if (!u) {
-    return res.status(401).json({
-      error: "No autorizado"
-    });
-  }
-
-  const subscription =
-    req.body.subscription;
-
-  if (
-    !subscription ||
-    !subscription.endpoint
-  ) {
-    return res.status(400).json({
-      error:
-        "Suscripción inválida."
-    });
-  }
-
-  const list = pushSubs();
-
-  const exists = list.some(
-    x =>
-      x.username === u.username &&
-      x.subscription.endpoint ===
-        subscription.endpoint
-  );
-
-  if (!exists) {
-    list.push({
-      username: u.username,
-      subscription
-    });
-  }
-
-  savePushSubs(list);
-
-  res.json({
-    success: true,
-    enabled:
-      !!(
-        vapidPublic &&
-        vapidPrivate
-      )
-  });
-});
-
-app.get("/api/push/public-key", (req, res) => {
-  res.json({
-    enabled:
-      !!(
-        vapidPublic &&
-        vapidPrivate
-      ),
-    publicKey: vapidPublic
-  });
-});
-
-// =====================================================
-// TOKEN FCM ANDROID
-// =====================================================
-
-app.post("/api/fcm/token", (req, res) => {
-  const user = sessionUser(
-    authToken(req)
-  );
-
-  if (!user) {
-    return res.status(401).json({
-      error: "No autorizado"
-    });
-  }
+async function checkSession(){
 
   const token =
-    String(req.body.token || "").trim();
+    localStorage.getItem("chatToken");
 
-  if (
-    !token ||
-    token.length < 20 ||
-    token.length > 4096
-  ) {
-    return res.status(400).json({
-      error:
-        "Token FCM inválido."
-    });
-  }
+  if(!token) return;
 
-  const data = fcmTokens();
+  try{
 
-  // El mismo dispositivo/token no debe
-  // quedarse asociado a varios usuarios.
-  for (const username of Object.keys(data)) {
-    data[username] =
-      (
-        Array.isArray(data[username])
-          ? data[username]
-          : []
-      ).filter(
-        existing => existing !== token
-      );
-  }
-
-  const key =
-    norm(user.username);
-
-  if (!Array.isArray(data[key])) {
-    data[key] = [];
-  }
-
-  if (!data[key].includes(token)) {
-    data[key].push(token);
-  }
-
-  data[key] =
-    data[key].slice(-5);
-
-  saveFcmTokens(data);
-
-  console.log(
-    `FCM token registrado para ${key}. Total de dispositivos: ${data[key].length}`
-  );
-
-  res.json({
-    success: true
-  });
-});
-
-// =====================================================
-// HISTORIAS
-// =====================================================
-
-app.get("/api/stories", (req, res) => {
-  const u = sessionUser(
-    authToken(req)
-  );
-
-  if (!u) {
-    return res.status(401).json({
-      error: "No autorizado"
-    });
-  }
-
-  const list =
-    visibleStoriesFor(u.username)
-      .map(story => ({
-        ...story,
-        views:
-          Array.isArray(story.views)
-            ? story.views
-            : []
-      }));
-
-  res.json(list);
-});
-
-app.post("/api/stories", (req, res) => {
-  const u = sessionUser(
-    authToken(req)
-  );
-
-  if (!u) {
-    return res.status(401).json({
-      error: "No autorizado"
-    });
-  }
-
-  const type =
-    req.body.type === "image"
-      ? "image"
-      : "text";
-
-  const content =
-    String(req.body.content || "").trim();
-
-  if (!content) {
-    return res.status(400).json({
-      error:
-        "La historia no puede estar vacía."
-    });
-  }
-
-  if (
-    type === "text" &&
-    content.length > 500
-  ) {
-    return res.status(400).json({
-      error:
-        "El texto puede tener como máximo 500 caracteres."
-    });
-  }
-
-  if (
-    type === "image" &&
-    content.length > 9000000
-  ) {
-    return res.status(400).json({
-      error:
-        "La imagen es demasiado grande."
-    });
-  }
-
-  if (
-    type === "image" &&
-    !/^data:image\/(jpeg|jpg|png|webp|gif);base64,/i.test(
-      content
-    )
-  ) {
-    return res.status(400).json({
-      error:
-        "Formato de imagen no válido."
-    });
-  }
-
-  const list =
-    cleanExpiredStories();
-
-  const ownCount =
-    list.filter(
-      s =>
-        norm(s.username) ===
-        norm(u.username)
-    ).length;
-
-  if (ownCount >= 20) {
-    return res.status(400).json({
-      error:
-        "Has alcanzado el límite de 20 historias activas."
-    });
-  }
-
-  const now = Date.now();
-
-  const story = {
-    id:
-      now +
-      "-" +
-      crypto.randomBytes(5).toString("hex"),
-
-    username: u.username,
-
-    displayName:
-      u.displayName || u.username,
-
-    profileImage:
-      u.profileImage || "",
-
-    type,
-
-    content,
-
-    background:
-      type === "text"
-        ? String(
-            req.body.background ||
-            "#075e54"
-          )
-        : "",
-
-    createdAt: now,
-
-    expiresAt:
-      now +
-      24 * 60 * 60 * 1000,
-
-    views: []
-  };
-
-  list.push(story);
-
-  saveStories(list);
-
-  broadcastStoryCreated(story);
-
-  res.json({
-    success: true,
-    story
-  });
-});
-
-// =====================================================
-// MARCAR HISTORIA COMO VISTA
-// =====================================================
-
-app.post("/api/stories/:id/view", (req, res) => {
-  const u = sessionUser(
-    authToken(req)
-  );
-
-  if (!u) {
-    return res.status(401).json({
-      error: "No autorizado"
-    });
-  }
-
-  const list =
-    cleanExpiredStories();
-
-  const idx = list.findIndex(
-    s =>
-      String(s.id) ===
-      String(req.params.id)
-  );
-
-  if (idx < 0) {
-    return res.status(404).json({
-      error:
-        "Historia no encontrada."
-    });
-  }
-
-  const story = list[idx];
-
-  if (!canViewStory(u.username, list[idx].username)) {
-    return res.status(403).json({
-      error:
-        "No puedes ver esta historia."
-    });
-  }
-
-  if (!Array.isArray(story.views)) {
-    story.views = [];
-  }
-
-  if (
-    norm(story.username) ===
-    norm(u.username)
-  ) {
-    saveStories(list);
-
-    return res.json({
-      success: true,
-      viewed: false,
-      owner: true,
-      views: story.views
-    });
-  }
-
-  let added = false;
-
-  if (
-    !story.views.some(
-      v =>
-        norm(v.username) ===
-        norm(u.username)
-    )
-  ) {
-    const view = {
-      username: u.username,
-      displayName:
-        u.displayName ||
-        u.username,
-      profileImage:
-        u.profileImage || "",
-      viewedAt: Date.now()
-    };
-
-    story.views.push(view);
-    added = true;
-
-    saveStories(list);
-
-    const ownerSid =
-      socketIdFor(
-        story.username
-      );
-
-    if (ownerSid) {
-      io.to(ownerSid).emit(
-        "storyViewed",
+    const response =
+      await fetch(
+        "/api/session",
         {
-          storyId: story.id,
-          view,
-          views: story.views
+          headers:{
+            Authorization:"Bearer " + token
+          }
         }
       );
-    }
-  } else {
-    saveStories(list);
-  }
 
-  res.json({
-    success: true,
-    viewed: true,
-    owner: false,
-    added,
-    views: story.views
-  });
-});
+    const data =
+      await response.json().catch(() => ({}));
 
-// =====================================================
-// VER QUIÉN HA VISTO UNA HISTORIA
-// =====================================================
-
-app.get("/api/stories/:id/views", (req, res) => {
-  const u = sessionUser(
-    authToken(req)
-  );
-
-  if (!u) {
-    return res.status(401).json({
-      error: "No autorizado"
-    });
-  }
-
-  const list =
-    cleanExpiredStories();
-
-  const story =
-    list.find(
-      s =>
-        String(s.id) ===
-        String(req.params.id)
-    );
-
-  if (!story) {
-    return res.status(404).json({
-      error:
-        "Historia no encontrada."
-    });
-  }
-
-  if (
-    norm(story.username) !==
-    norm(u.username)
-  ) {
-    return res.status(403).json({
-      error:
-        "Solo el dueño puede ver los espectadores."
-    });
-  }
-
-  const views =
-    Array.isArray(story.views)
-      ? story.views
-      : [];
-
-  res.json({
-    success: true,
-    count: views.length,
-    views
-  });
-});
-
-app.delete("/api/stories/:id", (req, res) => {
-  const u = sessionUser(
-    authToken(req)
-  );
-
-  if (!u) {
-    return res.status(401).json({
-      error: "No autorizado"
-    });
-  }
-
-  const list =
-    cleanExpiredStories();
-
-  const idx = list.findIndex(
-    s =>
-      String(s.id) ===
-      String(req.params.id)
-  );
-
-  if (idx < 0) {
-    return res.status(404).json({
-      error:
-        "Historia no encontrada."
-    });
-  }
-
-  if (
-    norm(list[idx].username) !==
-    norm(u.username)
-  ) {
-    return res.status(403).json({
-      error:
-        "No puedes borrar esta historia."
-    });
-  }
-
-  const removed =
-    list.splice(idx, 1)[0];
-
-  saveStories(list);
-
-  broadcastStoryDeleted(removed);
-
-  res.json({
-    success: true
-  });
-});
-
-// =====================================================
-// SOCKET.IO
-// =====================================================
-
-io.on("connection", socket => {
-  socket.on("authenticate", token => {
-    const u = sessionUserRaw(token);
-
-    if (!u) {
-      return socket.emit(
-        "authenticationError"
-      );
-    }
-
-    if (globalAccessEnabled() && !globalOwnerCanAccess(u.username)) {
-      socket.emit("globalAccessLocked", {
-        message: "No tienes acceso a este servicio."
-      });
-      return socket.disconnect(true);
-    }
-
-    const accessBlock = activeAccessBlockFor(u.username);
-    if (accessBlock) {
-      socket.emit("accessBlocked", {
-        reason: accessBlock.reason || "Tu acceso a Mi Chat ha sido bloqueado por un administrador."
-      });
-      return socket.disconnect(true);
-    }
-
-    const ban = activeBanFor(u.username);
-    if (ban) {
-      socket.emit("banned", {
-        reason: ban.reason || "",
-        expiresAt: ban.expiresAt || null,
-        createdAt: ban.createdAt || Date.now()
-      });
-      return socket.disconnect(true);
-    }
-
-    for (const [
-      sid,
-      name
-    ] of online.entries()) {
-      if (
-        sid !== socket.id &&
-        norm(name) ===
-          norm(u.username)
-      ) {
-        online.delete(sid);
-
-        const old =
-          io.sockets.sockets.get(sid);
-
-        if (old) {
-          old.disconnect(true);
-        }
+    if(!response.ok){
+      if(data.globalLock){
+        // Conservamos el token: al desbloquear, la sesión se recuperará automáticamente.
+        app.style.display = "none";
+        authScreen.style.display = "flex";
+        authError.textContent = "";
+        showAccessBlockedModal({globalLock:true});
+        return;
       }
-    }
-
-    online.set(
-      socket.id,
-      u.username
-    );
-
-    addAdminActivity(
-      `@${u.username} se ha conectado.`
-    );
-
-    socket.emit(
-      "authenticated",
-      {
-        username:
-          u.username,
-        displayName:
-          u.displayName,
-        profileImage:
-          u.profileImage || "",
-        commandConsoleEnabled: hasCommandAccess(u.username),
-        commandConsoleRank: getCommandRank(u.username),
-        commandConsoleRankLabel: commandRankLabel(getCommandRank(u.username))
+      localStorage.removeItem("chatToken");
+      if(data.accessBlocked){
+        authError.textContent = "";
+        showAccessBlockedModal({message:data.error});
+      } else if(data.banned){
+        authError.textContent = data.error || "Tu cuenta está temporalmente bloqueada.";
       }
-    );
-
-    sendUserList();
-
-    emitUnread(
-      socket,
-      u.username
-    );
-
-    socket.emit(
-      "storiesData",
-      visibleStoriesFor(u.username)
-    );
-
-    socket.emit(
-      "contactsUpdated",
-      getContactList(
-        u.username
-      )
-    );
-
-    emitRelationshipData(socket, u.username);
-    emitGroupsData(socket, u.username);
-    emitGroupUnread(socket, u.username);
-
-    socket.emit(
-      "moderationNotices",
-      visibleUnreadModerationNotices(u.username)
-    );
-  });
-
-  // ===================================================
-  // CONTACTOS
-  // ===================================================
-
-  socket.on("getModerationNotices", () => {
-    const username = online.get(socket.id);
-    if (!username) return;
-
-    socket.emit(
-      "moderationNotices",
-      visibleUnreadModerationNotices(username)
-    );
-  });
-
-  socket.on("moderationNoticeSeen", noticeId => {
-    const username = online.get(socket.id);
-    if (!username) return;
-    const id = String(noticeId || "");
-    if (!id) return;
-
-    const notice = moderationNotices().find(item => String(item.id) === id);
-    if (!notice) return;
-    if (notice.target !== "*" && norm(notice.target) !== norm(username)) return;
-
-    markModerationNoticeSeen(username, id);
-  });
-
-  socket.on("command", rawInput => {
-    const username = online.get(socket.id);
-    if (!username) {
-      return socket.emit("commandResult", { ok: false, output: ["No estás autenticado."] });
-    }
-
-    const rank = getCommandRank(username);
-    if (!rank) {
-      return socket.emit("commandResult", { ok: false, output: ["No tienes acceso a la consola de comandos."] });
-    }
-
-    const commandLabel = String(rawInput || "").trim().split(/\s+/)[0].replace(/^\//, "").toLowerCase().slice(0, 80) || "(vacío)";
-    if (!commandAllowed(rank, commandLabel)) {
-      return socket.emit("commandResult", {
-        ok: false,
-        output: [`El rango ${commandRankLabel(rank)} no puede usar /${commandLabel}.`, `Usa /help para ver los comandos de tu rango.`]
-      });
-    }
-
-    const result = executeCommand(username, rawInput);
-    addAdminActivity(`@${username} (${commandRankLabel(rank)}) ejecutó /${commandLabel} en la consola.`);
-    socket.emit("commandResult", result);
-  });
-
-  socket.on("getContacts", () => {
-    const me =
-      online.get(socket.id);
-
-    if (!me) return;
-
-    socket.emit(
-      "contactsUpdated",
-      getContactList(me)
-    );
-  });
-
-  socket.on(
-    "sendContactRequest",
-    username => {
-      const me = online.get(socket.id);
-      const target = norm(username);
-      if (!me || !target) return;
-
-      if (target === norm(me)) {
-        return socket.emit("contactRequestError", "No puedes enviarte una solicitud a ti mismo.");
-      }
-      if (!getUser(target)) {
-        return socket.emit("contactRequestError", "Ese usuario no existe.");
-      }
-      if (isEitherBlocked(me, target)) {
-        return socket.emit("contactRequestError", "No puedes contactar con este usuario.");
-      }
-
-      const list = users();
-      const meIdx = list.findIndex(u => norm(u.username) === norm(me));
-      const targetIdx = list.findIndex(u => norm(u.username) === target);
-      if (meIdx < 0 || targetIdx < 0) {
-        return socket.emit("contactRequestError", "Usuario no encontrado.");
-      }
-
-      ensureContactRequests(list[meIdx]);
-      ensureContactRequests(list[targetIdx]);
-
-      if (areContacts(me, target)) {
-        return socket.emit("contactRequestError", "Ya sois contactos.");
-      }
-      if (list[meIdx].contactRequests.outgoing.some(x => norm(x) === target)) {
-        return socket.emit("contactRequestError", "Ya has enviado una solicitud a este usuario.");
-      }
-      if (list[meIdx].contactRequests.incoming.some(x => norm(x) === target)) {
-        return socket.emit("contactRequestError", "Este usuario ya te ha enviado una solicitud. Acéptala desde Solicitudes.");
-      }
-
-      list[meIdx].contactRequests.outgoing.push(target);
-      list[targetIdx].contactRequests.incoming.push(norm(me));
-      saveUsers(list);
-
-      emitRelationshipData(socket, me);
-      emitRelationshipToUser(target);
-
-      const targetSid = socketIdFor(target);
-      if (targetSid) {
-        io.to(targetSid).emit("contactRequestReceived", {
-          username: norm(me),
-          displayName: list[meIdx].displayName || list[meIdx].username,
-          profileImage: list[meIdx].profileImage || "",
-          online: true
-        });
-      }
-
-      sendPushToUser(target, {
-        type: "contact_request",
-        title: "📥 Nueva solicitud de contacto",
-        from: list[meIdx].displayName || list[meIdx].username,
-        sender: norm(me),
-        username: norm(me),
-        body: `@${list[meIdx].username} te ha enviado una solicitud de contacto.`,
-        message: `@${list[meIdx].username} te ha enviado una solicitud de contacto.`
-      });
-
-      socket.emit("contactRequestSent", {
-        username: target,
-        displayName: list[targetIdx].displayName || list[targetIdx].username
-      });
-    }
-  );
-
-  socket.on(
-    "acceptContactRequest",
-    username => {
-      const me = online.get(socket.id);
-      const target = norm(username);
-      if (!me || !target || target === norm(me)) return;
-
-      const list = users();
-      const meIdx = list.findIndex(u => norm(u.username) === norm(me));
-      const targetIdx = list.findIndex(u => norm(u.username) === target);
-      if (meIdx < 0 || targetIdx < 0) return;
-
-      ensureContactRequests(list[meIdx]);
-      ensureContactRequests(list[targetIdx]);
-
-      if (isEitherBlocked(me, target)) {
-        return socket.emit("contactRequestError", "No puedes aceptar esta solicitud porque hay un bloqueo activo.");
-      }
-
-      const hasRequest = list[meIdx].contactRequests.incoming.some(x => norm(x) === target);
-      if (!hasRequest) {
-        return socket.emit("contactRequestError", "La solicitud ya no está disponible.");
-      }
-
-      list[meIdx].contactRequests.incoming = list[meIdx].contactRequests.incoming.filter(x => norm(x) !== target);
-      list[targetIdx].contactRequests.outgoing = list[targetIdx].contactRequests.outgoing.filter(x => norm(x) !== norm(me));
-
-      if (!list[meIdx].contacts.some(x => norm(x) === target)) list[meIdx].contacts.push(target);
-      if (!list[targetIdx].contacts.some(x => norm(x) === norm(me))) list[targetIdx].contacts.push(norm(me));
-
-      saveUsers(list);
-
-      const meInfo = {
-        username: norm(me),
-        displayName: list[meIdx].displayName || list[meIdx].username,
-        profileImage: list[meIdx].profileImage || "",
-        online: true
-      };
-      const targetInfo = {
-        username: target,
-        displayName: list[targetIdx].displayName || list[targetIdx].username,
-        profileImage: list[targetIdx].profileImage || "",
-        online: !!socketIdFor(target)
-      };
-
-      socket.emit("contactRequestAccepted", targetInfo);
-      emitRelationshipData(socket, me);
-      emitRelationshipToUser(target);
-
-      const targetSid = socketIdFor(target);
-      if (targetSid) io.to(targetSid).emit("contactRequestAccepted", meInfo);
-      socket.emit("contactsUpdated", getContactList(me));
-
-      if (targetSid) io.to(targetSid).emit("contactsUpdated", getContactList(target));
-    }
-  );
-
-  socket.on(
-    "rejectContactRequest",
-    username => {
-      const me = online.get(socket.id);
-      const target = norm(username);
-      if (!me || !target || target === norm(me)) return;
-
-      const list = users();
-      const meIdx = list.findIndex(u => norm(u.username) === norm(me));
-      const targetIdx = list.findIndex(u => norm(u.username) === target);
-      if (meIdx < 0 || targetIdx < 0) return;
-
-      ensureContactRequests(list[meIdx]);
-      ensureContactRequests(list[targetIdx]);
-
-      list[meIdx].contactRequests.incoming = list[meIdx].contactRequests.incoming.filter(x => norm(x) !== target);
-      list[targetIdx].contactRequests.outgoing = list[targetIdx].contactRequests.outgoing.filter(x => norm(x) !== norm(me));
-
-      saveUsers(list);
-      socket.emit("contactRequestRejected", { username: target });
-      emitRelationshipData(socket, me);
-      emitRelationshipToUser(target);
-
-      const targetSid = socketIdFor(target);
-      if (targetSid) io.to(targetSid).emit("contactRequestRejected", { username: norm(me) });
-    }
-  );
-
-  socket.on(
-    "removeContact",
-    username => {
-      const me =
-        online.get(socket.id);
-
-      const target =
-        norm(username);
-
-      if (!me || !target) return;
-
-      const list = users();
-
-      const idx =
-        list.findIndex(
-          u =>
-            norm(u.username) ===
-            norm(me)
-        );
-
-      if (idx < 0) return;
-
-      ensureContactRequests(list[idx]);
-      list[idx].contacts = list[idx].contacts.filter(x => norm(x) !== target);
-      list[idx].contactRequests.incoming = list[idx].contactRequests.incoming.filter(x => norm(x) !== target);
-      list[idx].contactRequests.outgoing = list[idx].contactRequests.outgoing.filter(x => norm(x) !== target);
-
-      const targetIdx = list.findIndex(u => norm(u.username) === target);
-      if (targetIdx >= 0) {
-        ensureContactRequests(list[targetIdx]);
-        list[targetIdx].contacts = list[targetIdx].contacts.filter(x => norm(x) !== norm(me));
-        list[targetIdx].contactRequests.incoming = list[targetIdx].contactRequests.incoming.filter(x => norm(x) !== norm(me));
-        list[targetIdx].contactRequests.outgoing = list[targetIdx].contactRequests.outgoing.filter(x => norm(x) !== norm(me));
-      }
-
-      saveUsers(list);
-
-      socket.emit(
-        "contactRemoved",
-        { username: target }
-      );
-
-      socket.emit(
-        "contactsUpdated",
-        getContactList(me)
-      );
-      emitRelationshipData(socket, me);
-      emitRelationshipToUser(target);
-    }
-  );
-
-
-  // ===================================================
-  // GRUPOS
-  // ===================================================
-
-  socket.on("getGroups", () => {
-    const me = online.get(socket.id);
-    if (!me) return;
-    emitGroupsData(socket, me);
-    emitGroupUnread(socket, me);
-  });
-
-  socket.on("updateGroupAvatar", data => {
-    const me = online.get(socket.id);
-    const groupId = String(data?.groupId || "").trim();
-    const avatar = String(data?.avatar || "").trim();
-    if (!me || !groupId) return;
-
-    const list = groups();
-    const index = list.findIndex(item => String(item.id) === groupId);
-    if (index < 0) return socket.emit("groupAvatarError", "No existe ese grupo.");
-
-    const group = list[index];
-    if (!isGroupMember(group, me)) {
-      return socket.emit("groupAvatarError", "No perteneces a este grupo.");
-    }
-    if (!Array.isArray(group.admins) || !group.admins.some(name => norm(name) === norm(me))) {
-      return socket.emit("groupAvatarError", "Solo un administrador puede cambiar la foto del grupo.");
-    }
-
-    if (avatar && !/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(avatar)) {
-      return socket.emit("groupAvatarError", "La imagen debe ser JPG, PNG o WebP.");
-    }
-    if (avatar.length > 1400000) {
-      return socket.emit("groupAvatarError", "La foto es demasiado grande. Prueba con otra imagen.");
-    }
-
-    group.avatar = avatar;
-    list[index] = group;
-    saveGroups(list);
-    const summary = groupSummary(group);
-
-    addAdminActivity(`@${me} cambió la foto del grupo «${group.name}».`);
-    for (const username of group.members || []) {
-      const sid = socketIdFor(username);
-      if (sid) io.to(sid).emit("groupUpdated", summary);
-    }
-  });
-
-  socket.on("createGroup", data => {
-    const me = online.get(socket.id);
-    if (!me) return;
-
-    const name = String(data?.name || "").trim().replace(/\s+/g, " ");
-    const requested = Array.isArray(data?.members) ? data.members.map(norm) : [];
-
-    if (name.length < 2 || name.length > 50) {
-      return socket.emit("groupError", "El nombre del grupo debe tener entre 2 y 50 caracteres.");
-    }
-
-    const members = Array.from(new Set(requested.filter(Boolean))).filter(username => username !== norm(me));
-    if (!members.length) {
-      return socket.emit("groupError", "Selecciona al menos un contacto para crear el grupo.");
-    }
-    if (members.length > 49) {
-      return socket.emit("groupError", "Un grupo puede tener como máximo 50 personas.");
-    }
-
-    for (const member of members) {
-      if (!getUser(member)) {
-        return socket.emit("groupError", `No existe el usuario @${member}.`);
-      }
-      if (!areContacts(me, member)) {
-        return socket.emit("groupError", `Solo puedes añadir a tus contactos: @${member}.`);
-      }
-      if (isEitherBlocked(me, member)) {
-        return socket.emit("groupError", `No puedes añadir a @${member}.`);
-      }
-    }
-
-    const group = {
-      id: `g_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`,
-      name,
-      createdBy: norm(me),
-      createdAt: new Date().toISOString(),
-      admins: [norm(me)],
-      members: Array.from(new Set([norm(me), ...members])),
-      avatar: ""
-    };
-
-    const list = groups();
-    list.push(group);
-    saveGroups(list);
-    addAdminActivity(`@${me} creó el grupo «${name}» con ${group.members.length} miembros.`);
-
-    for (const username of group.members) {
-      const sid = socketIdFor(username);
-      if (sid) io.to(sid).emit("groupCreated", groupSummary(group));
-      if (norm(username) !== norm(me)) {
-        sendPushToUser(username, {
-          type: "group_invite",
-          title: `👥 Te han añadido a ${name}`,
-          body: `@${me} te ha añadido al grupo.`,
-          groupId: group.id,
-          groupName: name,
-          username: norm(me),
-          message: `@${me} te ha añadido al grupo ${name}.`
-        });
-      }
-    }
-
-    emitGroupsData(socket, me);
-    emitGroupUnread(socket, me);
-  });
-
-  socket.on("updateGroupName", data => {
-    const me = norm(online.get(socket.id) || "");
-    const groupId = String(data?.groupId || "").trim();
-    const name = String(data?.name || "").trim();
-    if (!me || !groupId) return;
-
-    if (name.length < 2 || name.length > 50) {
-      return socket.emit("groupNameError", "El nombre del grupo debe tener entre 2 y 50 caracteres.");
-    }
-
-    const list = groups();
-    const index = list.findIndex(item => String(item.id) === groupId);
-    if (index < 0) return socket.emit("groupNameError", "No existe ese grupo.");
-
-    const group = list[index];
-    if (!isGroupMember(group, me)) {
-      return socket.emit("groupNameError", "No perteneces a este grupo.");
-    }
-    if (!Array.isArray(group.admins) || !group.admins.some(username => norm(username) === me)) {
-      return socket.emit("groupNameError", "Solo un administrador puede cambiar el nombre del grupo.");
-    }
-
-    const oldName = String(group.name || "Grupo");
-    if (oldName === name) return;
-
-    group.name = name;
-    list[index] = group;
-    saveGroups(list);
-    addAdminActivity(`@${me} cambió el nombre del grupo «${oldName}» a «${name}».`);
-
-    const summary = groupSummary(group);
-    for (const username of group.members || []) {
-      const sid = socketIdFor(username);
-      if (sid) io.to(sid).emit("groupUpdated", summary);
-    }
-    emitGroupsData(socket, me);
-  });
-
-  socket.on("addGroupMembers", data => {
-    const me = norm(online.get(socket.id) || "");
-    const groupId = String(data?.groupId || "").trim();
-    const requested = Array.isArray(data?.members) ? data.members.map(norm).filter(Boolean) : [];
-    if (!me || !groupId || !requested.length) return;
-
-    const list = groups();
-    const index = list.findIndex(item => String(item.id) === groupId);
-    if (index < 0) return socket.emit("groupAddMembersError", "No existe ese grupo.");
-    const group = list[index];
-    if (!isGroupMember(group, me)) return socket.emit("groupAddMembersError", "No perteneces a este grupo.");
-    if (!Array.isArray(group.admins) || !group.admins.some(name => norm(name) === me)) {
-      return socket.emit("groupAddMembersError", "Solo un administrador puede añadir personas al grupo.");
-    }
-
-    const current = new Set((group.members || []).map(norm));
-    const additions = Array.from(new Set(requested)).filter(username => username !== me && !current.has(username));
-    if (!additions.length) return socket.emit("groupAddMembersError", "No has seleccionado nuevos contactos.");
-    if ((group.members?.length || 0) + additions.length > 50) {
-      return socket.emit("groupAddMembersError", `El grupo admite como máximo 50 personas. Ahora tiene ${group.members?.length || 0}.`);
-    }
-
-    for (const member of additions) {
-      if (!getUser(member)) return socket.emit("groupAddMembersError", `No existe el usuario @${member}.`);
-      if (!areContacts(me, member)) return socket.emit("groupAddMembersError", `Solo puedes añadir a tus contactos: @${member}.`);
-      if (isEitherBlocked(me, member)) return socket.emit("groupAddMembersError", `No puedes añadir a @${member}.`);
-    }
-
-    group.members = Array.from(new Set([...(group.members || []).map(norm), ...additions]));
-    list[index] = group;
-    saveGroups(list);
-    addAdminActivity(`@${me} añadió ${additions.length} persona${additions.length === 1 ? "" : "s"} al grupo «${group.name}».`);
-
-    const summary = groupSummary(group);
-    for (const username of group.members || []) {
-      const sid = socketIdFor(username);
-      if (sid) {
-        if (additions.some(name => norm(name) === norm(username))) io.to(sid).emit("groupCreated", summary);
-        else io.to(sid).emit("groupUpdated", summary);
-      }
-    }
-    for (const username of additions) {
-      sendPushToUser(username, {
-        type: "group_invite",
-        title: `👥 Te han añadido a ${group.name}`,
-        body: `@${me} te ha añadido al grupo.`,
-        groupId: group.id,
-        groupName: group.name,
-        username: me,
-        message: `@${me} te ha añadido al grupo ${group.name}.`
-      });
-    }
-    emitGroupsData(socket, me);
-    emitGroupUnreadToMembers(group);
-  });
-
-  socket.on("deleteGroup", data => {
-    const me = norm(online.get(socket.id) || "");
-    const groupId = String(data?.groupId || "").trim();
-    if (!me || !groupId) return;
-
-    const group = getGroup(groupId);
-    if (!group) return socket.emit("groupDeleteError", "No existe ese grupo.");
-    if (!isGroupMember(group, me)) return socket.emit("groupDeleteError", "No perteneces a este grupo.");
-    if (!Array.isArray(group.admins) || !group.admins.some(name => norm(name) === me)) {
-      return socket.emit("groupDeleteError", "Solo un administrador puede borrar el grupo.");
-    }
-
-    removeGroupPermanently(groupId, `@${me}`);
-    socket.emit("groupDeleted", { id: groupId });
-    emitGroupsData(socket, me);
-  });
-
-  socket.on("getGroupConversation", groupId => {
-    const me = online.get(socket.id);
-    const group = getGroup(groupId);
-    if (!me || !group || !isGroupMember(group, me)) {
-      return socket.emit("groupConversationBlocked", "No perteneces a este grupo.");
-    }
-
-    const list = messages()
-      .filter(message => String(message.groupId || "") === String(group.id))
-      .filter(message => !(message.deletedFor || []).includes(norm(me)));
-
-    socket.emit("groupConversationHistory", {
-      group: groupSummary(group),
-      messages: list
-    });
-  });
-
-  socket.on("markGroupRead", groupId => {
-    const me = online.get(socket.id);
-    const group = getGroup(groupId);
-    if (!me || !group || !isGroupMember(group, me)) return;
-
-    const list = messages();
-    for (const message of list) {
-      if (String(message.groupId || "") === String(group.id) && norm(message.from) !== norm(me)) {
-        message.read = true;
-      }
-    }
-    saveMessages(list);
-    emitGroupUnread(socket, me);
-  });
-
-  socket.on("groupMessage", data => {
-    const me = online.get(socket.id);
-    const group = getGroup(data?.groupId);
-    const text = String(data?.message || "").trim();
-
-    const media = data?.media && typeof data.media === "object" ? data.media : null;
-    const mediaData = media ? String(media.data || "") : "";
-    const mediaMime = media ? String(media.mimeType || "").slice(0, 120) : "";
-    const mediaName = media ? String(media.fileName || "archivo").slice(0, 180) : "";
-    const mediaType = media ? String(media.type || "file").slice(0, 30) : "";
-    const allowedMedia = !mediaMime || mediaMime.startsWith("image/") || mediaMime.startsWith("video/") || mediaMime.startsWith("audio/") || [
-      "application/pdf",
-      "text/plain",
-      "application/zip",
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "application/vnd.ms-excel",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "application/vnd.ms-powerpoint",
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-    ].includes(mediaMime);
-    const hasMedia = Boolean(mediaData && mediaData.startsWith("data:") && mediaData.length <= 10 * 1024 * 1024 && allowedMedia);
-
-    if (!me || !group || !isGroupMember(group, me) || (!text && !hasMedia) || text.length > 5000) return;
-    if (media && !hasMedia) {
-      return socket.emit("messageError", "El archivo no es válido, no está permitido o supera el límite de 7 MB.");
-    }
-
-    const blockedTerm = isInappropriateMessage(text, hasMedia ? mediaName : "");
-    if (blockedTerm) {
-      addAdminActivity(`Mensaje bloqueado automáticamente por moderación: @${me} -> grupo «${group.name}».`);
-      return socket.emit(
-        "messageError",
-        "Mensaje eliminado por moderación automática. Revisa el contenido e inténtalo de nuevo."
-      );
-    }
-
-    const message = {
-      id: Date.now() + "-" + crypto.randomBytes(5).toString("hex"),
-      from: norm(me),
-      fromDisplay: getUser(me)?.displayName || me,
-      to: "",
-      toDisplay: group.name,
-      groupId: group.id,
-      groupName: group.name,
-      message: text,
-      type: hasMedia ? (mediaType || "file") : "text",
-      media: hasMedia ? mediaData : "",
-      fileName: hasMedia ? mediaName : "",
-      mimeType: hasMedia ? mediaMime : "",
-      time: new Date().toISOString(),
-      read: false,
-      deletedFor: []
-    };
-
-    const list = messages();
-    list.push(message);
-    if (list.length > 50000) list.splice(0, list.length - 50000);
-    saveMessages(list);
-
-    addAdminMessageActivity(me, `${message.fromDisplay} ha enviado un mensaje al grupo «${group.name}»: ${message.message || (message.fileName ? "📎 " + message.fileName : "Archivo multimedia")}`);
-
-    for (const username of group.members || []) {
-      const sid = socketIdFor(username);
-      if (sid) {
-        if (norm(username) === norm(me)) io.to(sid).emit("groupMessageSent", message);
-        else io.to(sid).emit("groupMessageReceived", message);
-      }
-
-      if (norm(username) !== norm(me)) {
-        sendPushToUser(username, {
-          type: "group_message",
-          title: `💬 ${group.name}`,
-          from: message.fromDisplay,
-          body: message.message || (message.fileName ? "📎 " + message.fileName : "Archivo multimedia"),
-          message: message.message || (message.fileName ? "📎 " + message.fileName : "Archivo multimedia"),
-          groupId: group.id,
-          groupName: group.name,
-          username: norm(me)
-        });
-      }
-    }
-
-    emitGroupUnreadToMembers(group);
-  });
-
-  socket.on("leaveGroup", groupId => {
-    const me = online.get(socket.id);
-    const group = getGroup(groupId);
-    if (!me || !group || !isGroupMember(group, me)) return;
-
-    const list = groups();
-    const index = list.findIndex(item => String(item.id) === String(group.id));
-    if (index < 0) return;
-
-    const target = list[index];
-    target.members = (target.members || []).filter(name => norm(name) !== norm(me));
-    target.admins = (target.admins || []).filter(name => norm(name) !== norm(me));
-
-    if (!target.members.length) {
-      list.splice(index, 1);
-      saveGroups(list);
-      socket.emit("groupRemoved", { id: group.id });
       return;
     }
 
-    if (!target.admins.length) target.admins = [norm(target.members[0])];
-    saveGroups(list);
+    if(data.loggedIn){
 
-    for (const username of target.members) {
-      const sid = socketIdFor(username);
-      if (sid) io.to(sid).emit("groupUpdated", groupSummary(target));
+      myUsername =
+        data.username ||
+        data.displayName ||
+        myUsername;
+
+      await loadIdentity();
+
+      hideAccessBlockedModal();
+      enterApp();
     }
 
-    socket.emit("groupRemoved", { id: group.id });
+  }catch{}
+}
+
+function enterApp(){
+
+  authScreen.style.display = "none";
+  app.style.display = "flex";
+
+  if(!socket.connected){
+    socket.connect();
+  }
+}
+
+socket.on("connect",() => {
+
+  const token =
+    localStorage.getItem("chatToken");
+
+  if(token){
+    socket.emit(
+      "authenticate",
+      token
+    );
+  }
+});
+
+socket.on("authenticated",data => {
+  myUsername =
+    data.username ||
+    myUsername;
+  setCommandConsoleAccess(Boolean(data.commandConsoleEnabled), data.commandConsoleRank, data.commandConsoleRankLabel);
+  loadStories();
+  socket.emit("getGroups");
+
+  // Refrescamos los avisos después de autenticar para no depender de una carrera de eventos.
+  setTimeout(() => {
+    if (socket.connected) socket.emit("getModerationNotices");
+  }, 120);
+
+  // Una acción de una notificación puede haber llegado
+  // antes de que Socket.IO terminara de autenticar.
+  if (pendingNativeCallAction) {
+    const pending = pendingNativeCallAction;
+    pendingNativeCallAction = null;
+    setTimeout(() => {
+      handleNativeCallNotification(pending);
+    }, 150);
+  }
+});
+
+socket.on("accountUpdated", data => {
+  if(data?.token){
+    localStorage.setItem("chatToken", data.token);
+  }
+  if(data?.username){
+    myUsername = data.username;
+  }
+});
+
+socket.on("usernameChanged", data => {
+  const oldName = norm(data?.oldUsername || "");
+  const newName = norm(data?.newUsername || "");
+  if(!oldName || !newName) return;
+
+  if(norm(myUsername) === oldName){
+    myUsername = newName;
+  }
+  if(norm(selectedUser) === oldName){
+    selectedUser = newName;
+    chatTitle.textContent = data?.displayName || newName;
+    socket.emit("getConversation", newName);
+  }
+
+  if(conversations[oldName]){
+    conversations[newName] = conversations[oldName];
+    delete conversations[oldName];
+  }
+  if(Object.prototype.hasOwnProperty.call(unread, oldName)){
+    unread[newName] = unread[oldName];
+    delete unread[oldName];
+  }
+  renderUsers();
+});
+
+socket.on("commandAccessUpdated", data => {
+  setCommandConsoleAccess(Boolean(data?.enabled), data?.rank, data?.rankLabel);
+  if(data?.enabled){
+    appendCommandOutput(`Se te ha asignado el rango ${data?.rankLabel || "de consola"}.`, "ok");
+  }else{
+    appendCommandOutput("Se te ha retirado el acceso a la consola.", "error");
+  }
+});
+
+socket.on("commandResult", data => {
+  const lines = Array.isArray(data?.output) ? data.output : [data?.output || "Sin respuesta."];
+  printCommandBlock(lines, data?.ok === false ? "error" : "ok");
+});
+
+socket.on("moderationNotice", notice => {
+  enqueueModerationNotice(notice);
+});
+
+socket.on("moderationNotices", list => {
+  const notices = Array.isArray(list) ? list : [];
+  const newestFirst = notices.slice().sort((a,b) => Number(b.createdAt||0) - Number(a.createdAt||0));
+  for(const notice of newestFirst){
+    if(!notice?.id || moderationSeen(notice.id)) continue;
+    enqueueModerationNotice(notice);
+  }
+});
+
+socket.on("appealStatus", data => {
+  if(!data?.id) return;
+  const label = data.status === "approved" ? "aprobada" : data.status === "rejected" ? "rechazada" : "pendiente";
+  if(activeModerationNotice?.id === data.noticeId){
+    moderationModalStatus.textContent = `Tu apelación está ${label}.`;
+    moderationModalStatus.style.color = data.status === "approved" ? "#15803d" : data.status === "rejected" ? "#b91c1c" : "#555";
+  }
+  showNotification("Estado de apelación", `Tu apelación está ${label}.`, "", "moderation");
+});
+
+function enqueueModerationNotice(notice){
+  if(!notice?.id || moderationSeen(notice.id)) return;
+  if(!moderationModal || !moderationModalTitle || !moderationModalMessage) return;
+  moderationQueue.push(notice);
+  showNextModerationNotice();
+}
+
+async function showNextModerationNotice(){
+  if(moderationQueueOpen || !moderationQueue.length) return;
+  const notice = moderationQueue.shift();
+  activeModerationNotice = notice;
+  moderationQueueOpen = true;
+  moderationModalTitle.textContent = notice.title || "Aviso de moderación";
+  moderationModalDate.textContent = notice.createdAt ? new Date(Number(notice.createdAt)).toLocaleString("es-ES") : "";
+  moderationModalMessage.textContent = notice.message || "";
+  moderationAppealText.value = "";
+  moderationModalStatus.textContent = "";
+  sendModerationAppeal.disabled = false;
+  sendModerationAppeal.textContent = "Enviar apelación";
+
+  try{
+    const token = localStorage.getItem("chatToken") || "";
+    const response = await fetch("/api/appeals", {headers:{Authorization:"Bearer "+token}});
+    if(response.ok){
+      const list = await response.json();
+      const existing = Array.isArray(list) ? list.find(item => String(item.noticeId) === String(notice.id)) : null;
+      if(existing){
+        moderationModalStatus.textContent = existing.status === "approved" ? "Tu apelación fue aprobada." : existing.status === "rejected" ? "Tu apelación fue rechazada." : "Ya has enviado una apelación para este aviso.";
+        moderationModalStatus.style.color = existing.status === "approved" ? "#15803d" : existing.status === "rejected" ? "#b91c1c" : "#555";
+        sendModerationAppeal.disabled = true;
+        sendModerationAppeal.textContent = "Apelación enviada";
+      }
+    }
+  }catch{}
+
+  markModerationSeen(notice.id);
+  moderationModal.style.display = "";
+  moderationModal.classList.add("open");
+  moderationModal.setAttribute("aria-hidden", "false");
+}
+
+function closeModerationModal(){
+  if(!moderationModal) return;
+  moderationModal.classList.remove("open");
+  moderationModal.setAttribute("aria-hidden", "true");
+  moderationModal.style.display = "none";
+  moderationQueueOpen = false;
+  activeModerationNotice = null;
+  setTimeout(() => {
+    if(moderationModal) moderationModal.style.display = "";
+    showNextModerationNotice();
+  }, 80);
+}
+
+async function submitModerationAppeal(){
+  if(!activeModerationNotice) return;
+  const text = moderationAppealText.value.trim();
+  if(text.length < 5){
+    moderationModalStatus.textContent = "Escribe una apelación de al menos 5 caracteres.";
+    moderationModalStatus.style.color = "#b91c1c";
+    return;
+  }
+  try{
+    sendModerationAppeal.disabled = true;
+    moderationModalStatus.style.color = "#555";
+    moderationModalStatus.textContent = "Enviando apelación...";
+    const token = localStorage.getItem("chatToken") || "";
+    const response = await fetch("/api/appeals", {
+      method:"POST",
+      headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},
+      body:JSON.stringify({noticeId:activeModerationNotice.id,text})
+    });
+    let data={}; try{data=await response.json()}catch{}
+    if(!response.ok) throw new Error(data.error || "No se pudo enviar la apelación.");
+    moderationAppealText.value = "";
+    moderationModalStatus.textContent = "Apelación enviada. El administrador revisará tu solicitud.";
+    moderationModalStatus.style.color = "#15803d";
+    sendModerationAppeal.textContent = "Apelación enviada";
+  }catch(e){
+    sendModerationAppeal.disabled = false;
+    moderationModalStatus.textContent = e.message || "No se pudo enviar la apelación.";
+    moderationModalStatus.style.color = "#b91c1c";
+  }
+}
+
+function moderationSeen(id){
+  try{ const seen = JSON.parse(localStorage.getItem("michat_moderation_seen") || "[]"); return seen.includes(String(id)); }catch{return false}
+}
+function markModerationSeen(id){
+  const value = String(id || "");
+  if(!value) return;
+  try{
+    const key="michat_moderation_seen";
+    const seen=JSON.parse(localStorage.getItem(key)||"[]");
+    if(!seen.includes(value)) seen.push(value);
+    localStorage.setItem(key,JSON.stringify(seen.slice(-100)));
+  }catch{}
+  try{
+    if(socket?.connected) socket.emit("moderationNoticeSeen", value);
+  }catch{}
+}
+
+socket.on("kicked", data => {
+  localStorage.removeItem("chatToken");
+  try { closeModerationModal(); } catch {}
+  if(socket.connected) socket.disconnect();
+  app.style.display = "none";
+  authScreen.style.display = "flex";
+  const reason = data?.reason ? ` Motivo: ${data.reason}` : "";
+  authError.textContent = `Has sido expulsado del chat.${reason} Vuelve a iniciar sesión para entrar de nuevo.`;
+});
+
+socket.on("banned", data => {
+  localStorage.removeItem("chatToken");
+  try { closeModerationModal(); } catch {}
+  if(socket.connected) socket.disconnect();
+  app.style.display = "none";
+  authScreen.style.display = "flex";
+  const until = data?.expiresAt ? ` hasta ${new Date(Number(data.expiresAt)).toLocaleString("es-ES")}` : " permanentemente";
+  const reason = data?.reason ? ` Motivo: ${data.reason}` : "";
+  authError.textContent = `Tu cuenta ha sido baneada${until}.${reason}`;
+});
+
+socket.on("globalAccessLocked", data => {
+  // No borramos el token: así la sesión puede recuperarse automáticamente
+  // cuando el administrador desactive el bloqueo global.
+  try { closeModerationModal(); } catch {}
+  if(socket.connected) socket.disconnect();
+  app.style.display = "none";
+  authScreen.style.display = "flex";
+  authError.textContent = "";
+  showAccessBlockedModal({globalLock:true});
+});
+
+socket.on("accessBlocked", data => {
+  localStorage.removeItem("chatToken");
+  try { closeModerationModal(); } catch {}
+  if(socket.connected) socket.disconnect();
+  app.style.display = "none";
+  authScreen.style.display = "flex";
+  authError.textContent = "";
+  showAccessBlockedModal({message:data?.reason});
+});
+
+socket.on("authenticationError",() => {
+
+  localStorage.removeItem("chatToken");
+
+  location.reload();
+});
+
+/* =====================================================
+   USUARIOS Y SOLICITUDES
+===================================================== */
+
+function isContact(username){
+  return relationshipData.contacts.some(x => norm(x) === norm(username));
+}
+function hasIncomingRequest(username){
+  return relationshipData.incoming.some(x => norm(x) === norm(username));
+}
+function hasOutgoingRequest(username){
+  return relationshipData.outgoing.some(x => norm(x) === norm(username));
+}
+function updateRequestsBadge(){
+  const count = relationshipData.incoming.length;
+  requestsBadge.textContent = count > 99 ? "99+" : String(count);
+  requestsBadge.classList.toggle("hidden", count === 0);
+  const fabDot = $("requestsFabDot");
+  if(fabDot){
+    fabDot.classList.toggle("hidden", count === 0);
+  }
+  const navBadge = $("navRequestsBadge");
+  if(navBadge){
+    navBadge.textContent = count > 99 ? "99+" : String(count);
+    navBadge.classList.toggle("hidden", count === 0);
+  }
+}
+function renderRequests(){
+  updateRequestsBadge();
+  requestsList.innerHTML = "";
+  const incomingUsers = relationshipData.incoming
+    .map(username => allUsers.find(u => norm(u.username) === norm(username)))
+    .filter(Boolean);
+  if(!incomingUsers.length){
+    requestsList.innerHTML = `<div class="empty" style="min-height:120px">No tienes solicitudes pendientes.</div>`;
+    return;
+  }
+  incomingUsers.forEach(user => {
+    const row = document.createElement("div");
+    row.className = "requestItem";
+    row.innerHTML = `
+      <div class="avatar">${avatarHtml(user)}</div>
+      <div class="requestItemInfo">
+        <div class="requestItemName">${esc(user.displayName || user.username)}</div>
+        <div class="requestItemUser">@${esc(user.username)}</div>
+      </div>
+      <div class="requestItemActions">
+        <button class="primary" data-action="accept">Aceptar</button>
+        <button class="muted" data-action="reject">Rechazar</button>
+      </div>
+    `;
+    row.querySelector('[data-action="accept"]').onclick = () => socket.emit("acceptContactRequest", user.username);
+    row.querySelector('[data-action="reject"]').onclick = () => socket.emit("rejectContactRequest", user.username);
+    requestsList.appendChild(row);
   });
+}
 
-  // ===================================================
-  // HISTORIAS
-  // ===================================================
 
-  socket.on(
-    "getStories",
-    () => {
-      const me =
-        online.get(socket.id);
+socket.on("groupsData", data => { allGroups = Array.isArray(data) ? data : []; renderUsers(); renderGroups(); });
+socket.on("groupUnreadCounts", data => { groupUnread = data && typeof data === "object" ? data : {}; renderUsers(); renderGroups(); });
+socket.on("groupCreated", group => { if(group?.id && !allGroups.some(g=>String(g.id)===String(group.id))) allGroups.unshift(group); renderUsers(); renderGroups(); if(group?.createdBy && norm(group.createdBy)===norm(myUsername)) showNotification("Grupo creado", `Has creado «${group?.name || "Grupo"}».`); else showNotification("Nuevo grupo", `Te han añadido a «${group?.name || "Grupo"}».`); });
+socket.on("groupUpdated", group => {
+  if(!group?.id) return;
+  allGroups = allGroups.map(g=>String(g.id)===String(group.id)?group:g);
+  renderUsers();
+  if(String(selectedGroupId)===String(group.id)){
+    headerAvatar.className="avatar groupHeaderAvatar";
+    headerAvatar.innerHTML = group.avatar ? `<img src="${esc(group.avatar)}" alt="">` : "👥";
+    const canEdit = Array.isArray(group.admins) && group.admins.some(name=>norm(name)===norm(myUsername));
+    headerAvatar.classList.toggle("canEdit", canEdit);
+    headerAvatar.title = canEdit ? "Cambiar foto del grupo" : "";
+    headerAvatar.onclick = canEdit ? () => groupAvatarInput?.click() : null;
+    chatTitle.textContent = group.name || "Grupo";
+    chatSubtitle.textContent = `👥 ${Number(group.memberCount || (group.members || []).length)} miembros`;
+  }
+  refreshGroupAddButton();
+});
+socket.on("groupRemoved", data => { const id=String(data?.id||""); allGroups=allGroups.filter(g=>String(g.id)!==id); delete groupUnread[id]; if(String(selectedGroupId)===id){selectedGroupId=""; selectedUser=""; messageInput.disabled=true; sendButton.disabled=true; attachButton.disabled=true; messagesContainer.innerHTML='<div class="empty">Has salido del grupo.</div>'; chatTitle.textContent="Selecciona una conversación"; chatSubtitle.textContent="Usa «Nuevo chat» o «Crear grupo» para empezar.";} refreshGroupAddButton(); renderUsers(); });
+socket.on("groupError", message => { if(groupError) groupError.textContent=message||"No se pudo crear el grupo."; });
+socket.on("groupAvatarError", message => { showNotification("Foto del grupo", message || "No se pudo cambiar la foto."); });
 
-      if (!me) return;
+socket.emit("getBlockedUsers");
 
-      socket.emit(
-        "storiesData",
-        visibleStoriesFor(me)
-      );
+socket.on("relationshipData", data => {
+  relationshipData = {
+    contacts: Array.isArray(data?.contacts) ? data.contacts.map(norm) : [],
+    incoming: Array.isArray(data?.incoming) ? data.incoming.map(norm) : [],
+    outgoing: Array.isArray(data?.outgoing) ? data.outgoing.map(norm) : []
+  };
+  renderRequests();
+  renderUsers();
+});
+
+function closeRequestsModal(){
+  if(!requestsModal) return;
+  requestsModal.style.display = "none";
+}
+function setQuickActionsOpen(open){
+  if(!quickActionsMenu || !quickActionsToggle) return;
+  quickActionsMenu.classList.toggle("hidden", !open);
+  quickActionsToggle.classList.toggle("open", open);
+  quickActionsToggle.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+quickActionsToggle?.addEventListener("click", event => {
+  event.stopPropagation();
+  const open = quickActionsMenu?.classList.contains("hidden");
+  setQuickActionsOpen(open);
+});
+
+quickActionsMenu?.addEventListener("click", event => {
+  if(event.target.closest("button")) setQuickActionsOpen(false);
+});
+
+document.addEventListener("click", event => {
+  if(!quickActionsMenu || !quickActionsToggle) return;
+  if(!quickActionsMenu.contains(event.target) && event.target !== quickActionsToggle) setQuickActionsOpen(false);
+});
+
+requestsButton.onclick = () => {
+  renderRequests();
+  requestsModal.style.display = "flex";
+};
+if($("closeRequests")) $("closeRequests").onclick = closeRequestsModal;
+if($("exitRequests")) $("exitRequests").onclick = closeRequestsModal;
+if(requestsModal) requestsModal.addEventListener("click", event => {
+  if(event.target === requestsModal) closeRequestsModal();
+});
+document.addEventListener("keydown", event => {
+  if(event.key === "Escape" && requestsModal && requestsModal.style.display === "flex") closeRequestsModal();
+  if(event.key === "Escape") setQuickActionsOpen(false);
+}, true);
+if($("closeModerationModal")) $("closeModerationModal").onclick = closeModerationModal;
+if($("closeModerationModalBottom")) $("closeModerationModalBottom").onclick = closeModerationModal;
+if($("sendModerationAppeal")) $("sendModerationAppeal").onclick = submitModerationAppeal;
+
+socket.on("contactRequestReceived", user => {
+  if(user?.username && !hasIncomingRequest(user.username)){
+    relationshipData.incoming.push(norm(user.username));
+  }
+  renderRequests();
+  showNotification(
+    user?.displayName || user?.username || "Solicitud",
+    "Te ha enviado una solicitud de contacto."
+  );
+});
+
+socket.on("contactRequestSent", data => {
+  if(data?.username && !hasOutgoingRequest(data.username)){
+    relationshipData.outgoing.push(norm(data.username));
+  }
+  renderUsers();
+  $("newChatModal").style.display = "none";
+  pendingContactUser = null;
+  showNotification(
+    "Solicitud enviada",
+    `Solicitud enviada a ${data?.displayName || data?.username || "usuario"}.`
+  );
+});
+
+socket.on("contactRequestAccepted", user => {
+  if(user?.username){
+    if(!isContact(user.username)) relationshipData.contacts.push(norm(user.username));
+    relationshipData.incoming = relationshipData.incoming.filter(x => norm(x) !== norm(user.username));
+    relationshipData.outgoing = relationshipData.outgoing.filter(x => norm(x) !== norm(user.username));
+  }
+  renderRequests();
+  renderUsers();
+  showNotification(
+    "Solicitud aceptada",
+    `${user?.displayName || user?.username || "El usuario"} ya puede hablar contigo.`
+  );
+});
+
+socket.on("contactRequestRejected", data => {
+  const username = norm(data?.username || "");
+  if(username){
+    relationshipData.incoming = relationshipData.incoming.filter(x => norm(x) !== username);
+    relationshipData.outgoing = relationshipData.outgoing.filter(x => norm(x) !== username);
+  }
+  renderRequests();
+  renderUsers();
+});
+
+socket.on("contactRemoved", data => {
+  const username = norm(data?.username || "");
+  if(username){
+    relationshipData.contacts = relationshipData.contacts.filter(x => norm(x) !== username);
+    relationshipData.incoming = relationshipData.incoming.filter(x => norm(x) !== username);
+    relationshipData.outgoing = relationshipData.outgoing.filter(x => norm(x) !== username);
+    if(norm(selectedUser) === username){
+      selectedUser = "";
+      if(typeof chatView !== "undefined" && chatView) chatView.style.display = "none";
+      if(typeof emptyView !== "undefined" && emptyView) emptyView.style.display = "flex";
     }
+  }
+  renderRequests();
+  renderUsers();
+  showNotification("Contacto eliminado", "El contacto se ha eliminado correctamente.");
+});
+
+socket.on("contactRequestError", message => {
+  $("newChatError").textContent = message || "No se pudo gestionar la solicitud.";
+});
+
+socket.on("userList",users => {
+
+  allUsers =
+    Array.isArray(users)
+      ? users
+      : [];
+
+  $("onlineCount").textContent =
+    allUsers.filter(
+      user => user.online
+    ).length;
+
+  renderProfileNavAvatar();
+  renderUsers();
+});
+
+
+function renderGroups(){
+  if(!groupList) return;
+  groupList.innerHTML="";
+  groupsCount.textContent=String(allGroups.length);
+  if(!allGroups.length){groupList.innerHTML='<div style="padding:2px 4px 8px;color:#999;font-size:12px">Todavía no tienes grupos.</div>';return;}
+  allGroups.forEach(group=>{
+    const row=document.createElement("div"); row.className="groupRow";
+    const count=groupUnread[group.id]||0;
+    const avatar = group.avatar ? `<img src="${esc(group.avatar)}" alt="">` : "👥";
+    row.innerHTML=`<div class="groupAvatar">${avatar}</div><div class="groupInfo"><div class="groupName">${esc(group.name||"Grupo")}</div><div class="groupSub">${Number(group.memberCount||(group.members||[]).length)} miembros</div></div>${count?`<div class="groupUnread">${count>99?"99+":count}</div>`:""}`;
+    row.onclick=()=>openGroupChat(group); groupList.appendChild(row);
+  });
+}
+function renderGroupContactOptions(){
+  if(!groupMemberOptions) return;
+  const contacts=allUsers.filter(u=>u&&isContact(u.username));
+  if(!contacts.length){groupMemberOptions.innerHTML='<div style="padding:14px;color:#777;text-align:center">Necesitas tener al menos un contacto aceptado para crear un grupo.</div>';return;}
+  groupMemberOptions.innerHTML=contacts.map(user=>`<label class="groupMemberOption"><input type="checkbox" value="${esc(user.username)}" data-group-member><div class="avatar" style="width:34px;height:34px">${avatarHtml(user)}</div><div style="min-width:0"><div class="userName">${esc(user.displayName||user.username)}</div><div class="userSub">@${esc(user.username)}</div></div></label>`).join("");
+}
+function renderGroupAddMemberOptions(){
+  if(!groupAddMemberOptions) return;
+  const group=allGroups.find(g=>String(g.id)===String(selectedGroupId));
+  if(!group){groupAddMemberOptions.innerHTML='<div style="padding:14px;color:#777;text-align:center">Selecciona un grupo primero.</div>';return;}
+  const current=new Set((group.members||[]).map(norm));
+  const remaining=50-Number(group.memberCount||(group.members||[]).length);
+  const contacts=allUsers.filter(u=>u&&isContact(u.username)&&!current.has(norm(u.username)));
+  if(remaining<=0){groupAddMemberOptions.innerHTML='<div style="padding:14px;color:#777;text-align:center">El grupo ya tiene el máximo de 50 personas.</div>';return;}
+  if(!contacts.length){groupAddMemberOptions.innerHTML='<div style="padding:14px;color:#777;text-align:center">No tienes más contactos disponibles para añadir.</div>';return;}
+  groupAddMemberOptions.innerHTML=contacts.map(user=>`<label class="groupMemberOption"><input type="checkbox" value="${esc(user.username)}" data-group-add-member><div class="avatar" style="width:34px;height:34px">${avatarHtml(user)}</div><div style="min-width:0"><div class="userName">${esc(user.displayName||user.username)}</div><div class="userSub">@${esc(user.username)}</div></div></label>`).join('');
+}
+function closeGroupActionsMenu(){
+  if(groupActionsMenu) groupActionsMenu.classList.add('hidden');
+  if(groupActionsToggle) groupActionsToggle.setAttribute('aria-expanded','false');
+}
+function refreshGroupAddButton(){
+  const group=allGroups.find(g=>String(g.id)===String(selectedGroupId));
+  const isAdmin=!!group && Array.isArray(group.admins) && group.admins.some(name=>norm(name)===norm(myUsername));
+  const canAdd=isAdmin && Number(group.memberCount||(group.members||[]).length)<50;
+  if(groupAddMembersButton){
+    groupAddMembersButton.classList.toggle('visible',canAdd);
+    groupAddMembersButton.classList.toggle('hidden',!canAdd);
+  }
+  if(groupRenameButton){
+    groupRenameButton.classList.toggle('visible',isAdmin);
+    groupRenameButton.classList.toggle('hidden',!isAdmin);
+  }
+  if(groupDeleteButton){
+    groupDeleteButton.classList.toggle('visible',isAdmin);
+    groupDeleteButton.classList.toggle('hidden',!isAdmin);
+  }
+  const showMenu = !!(isAdmin && groupActionsWrap);
+  if(groupActionsWrap){
+    groupActionsWrap.classList.toggle('visible',showMenu);
+    groupActionsWrap.setAttribute('aria-hidden',String(!showMenu));
+  }
+  if(!showMenu) closeGroupActionsMenu();
+}
+function hideGroupTools(){
+  if(groupAddMembersButton){ groupAddMembersButton.classList.add('hidden'); groupAddMembersButton.classList.remove('visible'); }
+  if(groupRenameButton){ groupRenameButton.classList.add('hidden'); groupRenameButton.classList.remove('visible'); }
+  if(groupDeleteButton){ groupDeleteButton.classList.add('hidden'); groupDeleteButton.classList.remove('visible'); }
+  if(groupActionsWrap){ groupActionsWrap.classList.remove('visible'); groupActionsWrap.setAttribute('aria-hidden','true'); }
+  closeGroupActionsMenu();
+}
+function refreshBlockButton(){
+  if(!blockCurrentButton) return;
+  if(!selectedUser || selectedGroupId){ blockCurrentButton.classList.add('hidden'); return; }
+  blockCurrentButton.classList.remove('hidden');
+  blockCurrentButton.textContent = blockedUsersClient.has(norm(selectedUser)) ? '✅ Desbloquear' : '🚫 Bloquear';
+}
+function openGroupChat(group){
+  switchMainTab("chats");
+  if(!group?.id) return;
+  selectedGroupId=String(group.id); selectedUser=""; groupUnread[selectedGroupId]=0; renderGroups();
+  chatTitle.textContent=group.name||"Grupo"; chatSubtitle.textContent=`👥 ${Number(group.memberCount||(group.members||[]).length)} miembros`;
+  headerAvatar.className = "avatar groupHeaderAvatar";
+  headerAvatar.innerHTML = group.avatar ? `<img src="${esc(group.avatar)}" alt="">` : "👥";
+  const canEditAvatar = Array.isArray(group.admins) && group.admins.some(name => norm(name) === norm(myUsername));
+  headerAvatar.classList.toggle("canEdit", canEditAvatar);
+  headerAvatar.title = canEditAvatar ? "Cambiar foto del grupo" : "";
+  headerAvatar.onclick = canEditAvatar ? () => groupAvatarInput?.click() : null;
+  blockCurrentButton.classList.add("hidden"); callButton.classList.add("hidden"); hangupButton.classList.add("hidden"); layout.classList.add("mobileChat");
+  refreshGroupAddButton();
+  messageInput.disabled=false; sendButton.disabled=false; attachButton.disabled=false; messagesContainer.innerHTML='<div class="empty">Cargando grupo...</div>';
+  socket.emit("getGroupConversation",group.id); socket.emit("markGroupRead",group.id);
+}
+
+function renderUsers(){
+
+  const query =
+    searchInput.value
+      .trim()
+      .toLowerCase();
+
+  usersContainer.innerHTML = "";
+
+  // Sin búsqueda mostramos una única lista combinada de chats: contactos + grupos.
+  if(!query && allGroups.length){
+    allGroups.forEach(group => {
+      const row = document.createElement("div");
+      row.className = "user";
+      const count = groupUnread[group.id] || 0;
+      const avatar = group.avatar ? `<img src="${esc(group.avatar)}" alt="">` : "👥";
+      row.innerHTML = `
+        <div class="avatar">${avatar}</div>
+        <div class="userInfo">
+          <div class="userName">${esc(group.name || "Grupo")}</div>
+          <div class="userSub">👥 ${Number(group.memberCount || (group.members || []).length)} miembros</div>
+          <div class="statusRow">
+            <div style="height:1.2em"></div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <button class="toolBtn enterChatBtn" data-group-open="1">Entrar</button>
+              ${count ? `<div class="badge">${count > 99 ? "99+" : count}</div>` : ""}
+            </div>
+          </div>
+        </div>`;
+      row.querySelector('[data-group-open]')?.addEventListener("click", event => {
+        event.stopPropagation();
+        openGroupChat(group);
+      });
+      row.addEventListener("click", () => openGroupChat(group));
+      usersContainer.appendChild(row);
+    });
+  }
+
+  const others = allUsers.filter(user =>
+    user &&
+    norm(user.username) !== norm(myUsername)
   );
 
-  // ===================================================
-  // BUSCAR USUARIO
-  // ===================================================
+  // Sin búsqueda: solo mostramos los contactos aceptados.
+  // Con búsqueda: mostramos sugerencias de usuarios existentes.
+  let list = [];
+  let mode = "contacts";
 
-  socket.on(
-    "findUser",
-    username => {
-      const me =
-        online.get(socket.id);
+  if(!query){
+    list = others.filter(user => isContact(user.username));
+  }else{
+    mode = "search";
+    list = others
+      .filter(user => {
+        const displayName = String(user.displayName || "").toLowerCase();
+        const username = String(user.username || "").toLowerCase();
+        return displayName.startsWith(query) || username.startsWith(query);
+      })
+      .sort((a,b) => {
+        const ac = isContact(a.username) ? 0 : 1;
+        const bc = isContact(b.username) ? 0 : 1;
+        if(ac !== bc) return ac - bc;
+        return String(a.username || "").localeCompare(String(b.username || ""));
+      })
+      .slice(0, 12);
 
-      if (!me) return;
+    const heading = document.createElement("div");
+    heading.style.cssText = "padding:10px 14px 6px;color:#777;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:.04em";
+    heading.textContent = "Sugerencias de usuarios";
+    usersContainer.appendChild(heading);
+  }
 
-      const target =
-        norm(username);
+  if(!list.length){
+    usersContainer.innerHTML +=
+      `<div style="padding:20px;text-align:center;color:#777">
+        ${mode === "search" ? "No se encontraron usuarios con esa búsqueda." : "No tienes contactos añadidos. Busca un usuario arriba para enviarle una solicitud."}
+      </div>`;
+    return;
+  }
 
-      if (!target) {
-        return socket.emit(
-          "userNotFound"
-        );
-      }
+  list.forEach(user => {
 
-      if (
-        target === norm(me)
-      ) {
-        return socket.emit(
-          "userFoundError",
-          "No puedes contactar contigo mismo."
-        );
-      }
+    const row =
+      document.createElement("div");
 
-      const u =
-        getUser(target);
+    row.className = "user";
 
-      if (!u) {
-        return socket.emit(
-          "userNotFound"
-        );
-      }
+    const count = unread[user.username] || 0;
+    const contact = isContact(user.username);
+    const incoming = hasIncomingRequest(user.username);
+    const outgoing = hasOutgoingRequest(user.username);
 
-      if (
-        isEitherBlocked(
-          me,
-          target
-        )
-      ) {
-        return socket.emit(
-          "userFoundError",
-          "No puedes contactar con este usuario."
-        );
-      }
+    let actionHtml = "";
+    if(contact) actionHtml = `<button class="toolBtn enterChatBtn" data-action="open">Entrar</button><button class="toolBtn" data-action="remove" title="Eliminar contacto">🗑️ Eliminar</button>`;
+    else if(incoming) actionHtml = `<button class="toolBtn primary" data-action="accept">Aceptar</button>`;
+    else if(outgoing) actionHtml = `<button class="toolBtn" data-action="pending">Enviada</button>`;
+    else actionHtml = `<button class="toolBtn primary" data-action="request">Solicitar</button>`;
 
-      socket.emit(
-        "userFound",
-        {
-          username: u.username,
-          displayName:
-            u.displayName,
-          profileImage:
-            u.profileImage || "",
-          online:
-            [...online.values()]
-              .some(
-                x =>
-                  norm(x) ===
-                  target
-              ),
-          relationship: relationshipBetween(me, target)
+    row.innerHTML = `
+      <div class="avatar">${avatarHtml(user)}</div>
+      <div class="userInfo">
+        <div class="userName">${esc(user.displayName || user.username)}</div>
+        <div class="userSub">@${esc(user.username)}</div>
+        <div class="statusRow">
+          ${contact
+            ? `<div class="${user.online ? "online" : "offline"}">${user.online ? "● En línea" : "○ Desconectado"}</div>`
+            : `<div style="height:1.2em"></div>`}
+          <div style="display:flex;align-items:center;gap:6px">
+            ${actionHtml}
+            ${count ? `<div class="badge">${count > 99 ? "99+" : count}</div>` : ""}
+          </div>
+        </div>
+      </div>
+    `;
+
+    const actionButtons = row.querySelectorAll('[data-action]');
+    actionButtons.forEach(actionButton => {
+      actionButton.onclick = event => {
+        event.stopPropagation();
+        const action = actionButton.dataset.action;
+        if(action === "open") {
+          openChat(user.username, user.displayName || user.username, user.online, user.profileImage || "");
+        }else if(action === "accept") {
+          socket.emit("acceptContactRequest", user.username);
+        }else if(action === "request") {
+          socket.emit("sendContactRequest", user.username);
+        }else if(action === "remove") {
+          const display = user.displayName || user.username;
+          const ok = window.confirm(`¿Seguro que quieres eliminar a ${display} de tus contactos?`);
+          if(ok){
+            socket.emit("removeContact", user.username);
+          }
         }
-      );
-    }
-  );
-
-  // ===================================================
-  // CONVERSACIÓN
-  // ===================================================
-
-  socket.on(
-    "getConversation",
-    otherUsername => {
-      const me =
-        online.get(socket.id);
-
-      const other =
-        norm(otherUsername);
-
-      if (
-        !me ||
-        !getUser(other)
-      ) {
-        return;
-      }
-
-      if (
-        isEitherBlocked(
-          me,
-          other
-        )
-      ) {
-        return socket.emit(
-          "conversationBlocked",
-          "Esta conversación está bloqueada."
-        );
-      }
-
-      if (!areContacts(me, other)) {
-        return socket.emit(
-          "conversationBlocked",
-          "Para hablar con este usuario primero debes enviar una solicitud y esperar a que la acepte."
-        );
-      }
-
-      const conv =
-        messages()
-          .filter(
-            m =>
-              (
-                norm(m.from) ===
-                  norm(me) &&
-                norm(m.to) ===
-                  other
-              ) ||
-              (
-                norm(m.from) ===
-                  other &&
-                norm(m.to) ===
-                  norm(me)
-              )
-          )
-          .filter(
-            m =>
-              !(
-                m.deletedFor ||
-                []
-              ).includes(
-                norm(me)
-              )
-          );
-
-      socket.emit(
-        "conversationHistory",
-        {
-          username: other,
-          messages: conv
-        }
-      );
-    }
-  );
-
-  // ===================================================
-  // MENSAJES
-  // ===================================================
-
-  socket.on(
-    "privateMessage",
-    data => {
-      const me =
-        online.get(socket.id);
-
-      const to =
-        norm(data?.to);
-
-      const text =
-        String(
-          data?.message || ""
-        ).trim();
-
-      const media = data?.media && typeof data.media === "object"
-        ? data.media
-        : null;
-
-      const mediaData = media
-        ? String(media.data || "")
-        : "";
-
-      const mediaMime = media
-        ? String(media.mimeType || "").slice(0, 120)
-        : "";
-
-      const mediaName = media
-        ? String(media.fileName || "archivo").slice(0, 180)
-        : "";
-
-      const mediaType = media
-        ? String(media.type || "file").slice(0, 30)
-        : "";
-
-      const allowedMedia = !mediaMime ||
-        mediaMime.startsWith("image/") ||
-        mediaMime.startsWith("video/") ||
-        mediaMime.startsWith("audio/") ||
-        [
-          "application/pdf",
-          "text/plain",
-          "application/zip",
-          "application/msword",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "application/vnd.ms-excel",
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "application/vnd.ms-powerpoint",
-          "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        ].includes(mediaMime);
-
-      const hasMedia = Boolean(
-        mediaData &&
-        mediaData.startsWith("data:") &&
-        mediaData.length <= 10 * 1024 * 1024 &&
-        allowedMedia
-      );
-
-      if (
-        !me ||
-        !to ||
-        (!text && !hasMedia) ||
-        text.length > 5000
-      ) {
-        return;
-      }
-
-      if (media && !hasMedia) {
-        return socket.emit(
-          "messageError",
-          "El archivo no es válido, no está permitido o supera el límite de 7 MB."
-        );
-      }
-
-      const blockedTerm = isInappropriateMessage(text, hasMedia ? mediaName : "");
-      if (blockedTerm) {
-        addAdminActivity(`Mensaje bloqueado automáticamente por moderación: @${me} -> @${to}.`);
-        return socket.emit(
-          "messageError",
-          "Mensaje eliminado por moderación automática. Revisa el contenido e inténtalo de nuevo."
-        );
-      }
-
-      if (!getUser(to)) {
-        return socket.emit(
-          "messageError",
-          "Ese usuario no existe."
-        );
-      }
-
-      if (
-        to === norm(me)
-      ) {
-        return socket.emit(
-          "messageError",
-          "No puedes enviarte mensajes."
-        );
-      }
-
-      if (
-        isEitherBlocked(
-          me,
-          to
-        )
-      ) {
-        return socket.emit(
-          "messageError",
-          "No puedes contactar con este usuario."
-        );
-      }
-
-      if (!areContacts(me, to)) {
-        return socket.emit(
-          "messageError",
-          "Para hablar con este usuario primero debes enviar una solicitud y esperar a que la acepte."
-        );
-      }
-
-      const msg = {
-        id:
-          Date.now() +
-          "-" +
-          crypto.randomBytes(5).toString("hex"),
-
-        from: norm(me),
-
-        fromDisplay:
-          getUser(me)?.displayName ||
-          me,
-
-        to,
-
-        toDisplay:
-          getUser(to)?.displayName ||
-          to,
-
-        message: text,
-
-        type: hasMedia
-          ? mediaType || "file"
-          : "text",
-
-        media: hasMedia
-          ? mediaData
-          : "",
-
-        fileName: hasMedia
-          ? mediaName
-          : "",
-
-        mimeType: hasMedia
-          ? mediaMime
-          : "",
-
-        time:
-          new Date().toISOString(),
-
-        read: false,
-
-        deletedFor: []
       };
+    });
 
-      const list =
-        messages();
-
-      list.push(msg);
-
-      if (list.length > 50000) {
-        list.splice(
-          0,
-          list.length - 50000
-        );
-      }
-
-      saveMessages(list);
-
-      addAdminMessageActivity(me,
-        `${msg.fromDisplay} ha enviado un mensaje a ${msg.toDisplay}: ${
-          msg.message ||
-          (msg.fileName ? "📎 " + msg.fileName : "Archivo multimedia")
-        }`
-      );
-
-      const targetSid =
-        socketIdFor(to);
-
-      if (targetSid) {
-        io.to(targetSid).emit(
-          "privateMessage",
-          msg
-        );
-      }
-
-      socket.emit(
-        "messageSent",
-        msg
-      );
-
-      sendPushToUser(
-        to,
-        {
-          type: "message",
-          from:
-            msg.fromDisplay,
-          message:
-            msg.message ||
-            (msg.fileName
-              ? "📎 " + msg.fileName
-              : "Archivo multimedia"),
-          username:
-            msg.from
-        }
-      );
+    if(contact){
+      row.style.cursor = "pointer";
+      row.onclick = () => openChat(user.username, user.displayName || user.username, user.online, user.profileImage || "");
     }
+
+    usersContainer.appendChild(row);
+  });
+}
+
+searchInput.oninput = renderUsers;
+
+/* =====================================================
+   CONTACTOS
+===================================================== */
+
+
+if(groupAvatarInput){
+  groupAvatarInput.onchange = async () => {
+    const file = groupAvatarInput.files?.[0];
+    groupAvatarInput.value = "";
+    if(!file || !selectedGroupId) return;
+    if(!/^image\/(jpeg|png|webp)$/i.test(file.type)) return showNotification("Foto del grupo", "Selecciona una imagen JPG, PNG o WebP.");
+    if(file.size > 8 * 1024 * 1024) return showNotification("Foto del grupo", "La imagen original no puede superar 8 MB.");
+    try {
+      const reader = new FileReader();
+      const dataUrl = await new Promise((resolve, reject) => { reader.onload=()=>resolve(reader.result); reader.onerror=()=>reject(new Error()); reader.readAsDataURL(file); });
+      const img = new Image(); img.src = dataUrl;
+      await new Promise((resolve, reject) => { img.onload=resolve; img.onerror=reject; });
+      const max = 512; const scale = Math.min(1, max / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
+      const canvas = document.createElement("canvas"); canvas.width=Math.max(1,Math.round((img.naturalWidth||img.width)*scale)); canvas.height=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
+      const ctx=canvas.getContext("2d"); ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      socket.emit("updateGroupAvatar", {groupId:selectedGroupId, avatar:canvas.toDataURL("image/webp",0.82)});
+    } catch { showNotification("Foto del grupo", "No se pudo procesar la imagen."); }
+  };
+}
+
+if(groupActionsToggle){
+  groupActionsToggle.onclick=(event)=>{
+    event.stopPropagation();
+    if(groupActionsMenu) groupActionsMenu.classList.toggle('hidden');
+    groupActionsToggle.setAttribute('aria-expanded', String(groupActionsMenu ? !groupActionsMenu.classList.contains('hidden') : false));
+  };
+}
+document.addEventListener('click',(event)=>{
+  if(groupActionsWrap && !groupActionsWrap.contains(event.target)) closeGroupActionsMenu();
+});
+
+if(groupRenameButton){
+  groupRenameButton.onclick=()=>{
+    closeGroupActionsMenu();
+    const group=allGroups.find(g=>String(g.id)===String(selectedGroupId));
+    if(!group) return;
+    const next=window.prompt("Nuevo nombre del grupo:", group.name || "Grupo");
+    if(next===null) return;
+    const name=next.trim();
+    if(!name) return showNotification("Nombre del grupo","Escribe un nombre para el grupo.");
+    if(name.length<2 || name.length>50) return showNotification("Nombre del grupo","El nombre debe tener entre 2 y 50 caracteres.");
+    socket.emit("updateGroupName",{groupId:selectedGroupId,name});
+  };
+}
+socket.on("groupNameError",message=>showNotification("Nombre del grupo",message||"No se pudo cambiar el nombre."));
+
+if(groupAddMembersButton){
+  groupAddMembersButton.onclick=()=>{
+    closeGroupActionsMenu();
+    const group=allGroups.find(g=>String(g.id)===String(selectedGroupId));
+    if(!group) return;
+    groupAddError.textContent='';
+    renderGroupAddMemberOptions();
+    groupAddModal.style.display='flex';
+  };
+}
+if(groupDeleteButton){
+  groupDeleteButton.onclick=()=>{
+    closeGroupActionsMenu();
+    const group=allGroups.find(g=>String(g.id)===String(selectedGroupId));
+    if(!group) return;
+    if(!window.confirm(`¿Seguro que quieres borrar el grupo «${group.name || "Grupo"}»? Se eliminará para todos sus miembros y se borrarán sus mensajes.`)) return;
+    socket.emit('deleteGroup',{groupId:selectedGroupId});
+  };
+}
+socket.on('groupDeleteError',message=>showNotification('Borrar grupo',message||'No se pudo borrar el grupo.'));
+socket.on('groupDeleted',data=>{
+  const id=String(data?.id||'');
+  if(!id) return;
+  allGroups=allGroups.filter(g=>String(g.id)!==id);
+  delete groupUnread[id];
+  if(String(selectedGroupId)===id){
+    selectedGroupId='';
+    selectedUser='';
+    hideGroupTools();
+    messageInput.disabled=true;
+    sendButton.disabled=true;
+    attachButton.disabled=true;
+    messagesContainer.innerHTML='<div class="empty">Grupo eliminado.</div>';
+    chatTitle.textContent='Selecciona una conversación';
+    chatSubtitle.textContent='Usa «Nuevo chat» o «Crear grupo» para empezar.';
+  }
+  renderUsers();
+});
+if($('cancelGroupAdd')) $('cancelGroupAdd').onclick=()=>{groupAddModal.style.display='none';};
+if($('confirmGroupAdd')) $('confirmGroupAdd').onclick=()=>{
+  const selected=Array.from(groupAddMemberOptions.querySelectorAll('input[data-group-add-member]:checked')).map(el=>el.value);
+  groupAddError.textContent='';
+  if(!selected.length){groupAddError.textContent='Selecciona al menos una persona.';return;}
+  socket.emit('addGroupMembers',{groupId:selectedGroupId,members:selected});
+  groupAddModal.style.display='none';
+};
+if(groupAddModal) groupAddModal.addEventListener('click',event=>{if(event.target===groupAddModal) groupAddModal.style.display='none';});
+socket.on('groupAddMembersError',message=>{if(groupAddModal){groupAddModal.style.display='flex';renderGroupAddMemberOptions();}if(groupAddError)groupAddError.textContent=message||'No se pudo añadir a las personas.';});
+
+newGroupButton.onclick = () => {
+  groupError.textContent=""; groupNameInput.value=""; renderGroupContactOptions(); groupModal.style.display="flex"; setTimeout(()=>groupNameInput.focus(),50);
+};
+$("cancelGroup").onclick = () => { groupModal.style.display="none"; };
+$("createGroupButton").onclick = () => {
+  const name=groupNameInput.value.trim();
+  const selected=Array.from(groupMemberOptions.querySelectorAll("input[data-group-member]:checked")).map(el=>el.value);
+  groupError.textContent="";
+  if(name.length<2){groupError.textContent="Pon un nombre para el grupo.";return;}
+  if(!selected.length){groupError.textContent="Selecciona al menos un contacto.";return;}
+  socket.emit("createGroup",{name,members:selected});
+  groupModal.style.display="none";
+};
+if(groupModal) groupModal.addEventListener("click",event=>{if(event.target===groupModal)groupModal.style.display="none";});
+
+$("newChatButton").onclick = () => {
+
+  $("newChatError").textContent = "";
+  $("newChatUsername").value = "";
+  $("newChatModal").style.display = "flex";
+
+  setTimeout(
+    () => $("newChatUsername").focus(),
+    50
+  );
+};
+
+$("cancelNewChat").onclick = () => {
+  $("newChatModal").style.display = "none";
+};
+
+$("contactButton").onclick = () => {
+
+  const username =
+    $("newChatUsername")
+      .value
+      .trim();
+
+  $("newChatError").textContent = "";
+
+  if(!username){
+    $("newChatError").textContent =
+      "Escribe un nombre de usuario.";
+    return;
+  }
+
+  socket.emit("findUser",username);
+};
+
+$("newChatUsername").onkeydown = e => {
+  if(e.key === "Enter"){
+    $("contactButton").click();
+  }
+};
+
+socket.on("userNotFound",() => {
+  $("newChatError").textContent =
+    "No existe ese usuario.";
+});
+
+socket.on("userFoundError",message => {
+  $("newChatError").textContent =
+    message;
+});
+
+socket.on("userFound",user => {
+  pendingContactUser = user;
+  const relationship = user.relationship || "none";
+
+  if(relationship === "accepted") {
+    $("newChatModal").style.display = "none";
+    openChat(user.username, user.displayName || user.username, !!user.online, user.profileImage || "");
+    pendingContactUser = null;
+    return;
+  }
+  if(relationship === "outgoing") {
+    $("newChatError").textContent = "Ya has enviado una solicitud a este usuario.";
+    return;
+  }
+  if(relationship === "incoming") {
+    $("newChatError").textContent = "Este usuario ya te ha enviado una solicitud. Acepta la solicitud desde «Solicitudes».";
+    return;
+  }
+
+  socket.emit("sendContactRequest", user.username);
+});
+
+socket.on("contactRequestError",message => {
+  $("newChatError").textContent = message;
+  pendingContactUser = null;
+});
+
+/* =====================================================
+   CHAT
+===================================================== */
+
+function openChat(
+  username,
+  displayName,
+  online,
+  profileImage = ""
+){
+  switchMainTab("chats");
+
+  selectedGroupId = "";
+  hideGroupTools();
+  headerAvatar.className = "avatar";
+  headerAvatar.onclick = null;
+  headerAvatar.title = "";
+
+  if(!isContact(username)) {
+    selectedUser = "";
+    messageInput.disabled = true;
+    sendButton.disabled = true;
+    attachButton.disabled = true;
+    messagesContainer.innerHTML = `<div class="empty">Para poder hablar con ${esc(displayName || username)}, primero debes enviar una solicitud y esperar a que la acepte.</div>`;
+    chatTitle.textContent = displayName || username;
+    chatSubtitle.textContent = "🔒 Solicitud de contacto necesaria";
+    layout.classList.add("mobileChat");
+    return;
+  }
+
+  selectedUser = username;
+
+  unread[username] = 0;
+
+  renderUsers();
+
+  chatTitle.textContent =
+    displayName || username;
+
+  chatSubtitle.textContent =
+    online
+      ? "● En línea"
+      : "○ Desconectado";
+
+  headerAvatar.innerHTML =
+    profileImage
+      ? `<img src="${esc(profileImage)}" alt="">`
+      : esc(
+          (displayName || username)
+            .charAt(0)
+            .toUpperCase()
+        );
+
+  refreshBlockButton();
+
+  callButton.classList.remove("hidden");
+  hangupButton.classList.add("hidden");
+
+  layout.classList.add("mobileChat");
+
+  messageInput.disabled = false;
+  sendButton.disabled = false;
+  attachButton.disabled = false;
+
+  messagesContainer.innerHTML =
+    `<div class="empty">
+      Cargando conversación...
+    </div>`;
+
+  socket.emit(
+    "getConversation",
+    username
   );
 
-  socket.on(
+  /* CORREGIDO: faltaba ); en tu código */
+  socket.emit(
     "markConversationRead",
-    otherUsername => {
-      const me =
-        online.get(socket.id);
-
-      const other =
-        norm(otherUsername);
-
-      if (!me) return;
-
-      const list =
-        messages();
-
-      for (const m of list) {
-        if (
-          norm(m.from) ===
-            other &&
-          norm(m.to) ===
-            norm(me)
-        ) {
-          m.read = true;
-        }
-      }
-
-      saveMessages(list);
-
-      emitUnread(
-        socket,
-        me
-      );
-    }
+    username
   );
+}
 
-  socket.on(
-    "deleteMessage",
-    id => {
-      const me =
-        online.get(socket.id);
 
-      if (!me || !id) return;
+socket.on("groupConversationBlocked", message => { messagesContainer.innerHTML = `<div class="empty">${esc(message || "No puedes acceder a este grupo.")}</div>`; messageInput.disabled=true; sendButton.disabled=true; attachButton.disabled=true; });
 
-      const list =
-        messages();
+socket.on("groupConversationHistory", data => {
+  const group=data?.group; if(!group?.id) return;
+  const id=String(group.id); if(String(selectedGroupId)!==id) return;
+  conversations[`group:${id}`]=Array.isArray(data.messages)?data.messages:[];
+  chatTitle.textContent=group.name||"Grupo";
+  chatSubtitle.textContent=`👥 ${Number(group.memberCount||(group.members||[]).length)} miembros`;
+  renderConversation(`group:${id}`);
+});
+socket.on("groupMessageSent", message => handleIncomingGroupMessage(message, false));
+socket.on("groupMessageReceived", message => handleIncomingGroupMessage(message, true));
+function handleIncomingGroupMessage(message, incoming){
+  const id=String(message?.groupId||""); if(!id) return;
+  const key=`group:${id}`; if(!conversations[key]) conversations[key]=[];
+  if(!conversations[key].some(item=>item.id===message.id)) conversations[key].push(message);
+  if(String(selectedGroupId)===id){ addMessage(message); messagesContainer.scrollTop=messagesContainer.scrollHeight; if(incoming) socket.emit("markGroupRead",id); }
+  else if(incoming){ groupUnread[id]=(groupUnread[id]||0)+1; renderGroups(); const group=allGroups.find(g=>String(g.id)===id); showNotification(group?.name||"Grupo",message.message||(message.fileName?"📎 Archivo":"Nuevo mensaje")); }
+}
 
-      const idx =
-        list.findIndex(
-          m => m.id === id
-        );
+socket.on("conversationHistory",data => {
 
-      if (idx < 0) return;
+  conversations[data.username] =
+    data.messages || [];
 
-      if (
-        norm(list[idx].from) !==
-        norm(me)
-      ) {
-        return socket.emit(
-          "messageError",
-          "Solo puedes borrar tus propios mensajes."
-        );
-      }
+  if(selectedUser === data.username){
+    renderConversation(data.username);
+  }
+});
 
-      list[idx].deletedFor =
-        Array.from(
-          new Set([
-            ...(list[idx]
-              .deletedFor || []),
-            norm(me)
-          ])
-        );
+socket.on("conversationBlocked",message => {
 
-      list[idx].message =
-        "Mensaje eliminado";
+  messagesContainer.innerHTML =
+    `<div class="empty">
+      ${esc(message)}
+    </div>`;
 
-      list[idx].deleted = true;
+  messageInput.disabled = true;
+  sendButton.disabled = true;
+  attachButton.disabled = true;
+  clearPendingMedia();
+});
 
-      saveMessages(list);
+function renderConversation(username){
 
-      if (list[idx].groupId) {
-        const group = getGroup(list[idx].groupId);
-        if (group) {
-          for (const member of group.members || []) {
-            const sid = socketIdFor(member);
-            if (sid) io.to(sid).emit("messageDeleted", { id: list[idx].id, message: list[idx].message, groupId: group.id });
-          }
-        }
-      } else {
-        const target = list[idx].to;
-        for (const [sid, name] of online.entries()) {
-          if (norm(name) === target || norm(name) === norm(me)) {
-            io.to(sid).emit("messageDeleted", { id: list[idx].id, message: list[idx].message });
-          }
-        }
-      }
+  const list =
+    conversations[username] || [];
+
+  messagesContainer.innerHTML = "";
+
+  if(!list.length){
+
+    messagesContainer.innerHTML =
+      `<div class="empty">
+        Todavía no hay mensajes.
+      </div>`;
+
+    return;
+  }
+
+  list.forEach(addMessage);
+
+  messagesContainer.scrollTop =
+    messagesContainer.scrollHeight;
+}
+
+function addMessage(message){
+
+  const mine =
+    norm(message.from) ===
+    norm(myUsername);
+
+  const row =
+    document.createElement("div");
+
+  row.className =
+    "messageRow " +
+    (mine ? "mine" : "");
+
+  const bubble =
+    document.createElement("div");
+
+  bubble.className = "bubble";
+
+  const date =
+    new Date(message.time);
+
+  const time =
+    date.getHours()
+      .toString()
+      .padStart(2,"0") +
+    ":" +
+    date.getMinutes()
+      .toString()
+      .padStart(2,"0");
+
+  const text =
+    message.deleted
+      ? `<span class="deletedText">
+           Mensaje eliminado
+         </span>`
+      : esc(message.message || "");
+
+  bubble.innerHTML = `
+    ${
+      mine
+        ? ""
+        : `<div class="from">
+             ${esc(
+               message.fromDisplay ||
+               message.from
+             )}
+           </div>`
     }
-  );
 
-  // ===================================================
-  // BLOQUEOS
-  // ===================================================
+    ${message.message ? `<div>${text}</div>` : ""}
 
-  socket.on(
-    "blockUser",
-    username => {
-      const me =
-        online.get(socket.id);
+    <div class="time">
+      ${time}
+    </div>
+  `;
 
-      const target =
-        norm(username);
+  if(!message.deleted && message.media){
+    const mediaWrap = document.createElement("div");
+    mediaWrap.innerHTML = mediaHtml(message);
+    bubble.insertBefore(mediaWrap.firstElementChild, bubble.querySelector(".time"));
+  }
 
-      if (
-        !me ||
-        !target ||
-        target === norm(me) ||
-        !getUser(target)
-      ) {
-        return;
-      }
+  if(mine && !message.deleted){
 
-      const list = users();
+    const tools =
+      document.createElement("div");
 
-      const idx =
-        list.findIndex(
-          u =>
-            norm(u.username) ===
-            norm(me)
-        );
+    tools.className =
+      "messageContext";
 
-      if (idx < 0) return;
+    const deleteButton =
+      document.createElement("button");
 
-      list[idx].blockedUsers =
-        Array.from(
-          new Set([
-            ...(list[idx]
-              .blockedUsers || []),
-            target
-          ])
-        );
+    deleteButton.className =
+      "deleteBtn";
 
-      ensureContactRequests(list[idx]);
-      list[idx].contacts = list[idx].contacts.filter(x => norm(x) !== target);
-      list[idx].contactRequests.incoming = list[idx].contactRequests.incoming.filter(x => norm(x) !== target);
-      list[idx].contactRequests.outgoing = list[idx].contactRequests.outgoing.filter(x => norm(x) !== target);
+    deleteButton.textContent =
+      "🗑️ Borrar";
 
-      const targetIdx = list.findIndex(u => norm(u.username) === target);
-      if (targetIdx >= 0) {
-        ensureContactRequests(list[targetIdx]);
-        list[targetIdx].contacts = list[targetIdx].contacts.filter(x => norm(x) !== norm(me));
-        list[targetIdx].contactRequests.incoming = list[targetIdx].contactRequests.incoming.filter(x => norm(x) !== norm(me));
-        list[targetIdx].contactRequests.outgoing = list[targetIdx].contactRequests.outgoing.filter(x => norm(x) !== norm(me));
-      }
-
-      saveUsers(list);
-      emitRelationshipData(socket, me);
-      emitRelationshipToUser(target);
-
+    deleteButton.onclick = () => {
       socket.emit(
-        "blockUpdated",
-        {
-          username: target,
-          blocked: true
-        }
+        "deleteMessage",
+        message.id
+      );
+    };
+
+    tools.appendChild(
+      deleteButton
+    );
+
+    bubble.appendChild(
+      tools
+    );
+  }
+
+  row.appendChild(
+    bubble
+  );
+
+  messagesContainer.appendChild(
+    row
+  );
+}
+
+socket.on("messageDeleted",data => {
+
+  for(const key in conversations){
+
+    const index =
+      conversations[key].findIndex(
+        message =>
+          message.id === data.id
       );
 
-      socket.emit(
-        "contactsUpdated",
-        getContactList(me)
+    if(index >= 0){
+
+      conversations[key][index].deleted = true;
+      conversations[key][index].message =
+        data.message;
+    }
+  }
+
+  if(selectedUser){
+    renderConversation(selectedUser);
+  }else if(selectedGroupId){
+    renderConversation(`group:${selectedGroupId}`);
+  }
+});
+
+attachButton.onclick = () => fileInput.click();
+
+fileInput.onchange = () => {
+  const file = fileInput.files && fileInput.files[0];
+  if(!file){
+    clearPendingMedia();
+    return;
+  }
+
+  if(file.size > 7 * 1024 * 1024){
+    showNotification("Mi Chat", "El archivo no puede superar los 7 MB.");
+    clearPendingMedia();
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = String(reader.result || "");
+    if(!dataUrl.startsWith("data:")){
+      showNotification("Mi Chat", "No se pudo preparar el archivo.");
+      clearPendingMedia();
+      return;
+    }
+
+    let type = "file";
+    if(file.type.startsWith("image/")) type = "image";
+    else if(file.type.startsWith("video/")) type = "video";
+    else if(file.type.startsWith("audio/")) type = "audio";
+
+    pendingMedia = {
+      data: dataUrl,
+      mimeType: file.type || "application/octet-stream",
+      fileName: file.name,
+      type
+    };
+
+    mediaName.textContent = "📎 " + file.name;
+    mediaName.style.display = "block";
+  };
+  reader.onerror = () => {
+    showNotification("Mi Chat", "No se pudo leer el archivo.");
+    clearPendingMedia();
+  };
+  reader.readAsDataURL(file);
+};
+
+function clearPendingMedia(){
+  pendingMedia = null;
+  fileInput.value = "";
+  mediaName.textContent = "";
+  mediaName.style.display = "none";
+}
+
+function mediaHtml(message){
+  const src = esc(message.media || "");
+  const name = esc(message.fileName || "archivo");
+  const mime = String(message.mimeType || "");
+
+  if(message.type === "image" || mime.startsWith("image/")){
+    return `<img class="chatMedia" src="${src}" alt="${name}" loading="lazy">`;
+  }
+
+  if(message.type === "video" || mime.startsWith("video/")){
+    return `<video class="chatMedia chatVideo" src="${src}" controls playsinline preload="metadata"></video>`;
+  }
+
+  if(message.type === "audio" || mime.startsWith("audio/")){
+    return `<audio class="chatAudio" src="${src}" controls preload="metadata"></audio>`;
+  }
+
+  return `<a class="fileAttachment" href="${src}" download="${name}"><span class="fileAttachmentIcon">📎</span><span class="fileAttachmentName">${name}</span></a>`;
+}
+
+sendButton.onclick = sendMessage;
+
+messageInput.onkeydown = event => {
+  if(event.key === "Enter"){
+    sendMessage();
+  }
+};
+
+function sendMessage(){
+
+  const text =
+    messageInput.value.trim();
+
+  if((!text && !pendingMedia) || (!selectedUser && !selectedGroupId)){
+    return;
+  }
+
+  if(selectedGroupId){
+    socket.emit("groupMessage",{groupId:selectedGroupId,message:text,media:pendingMedia});
+  }else if(selectedUser){
+    socket.emit("privateMessage",{to:selectedUser,message:text,media:pendingMedia});
+  }else{
+    return;
+  }
+
+  messageInput.value = "";
+  clearPendingMedia();
+}
+
+socket.on("messageSent",message => {
+
+  const key =
+    message.to;
+
+  if(!conversations[key]){
+    conversations[key] = [];
+  }
+
+  if(
+    !conversations[key].some(
+      item =>
+        item.id === message.id
+    )
+  ){
+
+    conversations[key].push(message);
+  }
+
+  if(selectedUser === key){
+
+    addMessage(message);
+
+    messagesContainer.scrollTop =
+      messagesContainer.scrollHeight;
+  }
+});
+
+socket.on("privateMessage",message => {
+
+  const other =
+    norm(message.from) ===
+    norm(myUsername)
+      ? norm(message.to)
+      : norm(message.from);
+
+  if(!conversations[other]){
+    conversations[other] = [];
+  }
+
+  if(
+    !conversations[other].some(
+      item =>
+        item.id === message.id
+    )
+  ){
+
+    conversations[other].push(message);
+  }
+
+  if(selectedUser === other){
+
+    addMessage(message);
+
+    messagesContainer.scrollTop =
+      messagesContainer.scrollHeight;
+
+    socket.emit(
+      "markConversationRead",
+      other
+    );
+
+  }else{
+
+    unread[other] =
+      (unread[other] || 0) + 1;
+
+    renderUsers();
+
+    showNotification(
+      message.fromDisplay ||
+      message.from,
+      message.message,
+      other,
+      "message"
+    );
+  }
+});
+
+socket.on("unreadCounts",data => {
+  unread = data || {};
+  renderUsers();
+});
+
+/* =====================================================
+   NOTIFICACIÓN EN PANTALLA
+===================================================== */
+
+function showNotification(
+  title,
+  text,
+  username = "",
+  type = "message"
+){
+
+  const notification =
+    document.createElement("div");
+
+  notification.className =
+    "notification";
+
+  notification.innerHTML = `
+    <div class="notificationTitle">
+      ${
+        type === "call"
+          ? "📞 "
+          : type === "moderation"
+          ? "⚠️ "
+          : "💬 "
+      }${esc(title)}
+    </div>
+
+    <div class="notificationText">
+      ${esc(text)}
+    </div>
+  `;
+
+  notification.onclick = () => {
+
+    if(
+      type === "call" &&
+      username
+    ){
+
+      showIncomingCallFromNotification(
+        username,
+        title
       );
 
-      sendUserList();
+    }else if(username){
+
+      const user =
+        allUsers.find(
+          item =>
+            norm(item.username) ===
+            norm(username)
+        );
+
+      if(user){
+
+        openChat(
+          user.username,
+          user.displayName || user.username,
+          user.online,
+          user.profileImage || ""
+        );
+
+      }else{
+
+        socket.emit(
+          "findUser",
+          username
+        );
+      }
     }
+
+    notification.remove();
+  };
+
+  notifications.appendChild(
+    notification
   );
 
-  socket.on(
-    "unblockUser",
-    username => {
-      const me =
-        online.get(socket.id);
-
-      const target =
-        norm(username);
-
-      if (!me || !target) return;
-
-      const list = users();
-
-      const idx =
-        list.findIndex(
-          u =>
-            norm(u.username) ===
-            norm(me)
-        );
-
-      if (idx < 0) return;
-
-      list[idx].blockedUsers =
-        (
-          list[idx]
-            .blockedUsers || []
-        ).filter(
-          x =>
-            norm(x) !==
-            target
-        );
-
-      saveUsers(list);
-
-      socket.emit(
-        "blockUpdated",
-        {
-          username: target,
-          blocked: false
-        }
-      );
-
-      sendUserList();
-    }
+  setTimeout(
+    () => notification.remove(),
+    6000
   );
+}
 
-  socket.on(
-    "getBlockedUsers",
-    () => {
-      const me =
-        online.get(socket.id);
+/* =====================================================
+   WEBRTC
+===================================================== */
 
-      if (!me) return;
+const rtcConfig = {
+  iceServers:[
+    {
+      urls:"stun:stun.l.google.com:19302"
+    },
+    {
+      urls:"stun:stun1.l.google.com:19302"
+    }
+  ]
+};
 
-      socket.emit(
-        "blockedUsers",
-        getUser(me)?.blockedUsers ||
-          []
+async function ensureMicrophone(){
+
+  if(
+    !navigator.mediaDevices ||
+    !navigator.mediaDevices.getUserMedia
+  ){
+
+    throw new Error(
+      "Este navegador no permite usar el micrófono aquí."
+    );
+  }
+
+  if(!localStream){
+
+    localStream =
+      await navigator.mediaDevices.getUserMedia({
+        audio:true,
+        video:false
+      });
+  }
+
+  return localStream;
+}
+
+async function flushIceCandidates(){
+
+  if(
+    !peerConnection ||
+    !peerConnection.remoteDescription
+  ){
+    return;
+  }
+
+  const pending =
+    queuedIceCandidates.splice(0);
+
+  for(const candidate of pending){
+
+    try{
+
+      await peerConnection.addIceCandidate(
+        new RTCIceCandidate(candidate)
+      );
+
+    }catch(error){
+
+      console.warn(
+        "No se pudo añadir ICE:",
+        error
       );
     }
-  );
+  }
+}
 
-  // ===================================================
-  // LLAMADAS WEBRTC
-  // ===================================================
+async function startPeer(){
 
-  socket.on(
-    "callRequest",
-    ({ to }) => {
-      const caller =
-        online.get(socket.id);
+  if(peerConnection){
+    return;
+  }
 
-      const target =
-        norm(to);
+  peerConnection =
+    new RTCPeerConnection(
+      rtcConfig
+    );
 
-      if (!caller || !target) {
-        return;
-      }
+  const stream =
+    await ensureMicrophone();
 
-      if (
-        target === norm(caller)
-      ) {
-        return socket.emit(
-          "callError",
-          "No puedes llamarte a ti mismo."
-        );
-      }
-
-      if (
-        isEitherBlocked(
-          caller,
-          target
-        )
-      ) {
-        return socket.emit(
-          "callError",
-          "No puedes contactar con este usuario."
-        );
-      }
-
-      if (!areContacts(caller, target)) {
-        return socket.emit(
-          "callError",
-          "Para llamar a este usuario primero debes ser un contacto aceptado."
-        );
-      }
-
-      const targetUser =
-        getUser(target);
-
-      if (!targetUser) {
-        return socket.emit(
-          "callError",
-          "Ese usuario no existe."
-        );
-      }
-
-      const callerName =
-        getUser(caller)?.displayName ||
-        caller;
-
-      // Si el receptor tiene la app/web abierta,
-      // avisamos inmediatamente mediante Socket.IO.
-      const targetSid =
-        socketIdFor(target);
-
-      if (targetSid) {
-        io.to(targetSid).emit(
-          "incomingCall",
-          {
-            from: norm(caller),
-            fromDisplay:
-              callerName
-          }
-        );
-      }
-
-      // IMPORTANTE:
-      // Se manda FCM SIEMPRE, incluso si el receptor
-      // está desconectado o tiene la app cerrada.
-      sendPushToUser(
-        target,
-        {
-          type: "call",
-          title:
-            "Llamada entrante",
-          body:
-            callerName +
-            " te está llamando",
-          from:
-            callerName,
-          username:
-            norm(caller),
-          message:
-            "Llamada entrante"
-        }
-      );
-
-      // Indicamos al llamante que el aviso
-      // de llamada ha sido iniciado.
-      socket.emit(
-        "callRinging",
-        {
-          to: target,
-          online:
-            !!targetSid
-        }
+  stream.getTracks().forEach(
+    track => {
+      peerConnection.addTrack(
+        track,
+        stream
       );
     }
   );
 
-  socket.on(
-    "callAccept",
-    ({ to }) => {
-      const callee =
-        online.get(socket.id);
+  peerConnection.ontrack =
+    event => {
 
-      const target =
-        norm(to);
+      console.log("WEBRTC: audio remoto recibido", event);
 
-      if (!callee || !target) {
+      if(
+        !event.streams ||
+        !event.streams[0]
+      ){
+        console.warn("WEBRTC: no llegó ningún MediaStream remoto");
         return;
       }
 
-      if (!areContacts(callee, target)) {
-        return;
-      }
+      remoteAudio.srcObject =
+        event.streams[0];
 
-      const targetSid =
-        socketIdFor(target);
+      remoteAudio.autoplay = true;
+      remoteAudio.playsInline = true;
+      remoteAudio.muted = false;
+      remoteAudio.volume = 1.0;
 
-      if (!targetSid) {
-        return socket.emit(
-          "callError",
-          "El usuario ya no está conectado."
-        );
-      }
+      remoteAudio.play()
+        .then(() => {
+          console.log("WEBRTC: audio remoto reproduciéndose correctamente");
+        })
+        .catch(error => {
+          console.error("WEBRTC: ERROR reproduciendo audio remoto:", error);
+        });
 
-      io.to(targetSid).emit(
-        "callAccepted",
-        {
-          from:
-            norm(callee),
-          fromDisplay:
-            getUser(callee)?.displayName ||
-            callee
-        }
-      );
-    }
-  );
+      // El audio remoto puede llegar después de que WebRTC pase a
+      // connectionState=connected. Intentamos de nuevo en cuanto llega la
+      // pista para que la grabación automática no se pierda por una carrera.
+      scheduleAutomaticCallRecording();
+    };
 
-  socket.on(
-    "callReject",
-    ({ to }) => {
-      const rejecter =
-        online.get(socket.id);
+  peerConnection.onicecandidate =
+    event => {
 
-      const target =
-        norm(to);
+      if(
+        event.candidate &&
+        callPeer
+      ){
 
-      if (
-        !rejecter ||
-        !target
-      ) {
-        return;
-      }
-
-      const targetSid =
-        socketIdFor(target);
-
-      if (targetSid) {
-        io.to(targetSid).emit(
-          "callRejected",
-          {
-            from:
-              norm(rejecter)
-          }
-        );
-      }
-    }
-  );
-
-  socket.on(
-    "callOffer",
-    ({ to, offer }) => {
-      const sender =
-        online.get(socket.id);
-
-      const target =
-        norm(to);
-
-      if (
-        !sender ||
-        !target ||
-        !offer
-      ) {
-        return;
-      }
-
-      if (!areContacts(sender, target)) {
-        return;
-      }
-
-      const targetSid =
-        socketIdFor(target);
-
-      if (targetSid) {
-        io.to(targetSid).emit(
-          "callOffer",
-          {
-            from:
-              norm(sender),
-            offer
-          }
-        );
-      }
-    }
-  );
-
-  socket.on(
-    "callAnswer",
-    ({ to, answer }) => {
-      const sender =
-        online.get(socket.id);
-
-      const target =
-        norm(to);
-
-      if (
-        !sender ||
-        !target ||
-        !answer
-      ) {
-        return;
-      }
-
-      const targetSid =
-        socketIdFor(target);
-
-      if (targetSid) {
-        io.to(targetSid).emit(
-          "callAnswer",
-          {
-            from:
-              norm(sender),
-            answer
-          }
-        );
-      }
-    }
-  );
-
-  socket.on(
-    "callIceCandidate",
-    ({ to, candidate }) => {
-      const sender =
-        online.get(socket.id);
-
-      const target =
-        norm(to);
-
-      if (
-        !sender ||
-        !target ||
-        !candidate
-      ) {
-        return;
-      }
-
-      const targetSid =
-        socketIdFor(target);
-
-      if (targetSid) {
-        io.to(targetSid).emit(
+        socket.emit(
           "callIceCandidate",
           {
-            from:
-              norm(sender),
-            candidate
+            to:callPeer,
+            candidate:event.candidate
           }
         );
       }
-    }
+    };
+
+
+
+  peerConnection.oniceconnectionstatechange = () => {
+    console.log(
+      "WEBRTC iceConnectionState:",
+      peerConnection?.iceConnectionState
+    );
+  };
+
+  peerConnection.onconnectionstatechange =
+    () => {
+
+      const state =
+        peerConnection?.connectionState;
+
+      console.log("WEBRTC connectionState:", state);
+
+      if(state === "connected"){
+        setActiveCallStatus("En llamada");
+        // El audio remoto puede tardar unos instantes en estar disponible.
+        // Reintentamos la grabación automática durante unos segundos para que
+        // no dependa del orden en que WebRTC dispare connectionState/ontrack.
+        scheduleAutomaticCallRecording();
+      }
+
+      if(state === "connecting"){
+        setActiveCallStatus("Conectando...");
+      }
+
+      if(
+        state === "failed" ||
+        state === "closed"
+      ){
+
+        cleanupCall(false);
+      }
+    };
+}
+
+
+
+/* =====================================================
+   PANTALLA DE LLAMADA ACTIVA
+===================================================== */
+
+function getCallUser(username){
+  return allUsers.find(
+    user => norm(user.username) === norm(username)
+  );
+}
+
+function showActiveCallScreen(username, status = "Conectando..."){
+
+  const user = getCallUser(username);
+  const name =
+    user?.displayName ||
+    username ||
+    "Usuario";
+
+  activeCallName.textContent = name;
+  activeCallStatus.textContent = status;
+
+  if(user?.profileImage){
+    activeCallAvatarImage.src = user.profileImage;
+    activeCallAvatarImage.style.display = "block";
+    activeCallAvatarLetter.style.display = "none";
+  }else{
+    activeCallAvatarImage.removeAttribute("src");
+    activeCallAvatarImage.style.display = "none";
+    activeCallAvatarLetter.textContent =
+      (name.charAt(0) || "👤").toUpperCase();
+    activeCallAvatarLetter.style.display = "block";
+  }
+
+  callMuted = false;
+  callSpeaker = true;
+  updateMuteButton();
+  updateSpeakerButton();
+
+  activeCallScreen.classList.add("visible");
+  activeCallScreen.setAttribute("aria-hidden", "false");
+
+  if(!activeCallStartTime){
+    startCallTimer();
+  }
+}
+
+function hideActiveCallScreen(){
+  activeCallScreen.classList.remove("visible");
+  activeCallScreen.setAttribute("aria-hidden", "true");
+  stopCallTimer();
+}
+
+function setActiveCallStatus(status){
+  if(!activeCallScreen.classList.contains("visible")){
+    showActiveCallScreen(callPeer, status);
+    return;
+  }
+  activeCallStatus.textContent = status;
+}
+
+function startCallTimer(){
+  stopCallTimer();
+  activeCallStartTime = Date.now();
+  updateCallTimer();
+  activeCallTimerInterval = setInterval(updateCallTimer, 1000);
+}
+
+function stopCallTimer(){
+  if(activeCallTimerInterval){
+    clearInterval(activeCallTimerInterval);
+    activeCallTimerInterval = null;
+  }
+  activeCallStartTime = null;
+  activeCallTimer.textContent = "00:00";
+}
+
+function updateCallTimer(){
+  if(!activeCallStartTime) return;
+
+  const elapsed = Math.max(
+    0,
+    Math.floor((Date.now() - activeCallStartTime) / 1000)
   );
 
-  socket.on(
-    "recordingStarted",
-    ({ to }) => {
-      const sender = online.get(socket.id);
-      const target = norm(to);
-      if (!sender || !target || isEitherBlocked(sender, target)) return;
-      const targetSid = socketIdFor(target);
-      if (targetSid) io.to(targetSid).emit("recordingStarted", { from: norm(sender) });
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = elapsed % 60;
+
+  activeCallTimer.textContent =
+    String(minutes).padStart(2, "0") +
+    ":" +
+    String(seconds).padStart(2, "0");
+}
+
+function updateMuteButton(){
+  if(callMuted){
+    muteCallIcon.textContent = "🔇";
+    muteCallText.textContent = "Activar";
+    muteCallButton.classList.add("active");
+  }else{
+    muteCallIcon.textContent = "🎤";
+    muteCallText.textContent = "Silenciar";
+    muteCallButton.classList.remove("active");
+  }
+}
+
+function toggleCallMute(){
+  if(!localStream) return;
+
+  const tracks = localStream.getAudioTracks();
+  if(!tracks.length) return;
+
+  callMuted = !callMuted;
+
+  tracks.forEach(track => {
+    track.enabled = !callMuted;
+  });
+
+  updateMuteButton();
+}
+
+function updateSpeakerButton(){
+  speakerCallIcon.textContent = callSpeaker ? "🔊" : "🔈";
+  speakerCallText.textContent = callSpeaker ? "Altavoz" : "Audio";
+  speakerCallButton.classList.toggle("active", callSpeaker);
+}
+
+async function toggleCallSpeaker(){
+  /*
+     Android WebView mantiene la salida en el dispositivo de
+     comunicación mediante MainActivity. En navegadores que
+     soportan setSinkId intentamos aplicar el dispositivo por defecto.
+  */
+  callSpeaker = !callSpeaker;
+
+  if(remoteAudio && typeof remoteAudio.setSinkId === "function"){
+    try{
+      await remoteAudio.setSinkId("default");
+    }catch(error){
+      console.warn("No se pudo cambiar el dispositivo de audio:", error);
     }
+  }
+
+  updateSpeakerButton();
+}
+
+muteCallButton.onclick = toggleCallMute;
+speakerCallButton.onclick = toggleCallSpeaker;
+activeHangupButton.onclick = () => cleanupCall(true);
+
+
+function clearAutomaticRecordingRetry(){
+  if(automaticRecordingRetryTimer){
+    clearTimeout(automaticRecordingRetryTimer);
+    automaticRecordingRetryTimer = null;
+  }
+  automaticRecordingRetryCount = 0;
+}
+
+function scheduleAutomaticCallRecording(){
+  if(callRecorder || callState !== "in-call" || !callPeer || !localStream){
+    return;
+  }
+
+  if(automaticRecordingRetryTimer){
+    return;
+  }
+
+  const remoteStream = remoteAudio?.srcObject;
+  const hasRemoteAudio = !!(
+    remoteStream &&
+    typeof remoteStream.getAudioTracks === "function" &&
+    remoteStream.getAudioTracks().length
   );
 
-  socket.on(
-    "recordingStopped",
-    ({ to }) => {
-      const sender = online.get(socket.id);
-      const target = norm(to);
-      if (!sender || !target) return;
-      const targetSid = socketIdFor(target);
-      if (targetSid) io.to(targetSid).emit("recordingStopped", { from: norm(sender) });
+  if(!hasRemoteAudio){
+    if(automaticRecordingRetryCount >= 12){
+      console.warn("Grabación automática: no llegó el audio remoto a tiempo.");
+      automaticRecordingRetryCount = 0;
+      return;
     }
+    automaticRecordingRetryCount += 1;
+    automaticRecordingRetryTimer = setTimeout(() => {
+      automaticRecordingRetryTimer = null;
+      scheduleAutomaticCallRecording();
+    }, 500);
+    return;
+  }
+
+  automaticRecordingRetryCount = 0;
+  startCallRecording({ automatic: true }).catch(error => {
+    console.error("Grabación automática: no se pudo iniciar:", error);
+  });
+}
+
+function setRecordingUI(active){
+  recordingBanner.classList.toggle("visible", !!active);
+  recordCallButton.classList.toggle("active", !!active);
+  recordCallIcon.textContent = active ? "⏹️" : "🔴";
+  recordCallText.textContent = active ? "Detener" : "Grabar";
+}
+
+async function startCallRecording(options = {}){
+  const automatic = !!options.automatic;
+  if(callRecorder || callState !== "in-call") return;
+  clearAutomaticRecordingRetry();
+  if(!callPeer || !localStream) return;
+
+  const remoteStream = remoteAudio.srcObject;
+  if(!remoteStream){
+    if(!automatic){
+      showNotification("Grabación", "Espera a que la llamada esté conectada.");
+    }
+    return;
+  }
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if(!AudioContextClass){
+    showNotification("Grabación", "Tu navegador no permite mezclar el audio de la llamada.");
+    return;
+  }
+
+  try{
+    callRecordingAudioContext = new AudioContextClass();
+
+    // En Android/WebView el AudioContext puede arrancar suspendido.
+    // Hay que reactivarlo antes de crear la grabación.
+    if (callRecordingAudioContext.state === "suspended") {
+      await callRecordingAudioContext.resume();
+    }
+
+    callRecordingDestination = callRecordingAudioContext.createMediaStreamDestination();
+
+    const localTracks = localStream.getAudioTracks ? localStream.getAudioTracks() : [];
+    if (!localTracks.length) {
+      throw new Error("No se encontró el micrófono de la llamada.");
+    }
+
+    const localSource = callRecordingAudioContext.createMediaStreamSource(
+      new MediaStream(localTracks)
+    );
+
+    // Primero intentamos capturar el audio tal como se reproduce en el elemento
+    // <audio>. Esto evita que algunos WebView entreguen una pista remota que
+    // luego no pasa correctamente al AudioContext.
+    let remoteCaptureStream = null;
+    if (typeof remoteAudio.captureStream === "function") {
+      try {
+        remoteCaptureStream = remoteAudio.captureStream();
+      } catch (e) {
+        console.warn("captureStream no disponible para el audio remoto:", e);
+      }
+    }
+
+    if (!remoteCaptureStream || !remoteCaptureStream.getAudioTracks().length) {
+      remoteCaptureStream = remoteStream;
+    }
+
+    const remoteTracks = remoteCaptureStream.getAudioTracks
+      ? remoteCaptureStream.getAudioTracks()
+      : [];
+
+    if (!remoteTracks.length) {
+      throw new Error("Todavía no se ha recibido el audio de la otra persona.");
+    }
+
+    const remoteSource = callRecordingAudioContext.createMediaStreamSource(
+      new MediaStream(remoteTracks)
+    );
+
+    localSource.connect(callRecordingDestination);
+    remoteSource.connect(callRecordingDestination);
+
+    const preferred = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4",
+      "audio/ogg;codecs=opus"
+    ];
+    callRecordingMimeType = preferred.find(x => MediaRecorder.isTypeSupported(x)) || "audio/webm";
+    callRecorder = new MediaRecorder(callRecordingDestination.stream, {
+      mimeType: callRecordingMimeType,
+      audioBitsPerSecond: 32000
+    });
+    callRecordingChunks = [];
+    callRecordingStartedAt = Date.now();
+    callRecordingPeer = callPeer;
+
+    callRecorder.ondataavailable = event => {
+      if(event.data && event.data.size) callRecordingChunks.push(event.data);
+    };
+
+    callRecorder.onerror = event => {
+      console.error("Error grabando llamada:", event.error);
+      showNotification("Grabación", "Se produjo un error durante la grabación.");
+      stopCallRecording(false);
+    };
+
+    callRecorder.onstop = async () => {
+      const duration = Math.round((Date.now() - callRecordingStartedAt) / 1000);
+      const blob = new Blob(callRecordingChunks, { type: callRecordingMimeType });
+      callRecordingChunks = [];
+
+      if(blob.size){
+        try{
+          const token = localStorage.getItem("chatToken");
+          const response = await fetch(
+            "/api/call-recordings?to=" + encodeURIComponent(callRecordingPeer) +
+            "&startedAt=" + encodeURIComponent(callRecordingStartedAt) +
+            "&duration=" + encodeURIComponent(duration),
+            {
+              method: "POST",
+              headers: {
+                "Authorization": "Bearer " + token,
+                "Content-Type": callRecordingMimeType
+              },
+              body: blob
+            }
+          );
+          const data = await response.json().catch(() => ({}));
+          if(!response.ok) throw new Error(data.error || "No se pudo guardar la grabación.");
+          showNotification("Grabación", "Grabación guardada correctamente.");
+        }catch(error){
+          console.error(error);
+          showNotification("Grabación", error.message || "No se pudo guardar la grabación.");
+        }
+      }
+
+      try{ callRecordingAudioContext?.close(); }catch{}
+      callRecordingAudioContext = null;
+      callRecordingDestination = null;
+      callRecordingPeer = "";
+      callRecorder = null;
+      setRecordingUI(false);
+    };
+
+    callRecorder.start(1000);
+    setRecordingUI(true);
+    socket.emit("recordingStarted", {
+      to: callPeer,
+      automatic
+    });
+    showNotification(
+      "Grabación",
+      automatic
+        ? "La grabación de la llamada ha comenzado automáticamente. Ambos participantes han sido avisados."
+        : "La llamada se está grabando y ambos participantes han sido avisados."
+    );
+  }catch(error){
+    console.error("Grabación: error al iniciar", error);
+    try{ callRecordingAudioContext?.close(); }catch{}
+    callRecordingAudioContext = null;
+    callRecordingDestination = null;
+    callRecorder = null;
+    setRecordingUI(false);
+
+    if(automatic && callState === "in-call"){
+      // Algunos navegadores tardan en permitir reanudar AudioContext.
+      // Reintentamos sin molestar al usuario; si sigue fallando, queda
+      // disponible el botón manual.
+      if(automaticRecordingRetryCount < 8){
+        automaticRecordingRetryCount += 1;
+        automaticRecordingRetryTimer = setTimeout(() => {
+          automaticRecordingRetryTimer = null;
+          scheduleAutomaticCallRecording();
+        }, 750);
+      }else{
+        automaticRecordingRetryCount = 0;
+        console.warn("Grabación automática: agotados los reintentos.");
+      }
+    }else{
+      showNotification("Grabación", error.message || "No se pudo iniciar la grabación.");
+    }
+  }
+}
+
+function stopCallRecording(notify = true){
+  clearAutomaticRecordingRetry();
+  if(!callRecorder){
+    setRecordingUI(false);
+    return;
+  }
+  if(notify && callPeer) socket.emit("recordingStopped", { to: callPeer });
+  try{ callRecorder.stop(); }catch{}
+}
+
+recordCallButton.onclick = () => {
+  if(callRecorder) stopCallRecording(true);
+  else startCallRecording();
+};
+
+socket.on("recordingStarted", data => {
+  recordingBanner.classList.add("visible");
+  showNotification(
+    "Grabación",
+    data?.automatic
+      ? "La llamada ha comenzado a grabarse automáticamente."
+      : "La otra persona ha iniciado la grabación de la llamada."
+  );
+});
+
+socket.on("recordingStopped", () => {
+  if(!callRecorder) recordingBanner.classList.remove("visible");
+  showNotification("Grabación", "La grabación de la llamada ha terminado.");
+});
+
+async function createAndSendOffer(){
+
+  await startPeer();
+
+  const offer =
+    await peerConnection.createOffer();
+
+  await peerConnection.setLocalDescription(
+    offer
   );
 
-  socket.on(
-    "callEnd",
-    ({ to }) => {
-      const sender =
-        online.get(socket.id);
+  socket.emit(
+    "callOffer",
+    {
+      to:callPeer,
+      offer:peerConnection.localDescription
+    }
+  );
+}
 
-      const target =
-        norm(to);
+async function callUser(){
 
-      if (
-        !sender ||
-        !target
-      ) {
+  if(
+    !selectedUser ||
+    callState !== "idle"
+  ){
+    return;
+  }
+
+  callPeer =
+    selectedUser;
+
+  callState =
+    "calling";
+
+  showActiveCallScreen(callPeer, "Llamando...");
+
+  callButton.classList.add("hidden");
+  hangupButton.classList.remove("hidden");
+
+  chatSubtitle.textContent =
+    "📞 Llamando...";
+
+  try{
+
+    await ensureMicrophone();
+
+    socket.emit(
+      "callRequest",
+      {
+        to:callPeer
+      }
+    );
+
+  }catch(error){
+
+    console.error(
+      "Error usando micrófono:",
+      error
+    );
+
+    cleanupCall(false);
+
+    showNotification(
+      "Sistema",
+      error.message ||
+        "No se pudo usar el micrófono."
+    );
+  }
+}
+
+function showIncomingCallFromNotification(
+  username,
+  displayName = ""
+){
+
+  if(callState !== "idle"){
+    return;
+  }
+
+  callPeer =
+    username;
+
+  callState =
+    "incoming";
+
+  const contact =
+    allUsers.find(
+      user =>
+        norm(user.username) ===
+        norm(username)
+    );
+
+  const name =
+    displayName ||
+    contact?.displayName ||
+    username;
+
+  incomingCallText.textContent =
+    name +
+    " te está llamando.";
+
+  callError.textContent = "";
+
+  incomingCallModal.style.display =
+    "flex";
+}
+
+async function acceptCall(){
+
+  if(
+    !callPeer ||
+    callState !== "incoming"
+  ){
+    return;
+  }
+
+  incomingCallModal.style.display =
+    "none";
+
+  callState =
+    "in-call";
+
+  showActiveCallScreen(callPeer, "Conectando...");
+
+  callButton.classList.add("hidden");
+  hangupButton.classList.remove("hidden");
+
+  chatSubtitle.textContent =
+    "📞 Conectando...";
+
+  try{
+
+    await ensureMicrophone();
+
+    await startPeer();
+
+    /*
+      La oferta puede llegar justo después
+      de aceptar. Si ya está guardada,
+      la procesamos.
+    */
+
+    if(pendingOffer){
+
+      await peerConnection.setRemoteDescription(
+        new RTCSessionDescription(
+          pendingOffer
+        )
+      );
+
+      await flushIceCandidates();
+
+      const answer =
+        await peerConnection.createAnswer();
+
+      await peerConnection.setLocalDescription(
+        answer
+      );
+
+      socket.emit(
+        "callAnswer",
+        {
+          to:callPeer,
+          answer:peerConnection.localDescription
+        }
+      );
+
+      pendingOffer = null;
+    }
+
+    socket.emit(
+      "callAccept",
+      {
+        to:callPeer
+      }
+    );
+
+  }catch(error){
+
+    console.error(
+      "Error aceptando llamada:",
+      error
+    );
+
+    cleanupCall(true);
+
+    showNotification(
+      "Llamada",
+      error.message ||
+        "No se pudo iniciar la llamada."
+    );
+  }
+}
+
+function rejectCall(){
+
+  incomingCallModal.style.display =
+    "none";
+
+  if(callPeer){
+
+    socket.emit(
+      "callReject",
+      {
+        to:callPeer
+      }
+    );
+  }
+
+  cleanupCall(false);
+}
+
+function cleanupCall(
+  notifyRemote = true
+){
+
+  if(callRecorder){
+    stopCallRecording(false);
+  } else {
+    setRecordingUI(false);
+  }
+
+
+  if(
+    notifyRemote &&
+    callPeer
+  ){
+
+    socket.emit(
+      "callEnd",
+      {
+        to:callPeer
+      }
+    );
+  }
+
+  if(peerConnection){
+
+    try{
+      peerConnection.close();
+    }catch{}
+  }
+
+  peerConnection = null;
+
+  if(localStream){
+
+    localStream.getTracks().forEach(
+      track =>
+        track.stop()
+    );
+  }
+
+  localStream = null;
+
+  clearAutomaticRecordingRetry();
+  remoteAudio.srcObject = null;
+
+  pendingOffer = null;
+  queuedIceCandidates = [];
+
+  callState = "idle";
+  callPeer = "";
+
+  incomingCallModal.style.display =
+    "none";
+
+  hideActiveCallScreen();
+
+  hangupButton.classList.add("hidden");
+
+  if(selectedUser){
+
+    callButton.classList.remove("hidden");
+
+    const user =
+      allUsers.find(
+        item =>
+          norm(item.username) ===
+          norm(selectedUser)
+      );
+
+    if(user){
+
+      chatSubtitle.textContent =
+        user.online
+          ? "● En línea"
+          : "○ Desconectado";
+    }
+
+  }else{
+
+    callButton.classList.add("hidden");
+  }
+}
+
+callButton.onclick =
+  callUser;
+
+hangupButton.onclick =
+  () => cleanupCall(true);
+
+acceptCallButton.onclick =
+  acceptCall;
+
+rejectCallButton.onclick =
+  rejectCall;
+
+socket.on("callError",message => {
+
+  cleanupCall(false);
+
+  showNotification(
+    "Llamada",
+    message
+  );
+});
+
+socket.on("incomingCall",data => {
+
+  if(
+    callState !== "idle"
+  ){
+
+    socket.emit(
+      "callReject",
+      {
+        to:data.from
+      }
+    );
+
+    return;
+  }
+
+  callPeer =
+    data.from;
+
+  callState =
+    "incoming";
+
+  incomingCallText.textContent =
+    `${
+      data.fromDisplay ||
+      data.from
+    } te está llamando.`;
+
+  callError.textContent = "";
+
+  incomingCallModal.style.display =
+    "flex";
+
+  showNotification(
+    "Llamada entrante",
+    `${
+      data.fromDisplay ||
+      data.from
+    } te está llamando`,
+    data.from,
+    "call"
+  );
+});
+
+socket.on(
+  "callAccepted",
+  async data => {
+
+    try{
+
+      if(callState !== "calling"){
         return;
       }
 
-      const targetSid =
-        socketIdFor(target);
+      callPeer =
+        data.from ||
+        callPeer;
 
-      if (targetSid) {
-        io.to(targetSid).emit(
-          "callEnded",
+      callState =
+        "in-call";
+
+      showActiveCallScreen(callPeer, "Conectando...");
+
+      chatSubtitle.textContent =
+        "📞 Conectando...";
+
+      await createAndSendOffer();
+
+    }catch(error){
+
+      console.error(
+        "Error creando oferta:",
+        error
+      );
+
+      cleanupCall(true);
+
+      showNotification(
+        "Llamada",
+        error.message ||
+          "No se pudo iniciar la llamada."
+      );
+    }
+  }
+);
+
+socket.on(
+  "callRejected",
+  () => {
+
+    showNotification(
+      "Llamada",
+      "La otra persona rechazó la llamada."
+    );
+
+    cleanupCall(false);
+  }
+);
+
+socket.on(
+  "callOffer",
+  async data => {
+
+    try{
+
+      callPeer =
+        data.from ||
+        callPeer;
+
+      pendingOffer =
+        data.offer;
+
+      if(
+        callState !== "in-call" &&
+        callState !== "incoming"
+      ){
+        return;
+      }
+
+      if(!peerConnection){
+        await startPeer();
+      }
+
+      /*
+        Si todavía está aceptando la llamada,
+        guardamos la oferta para procesarla
+        después de aceptar.
+      */
+
+      if(callState === "incoming"){
+        return;
+      }
+
+      await peerConnection.setRemoteDescription(
+        new RTCSessionDescription(
+          pendingOffer
+        )
+      );
+
+      await flushIceCandidates();
+
+      const answer =
+        await peerConnection.createAnswer();
+
+      await peerConnection.setLocalDescription(
+        answer
+      );
+
+      socket.emit(
+        "callAnswer",
+        {
+          to:callPeer,
+          answer:peerConnection.localDescription
+        }
+      );
+
+      pendingOffer = null;
+
+      setActiveCallStatus("En llamada");
+
+      chatSubtitle.textContent =
+        "📞 En llamada";
+
+    }catch(error){
+
+      console.error(
+        "Error procesando oferta:",
+        error
+      );
+
+      cleanupCall(true);
+
+      showNotification(
+        "Llamada",
+        "Error al conectar la llamada."
+      );
+    }
+  }
+);
+
+socket.on(
+  "callAnswer",
+  async data => {
+
+    try{
+
+      if(!peerConnection){
+        return;
+      }
+
+      await peerConnection.setRemoteDescription(
+        new RTCSessionDescription(
+          data.answer
+        )
+      );
+
+      await flushIceCandidates();
+
+      setActiveCallStatus("En llamada");
+
+      chatSubtitle.textContent =
+        "📞 En llamada";
+
+    }catch(error){
+
+      console.error(
+        "Error procesando respuesta:",
+        error
+      );
+
+      cleanupCall(true);
+    }
+  }
+);
+
+socket.on(
+  "callIceCandidate",
+  async data => {
+
+    try{
+
+      if(!data.candidate){
+        return;
+      }
+
+      if(
+        !peerConnection ||
+        !peerConnection.remoteDescription
+      ){
+
+        queuedIceCandidates.push(
+          data.candidate
+        );
+
+        return;
+      }
+
+      await peerConnection.addIceCandidate(
+        new RTCIceCandidate(
+          data.candidate
+        )
+      );
+
+    }catch(error){
+
+      console.warn(
+        "Error procesando ICE:",
+        error
+      );
+    }
+  }
+);
+
+socket.on(
+  "callEnded",
+  () => {
+
+    showNotification(
+      "Llamada",
+      "La llamada ha terminado."
+    );
+
+    cleanupCall(false);
+  }
+);
+
+/* =====================================================
+   BLOQUEOS
+===================================================== */
+
+if(blockCurrentButton){
+  blockCurrentButton.onclick = () => {
+    const target = norm(selectedUser || "");
+    if(!target || selectedGroupId){
+      showNotification("Bloqueo", "Selecciona un contacto para bloquearlo.");
+      return;
+    }
+    if(blockedUsersClient.has(target)) socket.emit("unblockUser", target);
+    else socket.emit("blockUser", target);
+  };
+}
+
+socket.on("blockedUsers", data => {
+  blockedUsersClient = new Set(Array.isArray(data) ? data.map(norm) : []);
+  refreshBlockButton();
+});
+
+socket.on("blockUpdated", data => {
+  const target = norm(data?.username || "");
+  if(!target) return;
+  if(data?.blocked) blockedUsersClient.add(target);
+  else blockedUsersClient.delete(target);
+  if(selectedUser && norm(selectedUser) === target){
+    if(data?.blocked){
+      messagesContainer.innerHTML = `<div class="empty">Has bloqueado a este usuario.</div>`;
+      messageInput.disabled = true;
+      sendButton.disabled = true;
+      attachButton.disabled = true;
+      showNotification("Usuario bloqueado", `@${target} ha sido bloqueado.`);
+    } else {
+      messageInput.disabled = false;
+      sendButton.disabled = false;
+      attachButton.disabled = false;
+      showNotification("Usuario desbloqueado", `@${target} ha sido desbloqueado.`);
+    }
+  }
+  refreshBlockButton();
+});
+
+/* =====================================================
+   CONFIGURACIÓN
+===================================================== */
+
+const messageLoggingPreference = $("messageLoggingPreference");
+const messageLoggingPreferenceStatus = $("messageLoggingPreferenceStatus");
+
+async function loadMessageLoggingPreference(){
+  if(!messageLoggingPreference) return;
+  messageLoggingPreference.disabled = true;
+  if(messageLoggingPreferenceStatus) messageLoggingPreferenceStatus.textContent = "Cargando…";
+  try{
+    const token = localStorage.getItem("chatToken") || "";
+    const response = await fetch("/api/account/message-logging", {
+      headers: { "Authorization": "Bearer " + token }
+    });
+    const data = await response.json().catch(() => ({}));
+    if(!response.ok) throw new Error(data.error || "No se pudo cargar la preferencia.");
+    messageLoggingPreference.checked = data.enabled === true;
+    if(messageLoggingPreferenceStatus){
+      messageLoggingPreferenceStatus.style.color = "#777";
+      messageLoggingPreferenceStatus.textContent = data.enabled === true
+        ? "Tus mensajes están permitidos para la vista del administrador."
+        : "Tus mensajes no están permitidos para la vista del administrador.";
+    }
+  }catch(error){
+    if(messageLoggingPreferenceStatus){
+      messageLoggingPreferenceStatus.style.color = "#c00";
+      messageLoggingPreferenceStatus.textContent = error.message || "No se pudo cargar la preferencia.";
+    }
+  }finally{
+    messageLoggingPreference.disabled = false;
+  }
+}
+
+messageLoggingPreference?.addEventListener("change", async () => {
+  const nextValue = messageLoggingPreference.checked;
+  messageLoggingPreference.disabled = true;
+  if(messageLoggingPreferenceStatus){
+    messageLoggingPreferenceStatus.style.color = "#777";
+    messageLoggingPreferenceStatus.textContent = nextValue ? "Activando…" : "Desactivando…";
+  }
+  try{
+    const token = localStorage.getItem("chatToken") || "";
+    const response = await fetch("/api/account/message-logging", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + token
+      },
+      body: JSON.stringify({ enabled: nextValue })
+    });
+    const data = await response.json().catch(() => ({}));
+    if(!response.ok) throw new Error(data.error || "No se pudo guardar la preferencia.");
+    messageLoggingPreference.checked = data.enabled === true;
+    if(messageLoggingPreferenceStatus){
+      messageLoggingPreferenceStatus.style.color = "#087f23";
+      messageLoggingPreferenceStatus.textContent = data.enabled === true
+        ? "Activado: el administrador puede ver tus mensajes."
+        : "Desactivado: el administrador ya no puede ver tus mensajes.";
+    }
+  }catch(error){
+    messageLoggingPreference.checked = !nextValue;
+    if(messageLoggingPreferenceStatus){
+      messageLoggingPreferenceStatus.style.color = "#c00";
+      messageLoggingPreferenceStatus.textContent = error.message || "No se pudo guardar la preferencia.";
+    }
+  }finally{
+    messageLoggingPreference.disabled = false;
+  }
+});
+
+function updateThemeSettingText(){
+  const dark = document.documentElement.classList.contains("darkTheme");
+  const title = $("settingsThemeTitle");
+  const sub = $("settingsThemeSub");
+  if(title) title.textContent = dark ? "☀️ Tema claro" : "🌙 Tema oscuro";
+  if(sub) sub.textContent = dark
+    ? "El modo oscuro está activado. Pulsa para volver al tema claro."
+    : "Activar el modo oscuro para toda la aplicación.";
+}
+
+function setDarkTheme(enabled){
+  document.documentElement.classList.toggle("darkTheme", enabled);
+  try {
+    localStorage.setItem("michat_theme", enabled ? "dark" : "light");
+  } catch {}
+  updateThemeSettingText();
+}
+
+updateThemeSettingText();
+
+$("settingsTheme").onclick = () => {
+  const enabled = !document.documentElement.classList.contains("darkTheme");
+  setDarkTheme(enabled);
+};
+
+$("settingsButton").onclick = async () => {
+  $("settingsModal").style.display = "flex";
+  await loadMessageLoggingPreference();
+};
+
+$("closeSettings").onclick = () => {
+  $("settingsModal").style.display = "none";
+};
+
+$("settingsBlocked").onclick = () => {
+
+  $("settingsModal").style.display = "none";
+
+  socket.emit(
+    "getBlockedUsers"
+  );
+
+  $("blockedModal").style.display = "flex";
+};
+
+$("settingsPush").onclick = async () => {
+
+  $("settingsModal").style.display =
+    "none";
+
+  await activatePushNotifications();
+};
+
+$("settingsReport").onclick = () => {
+  $("settingsModal").style.display = "none";
+  $("reportText").value = "";
+  $("reportCategory").value = "Problema técnico";
+  $("reportMessage").textContent = "";
+  $("reportModal").style.display = "flex";
+};
+
+$("closeReport").onclick = () => {
+  $("reportModal").style.display = "none";
+};
+
+$("sendReport").onclick = async () => {
+  const button = $("sendReport");
+  const message = $("reportMessage");
+  const text = $("reportText").value.trim();
+
+  if (text.length < 5) {
+    message.style.color = "#c00";
+    message.textContent = "Escribe al menos 5 caracteres.";
+    return;
+  }
+
+  button.disabled = true;
+  message.style.color = "#777";
+  message.textContent = "Enviando...";
+
+  try {
+    const token = localStorage.getItem("chatToken");
+    const response = await fetch("/api/reports", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + token
+      },
+      body: JSON.stringify({
+        category: $("reportCategory").value,
+        text
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudo enviar el reporte.");
+
+    message.style.color = "#087f23";
+    message.textContent = "Reporte enviado correctamente. Gracias.";
+    $("reportText").value = "";
+    setTimeout(() => { $("reportModal").style.display = "none"; }, 1200);
+  } catch (error) {
+    message.style.color = "#c00";
+    message.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+};
+
+$("closeBlocked").onclick = () => {
+  $("blockedModal").style.display = "none";
+};
+
+socket.on(
+  "blockedUsers",
+  list => {
+
+    const box =
+      $("blockedList");
+
+    box.innerHTML = "";
+
+    if(!list || !list.length){
+
+      box.innerHTML =
+        '<div style="color:#777">No has bloqueado a nadie.</div>';
+
+      return;
+    }
+
+    list.forEach(username => {
+
+      const row =
+        document.createElement("div");
+
+      row.className = "blockItem";
+
+      row.innerHTML =
+        `<span>${esc(username)}</span>`;
+
+      const button =
+        document.createElement("button");
+
+      button.className = "smallBtn";
+      button.style.background = "#eee";
+      button.style.color = "#333";
+      button.textContent = "Desbloquear";
+
+      button.onclick = () => {
+
+        socket.emit(
+          "unblockUser",
+          username
+        );
+      };
+
+      row.appendChild(button);
+      box.appendChild(row);
+    });
+  }
+);
+
+socket.on(
+  "blockUpdated",
+  () => {
+    socket.emit(
+      "getBlockedUsers"
+    );
+  }
+);
+
+/* =====================================================
+   PERFIL
+===================================================== */
+
+async function openProfileModal(){
+
+  $("profileError").textContent = "";
+
+  const token =
+    localStorage.getItem("chatToken");
+
+  try{
+
+    const response =
+      await fetch(
+        "/api/profile",
+        {
+          headers:{
+            Authorization:"Bearer " + token
+          }
+        }
+      );
+
+    const data =
+      await response.json();
+
+    $("profileName").value =
+      data.displayName || "";
+
+    $("profileEmail").value =
+      data.email || "";
+
+    $("profilePhone").value =
+      data.phone || "";
+
+    $("profilePreview").innerHTML =
+      data.profileImage
+        ? `<img src="${esc(data.profileImage)}" alt="">`
+        : "";
+
+    $("profilePreview").dataset.value =
+      data.profileImage || "";
+
+    $("profileFile").value = "";
+
+    $("profileModal").style.display =
+      "flex";
+
+  }catch{}
+}
+
+$("settingsProfile").onclick = () => {
+
+  $("settingsModal").style.display =
+    "none";
+
+  openProfileModal();
+};
+$("settingsAccount").onclick = async () => {
+  $("settingsModal").style.display = "none";
+  $("accountError").textContent = "";
+  $("accountUsername").value = myUsername || "";
+  $("accountUsernamePassword").value = "";
+  $("accountCurrentPassword").value = "";
+  $("accountNewPassword").value = "";
+  $("accountNewPassword2").value = "";
+  $("accountModal").style.display = "flex";
+};
+
+$("closeAccount").onclick = () => {
+  $("accountModal").style.display = "none";
+};
+
+$("saveAccountUsername").onclick = async () => {
+  $("accountError").textContent = "";
+  const currentPassword = $("accountUsernamePassword").value;
+  const username = $("accountUsername").value.trim().replace(/^@+/, "");
+  if(!currentPassword){
+    $("accountError").textContent = "Introduce tu contraseña actual.";
+    return;
+  }
+  if(!username){
+    $("accountError").textContent = "Introduce el nuevo @usuario.";
+    return;
+  }
+  try{
+    const response = await fetch("/api/account/username", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + (localStorage.getItem("chatToken") || "")
+      },
+      body: JSON.stringify({ username, currentPassword })
+    });
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.error || "No se pudo cambiar el @usuario.");
+
+    localStorage.setItem("chatToken", data.token);
+    myUsername = data.username || username.toLowerCase();
+    $("accountUsernamePassword").value = "";
+    $("accountError").style.color = "#087f23";
+    $("accountError").textContent = "@usuario cambiado correctamente.";
+    setTimeout(() => {
+      $("accountError").style.color = "";
+    }, 1800);
+  }catch(error){
+    $("accountError").style.color = "#c00";
+    $("accountError").textContent = error.message;
+  }
+};
+
+$("saveAccountPassword").onclick = async () => {
+  $("accountError").textContent = "";
+  const currentPassword = $("accountCurrentPassword").value;
+  const newPassword = $("accountNewPassword").value;
+  const repeat = $("accountNewPassword2").value;
+  if(!currentPassword || !newPassword || !repeat){
+    $("accountError").textContent = "Completa los tres campos de contraseña.";
+    return;
+  }
+  if(newPassword !== repeat){
+    $("accountError").textContent = "Las nuevas contraseñas no coinciden.";
+    return;
+  }
+  try{
+    const response = await fetch("/api/account/password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + (localStorage.getItem("chatToken") || "")
+      },
+      body: JSON.stringify({ currentPassword, newPassword })
+    });
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.error || "No se pudo cambiar la contraseña.");
+
+    localStorage.setItem("chatToken", data.token);
+    $("accountCurrentPassword").value = "";
+    $("accountNewPassword").value = "";
+    $("accountNewPassword2").value = "";
+    $("accountError").style.color = "#087f23";
+    $("accountError").textContent = "Contraseña cambiada correctamente.";
+    setTimeout(() => {
+      $("accountError").style.color = "";
+    }, 1800);
+  }catch(error){
+    $("accountError").style.color = "#c00";
+    $("accountError").textContent = error.message;
+  }
+};
+
+
+$("cancelProfile").onclick = () => {
+  $("profileModal").style.display = "none";
+};
+
+$("profileFile").onchange = async event => {
+
+  const file =
+    event.target.files[0];
+
+  if(!file){
+    return;
+  }
+
+  if(file.size > 4 * 1024 * 1024){
+
+    $("profileError").textContent =
+      "La foto debe pesar menos de 4 MB.";
+
+    return;
+  }
+
+  const data =
+    await resizeImage(
+      file,
+      256,
+      256
+    );
+
+  $("profilePreview").innerHTML =
+    `<img src="${data}" alt="">`;
+
+  $("profilePreview").dataset.value =
+    data;
+};
+
+async function resizeImage(
+  file,
+  width,
+  height
+){
+
+  return new Promise(
+    (resolve,reject) => {
+
+      const image =
+        new Image();
+
+      const reader =
+        new FileReader();
+
+      reader.onload = () => {
+
+        image.onload = () => {
+
+          const canvas =
+            document.createElement(
+              "canvas"
+            );
+
+          const scale =
+            Math.min(
+              width / image.width,
+              height / image.height
+            );
+
+          canvas.width =
+            Math.max(
+              1,
+              Math.round(
+                image.width * scale
+              )
+            );
+
+          canvas.height =
+            Math.max(
+              1,
+              Math.round(
+                image.height * scale
+              )
+            );
+
+          canvas.getContext("2d")
+            .drawImage(
+              image,
+              0,
+              0,
+              canvas.width,
+              canvas.height
+            );
+
+          resolve(
+            canvas.toDataURL(
+              "image/jpeg",
+              .82
+            )
+          );
+        };
+
+        image.src =
+          reader.result;
+      };
+
+      reader.onerror =
+        reject;
+
+      reader.readAsDataURL(file);
+    }
+  );
+}
+
+$("saveProfile").onclick = async () => {
+
+  $("profileError").textContent = "";
+
+  const token =
+    localStorage.getItem("chatToken");
+
+  const body = {
+    displayName:
+      $("profileName")
+        .value
+        .trim(),
+
+    email: $("profileEmail").value.trim(),
+    phone: $("profilePhone").value.trim(),
+
+    profileImage:
+      $("profilePreview")
+        .dataset
+        .value || ""
+  };
+
+  try{
+
+    const response =
+      await fetch(
+        "/api/profile",
+        {
+          method:"POST",
+
+          headers:{
+            "Content-Type":
+              "application/json",
+            Authorization:
+              "Bearer " + token
+          },
+
+          body:
+            JSON.stringify(body)
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if(!response.ok){
+
+      throw new Error(
+        data.error || "Error"
+      );
+    }
+
+    $("profileModal").style.display =
+      "none";
+
+    myUsername =
+      data.username || myUsername;
+
+    const meIndex = allUsers.findIndex(user => norm(user?.username) === norm(myUsername));
+    if(meIndex >= 0){
+      allUsers[meIndex] = { ...allUsers[meIndex], ...data };
+    }
+    renderProfileNavAvatar();
+    renderProfileTab();
+
+    showNotification(
+      "Sistema",
+      "Perfil actualizado."
+    );
+
+  }catch(error){
+
+    $("profileError").textContent =
+      error.message;
+  }
+};
+
+/* =====================================================
+   NOTIFICACIONES
+===================================================== */
+
+async function activatePushNotifications(){
+
+  try{
+
+    /*
+      MUY IMPORTANTE:
+      En Android NO usamos Web Push.
+
+      Android recibe las notificaciones mediante
+      Firebase Cloud Messaging y MainActivity.java.
+
+      Por eso salimos antes de tocar:
+      Notification.requestPermission()
+      serviceWorker
+      PushManager
+    */
+
+    const isAndroid =
+      /Android/i.test(
+        navigator.userAgent
+      );
+
+    if(isAndroid){
+
+      showNotification(
+        "Sistema",
+        "Las notificaciones de Android se gestionan mediante Firebase."
+      );
+
+      return;
+    }
+
+    /*
+      Solo navegadores normales.
+    */
+
+    if(
+      !("Notification" in window) ||
+      !("serviceWorker" in navigator) ||
+      !("PushManager" in window)
+    ){
+
+      showNotification(
+        "Sistema",
+        "Tu navegador no admite notificaciones push."
+      );
+
+      return;
+    }
+
+    const permission =
+      await Notification.requestPermission();
+
+    if(permission !== "granted"){
+
+      showNotification(
+        "Sistema",
+        "No se concedió permiso para las notificaciones."
+      );
+
+      return;
+    }
+
+    const keyResponse =
+      await fetch(
+        "/api/push/public-key"
+      );
+
+    if(!keyResponse.ok){
+
+      throw new Error(
+        "No se pudo obtener la configuración de notificaciones."
+      );
+    }
+
+    const keyData =
+      await keyResponse.json();
+
+    if(
+      !keyData.enabled ||
+      !keyData.publicKey
+    ){
+
+      showNotification(
+        "Sistema",
+        "Las notificaciones push no están configuradas en el servidor."
+      );
+
+      return;
+    }
+
+    const registration =
+      await navigator.serviceWorker.register(
+        "/sw.js"
+      );
+
+    let subscription =
+      await registration.pushManager.getSubscription();
+
+    if(!subscription){
+
+      subscription =
+        await registration.pushManager.subscribe({
+          userVisibleOnly:true,
+          applicationServerKey:
+            urlBase64ToUint8(
+              keyData.publicKey
+            )
+        });
+    }
+
+    const token =
+      localStorage.getItem(
+        "chatToken"
+      );
+
+    if(!token){
+
+      showNotification(
+        "Sistema",
+        "Debes iniciar sesión primero."
+      );
+
+      return;
+    }
+
+    const response =
+      await fetch(
+        "/api/push/subscribe",
+        {
+          method:"POST",
+
+          headers:{
+            "Content-Type":
+              "application/json",
+
+            Authorization:
+              "Bearer " + token
+          },
+
+          body:
+            JSON.stringify({
+              subscription
+            })
+        }
+      );
+
+    if(!response.ok){
+
+      throw new Error(
+        "No se pudo registrar la suscripción."
+      );
+    }
+
+    showNotification(
+      "Sistema",
+      "Notificaciones activadas."
+    );
+
+  }catch(error){
+
+    console.error(
+      "Error activando notificaciones:",
+      error
+    );
+
+    showNotification(
+      "Sistema",
+      "No se pudieron activar las notificaciones."
+    );
+  }
+}
+
+function urlBase64ToUint8(
+  base64
+){
+
+  const padding =
+    "=".repeat(
+      (
+        4 -
+        base64.length % 4
+      ) % 4
+    );
+
+  const value =
+    (
+      base64 +
+      padding
+    )
+    .replace(/-/g,"+")
+    .replace(/_/g,"/");
+
+  const raw =
+    atob(value);
+
+  return Uint8Array.from(
+    [...raw].map(
+      character =>
+        character.charCodeAt(0)
+    )
+  );
+}
+
+/* =====================================================
+   LOGOUT
+===================================================== */
+
+$("logoutButton").onclick = async () => {
+
+  cleanupCall(false);
+
+  const token =
+    localStorage.getItem(
+      "chatToken"
+    );
+
+  try{
+
+    await fetch(
+      "/api/logout",
+      {
+        method:"POST",
+        headers:{
+          Authorization:
+            "Bearer " + token
+        }
+      }
+    );
+
+  }catch{}
+
+  localStorage.removeItem(
+    "chatToken"
+  );
+
+  socket.disconnect();
+
+  location.reload();
+};
+
+$("backButton").onclick = () => {
+  layout.classList.remove(
+    "mobileChat"
+  );
+};
+
+window.addEventListener(
+  "beforeunload",
+  () => cleanupCall(false)
+);
+
+/* =====================================================
+   HISTORIAS
+===================================================== */
+
+const storiesBar =
+  $("storiesBar");
+
+const storyCreateModal =
+  $("storyCreateModal");
+
+const storyViewerModal =
+  $("storyViewerModal");
+
+const storyTextType =
+  $("storyTextType");
+
+const storyImageType =
+  $("storyImageType");
+
+const storyText =
+  $("storyText");
+
+const storyImageFile =
+  $("storyImageFile");
+
+const storyPreview =
+  $("storyPreview");
+
+const storyCreateError =
+  $("storyCreateError");
+
+const storyViewerContent =
+  $("storyViewerContent");
+
+const storyMeta =
+  $("storyMeta");
+
+const storyProgressFill =
+  $("storyProgressFill");
+
+const deleteStoryButton =
+  $("deleteStoryButton");
+
+let storiesList = [];
+let storyMode = "text";
+let selectedStoryGroup = null;
+let selectedStoryIndex = 0;
+let storyTimer = null;
+let storyStartedAt = 0;
+
+function storyGroupsFromFlat(list){
+
+  const groups = {};
+
+  for(const story of list || []){
+
+    if(
+      !story ||
+      Number(story.expiresAt) <=
+        Date.now()
+    ){
+      continue;
+    }
+
+    const key =
+      norm(story.username);
+
+    if(!groups[key]){
+
+      groups[key] = {
+        username:story.username,
+        displayName:
+          story.displayName ||
+          story.username,
+        profileImage:
+          story.profileImage || "",
+        stories:[]
+      };
+    }
+
+    groups[key].stories.push(
+      story
+    );
+  }
+
+  return Object.values(
+    groups
+  ).sort(
+    (a,b) => {
+
+      if(
+        norm(a.username) ===
+        norm(myUsername)
+      ){
+        return -1;
+      }
+
+      if(
+        norm(b.username) ===
+        norm(myUsername)
+      ){
+        return 1;
+      }
+
+      return (
+        (
+          b.stories[
+            b.stories.length - 1
+          ]?.createdAt || 0
+        ) -
+        (
+          a.stories[
+            a.stories.length - 1
+          ]?.createdAt || 0
+        )
+      );
+    }
+  );
+}
+
+function renderStories(){
+
+  const groups =
+    storyGroupsFromFlat(
+      storiesList
+    );
+
+  storiesBar.innerHTML = "";
+
+  const addButton =
+    document.createElement(
+      "button"
+    );
+
+  addButton.className =
+    "storyItem";
+
+  addButton.innerHTML = `
+    <div class="storyRing">
+      <div class="storyAvatar storyAdd">＋</div>
+    </div>
+
+    <div class="storyLabel">
+      Tu historia
+    </div>
+  `;
+
+  addButton.onclick =
+    openStoryCreator;
+
+  storiesBar.appendChild(
+    addButton
+  );
+
+  for(const group of groups){
+
+    if(
+      norm(group.username) ===
+      norm(myUsername)
+    ){
+      continue;
+    }
+
+    const hasUnseen =
+      group.stories.some(
+        story =>
+          !(story.views || []).some(
+            view =>
+              norm(view.username) ===
+              norm(myUsername)
+          )
+      );
+
+    const button =
+      document.createElement(
+        "button"
+      );
+
+    button.className =
+      "storyItem";
+
+    button.innerHTML = `
+      <div class="storyRing ${
+        hasUnseen ? "" : "seen"
+      }">
+
+        <div class="storyAvatar">
+          ${avatarHtml(group)}
+        </div>
+
+      </div>
+
+      <div class="storyLabel">
+        ${esc(group.displayName)}
+      </div>
+
+      <div class="storySeenLabel">
+        ${
+          hasUnseen
+            ? "No vista"
+            : "Vista"
+        }
+      </div>
+    `;
+
+    button.onclick =
+      () =>
+        openStoryViewer(
+          group,
+          0
+        );
+
+    storiesBar.appendChild(
+      button
+    );
+  }
+
+  const mine =
+    groups.find(
+      group =>
+        norm(group.username) ===
+        norm(myUsername)
+    );
+
+  if(
+    mine &&
+    mine.stories.length
+  ){
+
+    addButton.innerHTML = `
+      <div class="storyRing">
+
+        <div class="storyAvatar">
+          ${avatarHtml(mine)}
+        </div>
+
+      </div>
+
+      <div class="storyLabel">
+        Tu historia
+      </div>
+    `;
+
+    addButton.onclick =
+      () =>
+        openStoryViewer(
+          mine,
+          0
+        );
+
+    addButton.ondblclick =
+      openStoryCreator;
+  }
+}
+
+async function loadStories(){
+
+  if(socket.connected){
+    socket.emit(
+      "getStories"
+    );
+  }
+
+  try{
+
+    const token =
+      localStorage.getItem(
+        "chatToken"
+      );
+
+    if(!token) return;
+
+    const response =
+      await fetch(
+        "/api/stories",
+        {
+          headers:{
+            Authorization:
+              "Bearer " + token
+          }
+        }
+      );
+
+    if(!response.ok) return;
+
+    const data =
+      await response.json();
+
+    storiesList =
+      Array.isArray(data)
+        ? data.map(
+            story => ({
+              ...story,
+              views:
+                Array.isArray(
+                  story.views
+                )
+                  ? story.views
+                  : []
+            })
+          )
+        : [];
+
+    renderStories();
+
+  }catch{}
+}
+
+socket.on(
+  "storiesData",
+  list => {
+
+    storiesList =
+      Array.isArray(list)
+        ? list
+        : [];
+
+    renderStories();
+  }
+);
+
+socket.on(
+  "storyCreated",
+  story => {
+
+    if(
+      !Array.isArray(
+        story.views
+      )
+    ){
+
+      story.views = [];
+    }
+
+    if(
+      !storiesList.some(
+        item =>
+          item.id ===
+          story.id
+      )
+    ){
+
+      storiesList.push(
+        story
+      );
+    }
+
+    renderStories();
+  }
+);
+
+socket.on(
+  "storyViewed",
+  data => {
+
+    const index =
+      storiesList.findIndex(
+        story =>
+          story.id ===
+          data.storyId
+      );
+
+    if(index >= 0){
+
+      storiesList[index].views =
+        Array.isArray(data.views)
+          ? data.views
+          : storiesList[index].views || [];
+
+      renderStories();
+    }
+  }
+);
+
+socket.on(
+  "storyDeleted",
+  data => {
+
+    storiesList =
+      storiesList.filter(
+        story =>
+          story.id !==
+          data.id
+      );
+
+    renderStories();
+
+    if(selectedStoryGroup){
+
+      selectedStoryGroup.stories =
+        selectedStoryGroup.stories.filter(
+          story =>
+            story.id !== data.id
+        );
+
+      if(
+        !selectedStoryGroup.stories.length
+      ){
+
+        closeStoryViewer();
+      }
+    }
+  }
+);
+
+function openStoryCreator(){
+
+  storyCreateError.textContent = "";
+
+  storyText.value = "";
+  storyImageFile.value = "";
+
+  storyMode = "text";
+
+  storyTextType.classList.add(
+    "active"
+  );
+
+  storyImageType.classList.remove(
+    "active"
+  );
+
+  storyText.classList.remove(
+    "hidden"
+  );
+
+  storyImageFile.classList.add(
+    "hidden"
+  );
+
+  storyPreview.style.background =
+    "#075e54";
+
+  storyPreview.innerHTML =
+    "Tu historia aparecerá aquí";
+
+  storyPreview.dataset.value = "";
+
+  storyCreateModal.style.display =
+    "flex";
+}
+
+storyTextType.onclick = () => {
+
+  storyMode = "text";
+
+  storyTextType.classList.add(
+    "active"
+  );
+
+  storyImageType.classList.remove(
+    "active"
+  );
+
+  storyText.classList.remove(
+    "hidden"
+  );
+
+  storyImageFile.classList.add(
+    "hidden"
+  );
+};
+
+storyImageType.onclick = () => {
+
+  storyMode = "image";
+
+  storyImageType.classList.add(
+    "active"
+  );
+
+  storyTextType.classList.remove(
+    "active"
+  );
+
+  storyText.classList.add(
+    "hidden"
+  );
+
+  storyImageFile.classList.remove(
+    "hidden"
+  );
+};
+
+storyText.oninput = () => {
+
+  storyPreview.style.background =
+    "#075e54";
+
+  storyPreview.textContent =
+    storyText.value.trim() ||
+    "Tu historia aparecerá aquí";
+};
+
+storyImageFile.onchange =
+  async () => {
+
+    const file =
+      storyImageFile.files[0];
+
+    if(!file) return;
+
+    if(
+      file.size >
+      5 * 1024 * 1024
+    ){
+
+      storyCreateError.textContent =
+        "La foto debe pesar menos de 5 MB.";
+
+      return;
+    }
+
+    try{
+
+      const data =
+        await resizeImage(
+          file,
+          1200,
+          1200
+        );
+
+      storyPreview.style.background =
+        "#111";
+
+      storyPreview.innerHTML =
+        `<img src="${data}" alt="">`;
+
+      storyPreview.dataset.value =
+        data;
+
+    }catch{
+
+      storyCreateError.textContent =
+        "No se pudo procesar la foto.";
+    }
+  };
+
+$("cancelStory").onclick = () => {
+  storyCreateModal.style.display =
+    "none";
+};
+
+$("publishStory").onclick =
+  async () => {
+
+    storyCreateError.textContent = "";
+
+    let content = "";
+
+    if(storyMode === "text"){
+
+      content =
+        storyText.value.trim();
+
+    }else{
+
+      content =
+        storyPreview.dataset.value ||
+        "";
+    }
+
+    if(!content){
+
+      storyCreateError.textContent =
+        storyMode === "text"
+          ? "Escribe algo primero."
+          : "Selecciona una foto.";
+
+      return;
+    }
+
+    try{
+
+      const token =
+        localStorage.getItem(
+          "chatToken"
+        );
+
+      const response =
+        await fetch(
+          "/api/stories",
           {
-            from:
-              norm(sender)
+            method:"POST",
+            headers:{
+              "Content-Type":
+                "application/json",
+              Authorization:
+                "Bearer " + token
+            },
+            body:JSON.stringify({
+              type:storyMode,
+              content
+            })
           }
         );
-      }
-    }
-  );
 
-  socket.on(
-    "disconnect",
-    () => {
-      const username = online.get(socket.id);
-      if (username) {
-        addAdminActivity(
-          `@${username} se ha desconectado.`
+      const data =
+        await response.json();
+
+      if(!response.ok){
+
+        throw new Error(
+          data.error ||
+          "No se pudo publicar la historia."
         );
       }
-      online.delete(socket.id);
-      sendUserList();
+
+      storyCreateModal.style.display =
+        "none";
+
+      storyPreview.dataset.value =
+        "";
+
+    }catch(error){
+
+      storyCreateError.textContent =
+        error.message;
     }
-  );
-});
+  };
 
-// =====================================================
-// NO LEÍDOS
-// =====================================================
+function openStoryViewer(
+  group,
+  index
+){
 
-function unreadCountsFor(username) {
-  const counts = {};
+  selectedStoryGroup =
+    group;
 
-  const blocks =
-    getUser(username)?.blockedUsers ||
-    [];
-
-  for (const m of messages()) {
-    if (
-      norm(m.to) ===
-        norm(username) &&
-      !m.read &&
-      !blocks.includes(
-        norm(m.from)
+  selectedStoryIndex =
+    Math.max(
+      0,
+      Math.min(
+        index,
+        group.stories.length - 1
       )
-    ) {
-      const from =
-        norm(m.from);
+    );
 
-      counts[from] =
-        (counts[from] || 0) + 1;
+  storyViewerModal.style.display =
+    "flex";
+
+  renderCurrentStory();
+}
+
+async function markStoryViewed(
+  storyId
+){
+
+  try{
+
+    const token =
+      localStorage.getItem(
+        "chatToken"
+      );
+
+    if(!token) return;
+
+    await fetch(
+      "/api/stories/" +
+      encodeURIComponent(storyId) +
+      "/view",
+      {
+        method:"POST",
+        headers:{
+          Authorization:
+            "Bearer " + token
+        }
+      }
+    );
+
+  }catch{}
+}
+
+function renderCurrentStory(){
+
+  if(
+    !selectedStoryGroup ||
+    !selectedStoryGroup.stories.length
+  ){
+
+    closeStoryViewer();
+    return;
+  }
+
+  const story =
+    selectedStoryGroup.stories[
+      selectedStoryIndex
+    ];
+
+  storyMeta.innerHTML = `
+    <div class="avatar">
+      ${avatarHtml(selectedStoryGroup)}
+    </div>
+
+    <div>
+      ${esc(
+        selectedStoryGroup.displayName
+      )}
+    </div>
+  `;
+
+  if(story.type === "image"){
+
+    storyViewerContent.innerHTML =
+      `<img
+        src="${esc(story.content)}"
+        alt="Historia"
+      >`;
+
+  }else{
+
+    storyViewerContent.innerHTML =
+      `
+        <div
+          class="storyViewerText"
+          style="
+            background:${esc(
+              story.background ||
+              "#075e54"
+            )};
+            width:100%;
+            height:100%;
+            display:flex;
+            align-items:center;
+            justify-content:center
+          "
+        >
+          ${esc(story.content)}
+        </div>
+      `;
+  }
+
+  deleteStoryButton.classList.toggle(
+    "hidden",
+    norm(story.username) !==
+      norm(myUsername)
+  );
+
+  if(
+    norm(story.username) !==
+      norm(myUsername)
+  ){
+
+    markStoryViewed(
+      story.id
+    );
+  }
+
+  storyStartedAt =
+    Date.now();
+
+  storyProgressFill.style.width =
+    "0%";
+
+  clearInterval(storyTimer);
+
+  storyTimer =
+    setInterval(
+      () => {
+
+        const progress =
+          Math.min(
+            100,
+            (
+              (
+                Date.now() -
+                storyStartedAt
+              ) /
+              6000
+            ) *
+            100
+          );
+
+        storyProgressFill.style.width =
+          progress + "%";
+
+        if(progress >= 100){
+
+          clearInterval(
+            storyTimer
+          );
+
+          nextStory();
+        }
+
+      },
+      50
+    );
+}
+
+function nextStory(){
+
+  if(!selectedStoryGroup){
+    return;
+  }
+
+  if(
+    selectedStoryIndex <
+    selectedStoryGroup.stories.length - 1
+  ){
+
+    selectedStoryIndex++;
+
+    renderCurrentStory();
+
+  }else{
+
+    closeStoryViewer();
+  }
+}
+
+function prevStory(){
+
+  if(!selectedStoryGroup){
+    return;
+  }
+
+  if(selectedStoryIndex > 0){
+
+    selectedStoryIndex--;
+
+    renderCurrentStory();
+  }
+}
+
+function closeStoryViewer(){
+
+  clearInterval(storyTimer);
+
+  storyViewerModal.style.display =
+    "none";
+
+  selectedStoryGroup = null;
+}
+
+$("storyNext").onclick =
+  nextStory;
+
+$("storyPrev").onclick =
+  prevStory;
+
+$("closeStoryViewer").onclick =
+  closeStoryViewer;
+
+deleteStoryButton.onclick =
+  async () => {
+
+    const story =
+      selectedStoryGroup?.stories[
+        selectedStoryIndex
+      ];
+
+    if(!story) return;
+
+    if(
+      !confirm(
+        "¿Borrar esta historia?"
+      )
+    ){
+      return;
+    }
+
+    try{
+
+      const token =
+        localStorage.getItem(
+          "chatToken"
+        );
+
+      const response =
+        await fetch(
+          "/api/stories/" +
+          encodeURIComponent(
+            story.id
+          ),
+          {
+            method:"DELETE",
+            headers:{
+              Authorization:
+                "Bearer " + token
+            }
+          }
+        );
+
+      if(!response.ok){
+
+        const data =
+          await response.json();
+
+        throw new Error(
+          data.error ||
+          "No se pudo borrar."
+        );
+      }
+
+    }catch(error){
+
+      showNotification(
+        "Historias",
+        error.message
+      );
+    }
+  };
+
+window.addEventListener(
+  "keydown",
+  event => {
+
+    if(
+      storyViewerModal.style.display !==
+      "flex"
+    ){
+      return;
+    }
+
+    if(event.key === "ArrowRight"){
+      nextStory();
+    }
+
+    if(event.key === "ArrowLeft"){
+      prevStory();
+    }
+
+    if(event.key === "Escape"){
+      closeStoryViewer();
     }
   }
+);
 
-  return counts;
-}
+/* =====================================================
+   NOTIFICACIÓN NATIVA ANDROID
+===================================================== */
 
-function emitUnread(
-  socket,
-  username
-) {
-  socket.emit(
-    "unreadCounts",
-    unreadCountsFor(username)
-  );
-}
+let pendingNativeCallAction = null;
 
-function isBlocked(a, b) {
-  const u = getUser(a);
+function handleNativeCallNotification(data){
 
-  return !!(
-    u &&
-    (
-      u.blockedUsers ||
-      []
-    ).includes(
-      norm(b)
-    )
-  );
-}
-
-function isEitherBlocked(
-  a,
-  b
-) {
-  return (
-    isBlocked(a, b) ||
-    isBlocked(b, a)
-  );
-}
-
-// =====================================================
-// LIMPIEZA DE HISTORIAS
-// =====================================================
-
-setInterval(() => {
-  const before =
-    allStories().length;
-
-  const after =
-    cleanExpiredStories();
-
-  if (
-    before !== after.length
-  ) {
-    broadcastVisibleStories();
-  }
-}, 60 * 1000);
-
-// =====================================================
-// INDEX
-// =====================================================
-
-app.get("/{*splat}", (req, res, next) => {
-  if (
-    req.path.startsWith("/api/")
-  ) {
-    return next();
+  if(!data){
+    return;
   }
 
-  if (
-    req.path.startsWith(
-      "/socket.io/"
-    )
-  ) {
-    return next();
+  const username =
+    norm(data.username || "");
+
+  if(!username){
+    return;
   }
 
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-  res.sendFile(
-    path.join(
-      __dirname,
-      "public",
-      "index.html"
-    )
+  const action =
+    norm(data.action || "");
+
+  if(callState !== "idle"){
+    return;
+  }
+
+  showIncomingCallFromNotification(
+    username,
+    data.sender || ""
   );
-});
 
-(async () => {
-  await initializeDatabase();
+  // La llamada se muestra primero para que el usuario vea
+  // el estado incluso si el micrófono tarda un momento en abrirse.
+  if(action === "accept"){
+    setTimeout(() => {
+      if(callState === "incoming"){
+        acceptCall();
+      }
+    }, 250);
+  }
 
-  server.listen(
-    PORT,
-    "0.0.0.0",
-    () => {
-      console.log(
-        `Mi Chat funcionando en http://localhost:${PORT}`
-      );
-      console.log(
-        `Persistencia: ${supabaseAvailable ? "Supabase activa" : "local temporal"}`
+  if(action === "reject"){
+    setTimeout(() => {
+      if(callState === "incoming"){
+        rejectCall();
+      }
+    }, 250);
+  }
+}
+
+window.addEventListener(
+  "nativeNotification",
+  event => {
+
+    try{
+
+      const data =
+        event.detail || {};
+
+      const username =
+        norm(data.username || "");
+
+      const type =
+        norm(data.type || "");
+
+      if(!username){
+        return;
+      }
+
+      if(type === "call"){
+
+        // Si todavía no estamos autenticados por Socket.IO,
+        // guardamos la acción y la procesamos al autenticar.
+        if(!myUsername || !socket.connected){
+          pendingNativeCallAction = data;
+          return;
+        }
+
+        handleNativeCallNotification(data);
+        return;
+      }
+
+      if(type === "contact_request"){
+        if(typeof renderRequests === "function") renderRequests();
+        if(typeof requestsModal !== "undefined" && requestsModal){
+          requestsModal.style.display = "flex";
+        }
+        return;
+      }
+
+      const contact =
+        allUsers.find(
+          user =>
+            norm(user.username) ===
+            username
+        );
+
+      if(contact){
+
+        openChat(
+          contact.username,
+          contact.displayName ||
+            contact.username,
+          contact.online,
+          contact.profileImage || ""
+        );
+
+      }else{
+
+        socket.emit(
+          "findUser",
+          username
+        );
+      }
+
+    }catch(error){
+
+      console.error(
+        "nativeNotification:",
+        error
       );
     }
-  );
+  }
+);
+
+/* =====================================================
+   ARRANQUE
+===================================================== */
+
+(async function checkGlobalAccessAtStartup(){
+  try{
+    const response = await fetch("/api/global-access/status");
+    const data = await response.json().catch(() => ({}));
+    if(data.locked) showAccessBlockedModal({globalLock:true});
+  }catch{}
+  checkSession();
 })();
+</script>
+
+
+</body>
+</html>
+
+   
