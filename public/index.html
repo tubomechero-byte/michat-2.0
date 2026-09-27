@@ -1062,6 +1062,24 @@ html.darkTheme .mobileBottomNav button{color:#8696a0}
 html.darkTheme .mobileBottomNav button.active{color:#53bdeb}
 html.darkTheme .mobileBottomNav button.active .navPill{background:#0b4f47}
 
+
+/* Correcciones responsive v2: un solo rail en PC y espacio seguro para la barra de estado en móvil. */
+@media (min-width: 901px){
+  /* La navegación de escritorio vive dentro de #layout; la navegación móvil no debe duplicarla. */
+  #mobileBottomNav{display:none !important;}
+  #layout{width:100% !important;max-width:none !important;margin:0 !important;}
+}
+@media (max-width: 900px){
+  /* Respeta el área superior del sistema para que la barra de estado no tape los controles. */
+  .sidebarHeader,
+  .tabPageHeader,
+  .chatHeader{
+    padding-top:calc(8px + env(safe-area-inset-top, 0px));
+  }
+  .storiesHeader{
+    padding-top:calc(8px + env(safe-area-inset-top, 0px));
+  }
+}
 </style>
 </head>
 
