@@ -1564,9 +1564,48 @@ function deleteSession(token) {
   }
 }
 
+function readCookieHeader(req, name) {
+  const header = String(req.headers.cookie || "");
+  if (!header) return "";
+  const prefix = name + "=";
+  for (const part of header.split(";")) {
+    const item = part.trim();
+    if (!item.startsWith(prefix)) continue;
+    try { return decodeURIComponent(item.slice(prefix.length)); } catch { return item.slice(prefix.length); }
+  }
+  return "";
+}
+
+function setSessionCookie(res, token) {
+  const safe = String(token || "");
+  if (!safe) return;
+  const secure = process.env.NODE_ENV === "production" || Boolean(res.req?.secure);
+  const parts = [
+    "michat_session=" + encodeURIComponent(safe),
+    "Max-Age=31536000",
+    "Path=/",
+    "SameSite=Lax"
+  ];
+  if (secure) parts.push("Secure");
+  res.setHeader("Set-Cookie", parts.join("; "));
+}
+
+function clearSessionCookie(res) {
+  const secure = process.env.NODE_ENV === "production" || Boolean(res.req?.secure);
+  const parts = [
+    "michat_session=",
+    "Max-Age=0",
+    "Path=/",
+    "SameSite=Lax"
+  ];
+  if (secure) parts.push("Secure");
+  res.setHeader("Set-Cookie", parts.join("; "));
+}
+
 function authToken(req) {
   const a = req.headers.authorization || "";
-  return a.startsWith("Bearer ") ? a.slice(7) : "";
+  if (a.startsWith("Bearer ")) return a.slice(7);
+  return readCookieHeader(req, "michat_session");
 }
 
 function normalizeIp(value) {
@@ -2132,6 +2171,7 @@ app.post("/api/global-unlock", (req, res) => {
   }
 
   const token = newSession(user.username);
+  setSessionCookie(res, token);
   addAdminActivity(`@${user.username} accedió al chat mediante la contraseña de acceso global.`);
 
   res.json({
@@ -4655,6 +4695,7 @@ app.post("/api/register", (req, res) => {
 
   // La cuenta recién creada usa directamente su username normalizado.
   const token = newSession(username);
+  setSessionCookie(res, token);
 
   sendUserList();
 
@@ -4894,6 +4935,7 @@ app.post("/api/login", (req, res) => {
   }
 
   const token = newSession(u.username);
+  setSessionCookie(res, token);
 
   addAdminActivity(
     `@${u.username} ha iniciado sesión.`
@@ -4907,6 +4949,9 @@ app.post("/api/login", (req, res) => {
 });
 
 app.get("/api/session", (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   const requestIp = clientIp(req); const ipBan = activeIpBanFor(requestIp);
   if (ipBan) return res.status(403).json({ loggedIn:false, ipBanned:true, error: ipBan.expiresAt ? `Esta IP está bloqueada hasta ${new Date(Number(ipBan.expiresAt)).toLocaleString("es-ES")}.` : "Esta IP está bloqueada permanentemente." });
   const token = authToken(req);
@@ -4966,6 +5011,7 @@ app.post("/api/logout", (req, res) => {
   deleteSession(
     authToken(req)
   );
+  clearSessionCookie(res);
 
   res.json({
     success: true
@@ -5166,6 +5212,7 @@ app.post("/api/account/username", requireUser, (req, res) => {
   }
 
   const token = newSession(newUsername);
+  setSessionCookie(res, token);
   sendUserList();
 
   for (const [, name] of online.entries()) {
@@ -5226,7 +5273,9 @@ app.post("/api/account/password", requireUser, (req, res) => {
 
   addAdminActivity(`@${list[idx].username} cambió su contraseña desde Configuración.`);
 
-  res.json({ success: true, token: newSession(list[idx].username) });
+  const token = newSession(list[idx].username);
+  setSessionCookie(res, token);
+  res.json({ success: true, token });
 });
 
 app.get("/api/profile", (req, res) => {
