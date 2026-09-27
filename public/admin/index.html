@@ -134,7 +134,7 @@ let supabaseUsageData=null;
 let commandAccessRanks = new Map();
 const $=id=>document.getElementById(id);
 function headers(){return {'Content-Type':'application/json','Authorization':'Bearer '+localStorage.getItem(tokenKey)}}
-function showPanel(){ $('loginCard').classList.add('hidden'); $('panel').classList.remove('hidden'); $('logout').classList.remove('hidden'); loadGlobalAccess(); loadAll(); loadSupabaseStorage(); loadSupabaseUsage(); loadContactRequests(); loadGroups(); loadChats(); loadCommandAccess(); loadReports(); loadModeration(); loadAppeals(); loadBans(); loadIpBans(); loadStories(); loadRecordings(); loadLocations(); startActivity(); }
+function showPanel(){ $('loginCard').classList.add('hidden'); $('panel').classList.remove('hidden'); $('logout').classList.remove('hidden'); loadGlobalAccess(); loadAll(); loadSupabaseStorage(); loadSupabaseUsage(); loadContactRequests(); loadGroups(); loadChats(); loadCommandAccess(); loadReports(); loadModeration(); loadAppeals(); loadBans(); loadIpBans(); loadStories(); loadRecordings(); startActivity(); setTimeout(()=>loadLocations(),0); }
 async function api(url,opt={}){const r=await fetch(url,{...opt,headers:{...headers(),...(opt.headers||{})}});let d={};try{d=await r.json()}catch{} if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d}
 async function login(){
   const msg = $('loginMsg');
@@ -908,18 +908,23 @@ let locationMap=null;
 let locationMarkers={};
 
 function initLocationMap(){
-  if(locationMap || !window.L) return;
-  locationMap=L.map("locationMap").setView([40.4168,-3.7038],6);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
-    maxZoom:19,
-    attribution:"&copy; OpenStreetMap contributors"
-  }).addTo(locationMap);
+  const container=$("locationMap");
+  if(!container || !window.L) return false;
+  if(!locationMap){
+    locationMap=L.map(container,{zoomControl:true}).setView([40.4168,-3.7038],6);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+      maxZoom:19,
+      attribution:"&copy; OpenStreetMap contributors"
+    }).addTo(locationMap);
+  }
+  setTimeout(()=>locationMap && locationMap.invalidateSize(true),50);
+  return true;
 }
 
 async function loadLocations(){
   const msg=$('locationsMsg');
   try{
-    initLocationMap();
+    if(!initLocationMap()) throw new Error('No se pudo iniciar el mapa. Comprueba que Leaflet está disponible y recarga el panel.');
     const list=await api('/api/admin/locations');
     const active=new Set(list.map(x=>x.username));
     Object.keys(locationMarkers).forEach(name=>{
@@ -964,6 +969,6 @@ async function loadLocations(){
     msg.textContent=e.message||'No se pudieron cargar las ubicaciones.';
   }
 }
-$('refreshLocations').onclick=loadLocations;loadLocations();setInterval(loadLocations,5000);</script>
+$('refreshLocations').onclick=loadLocations;setInterval(()=>{ if(!$('panel').classList.contains('hidden')) loadLocations(); },5000);window.addEventListener('resize',()=>{ if(locationMap) locationMap.invalidateSize(true); });</script>
 </body>
 </html>
