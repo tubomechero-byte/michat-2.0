@@ -54,11 +54,24 @@ button,input,textarea{font:inherit}
 .tabPageHeaderText{min-width:0}
 .tabPageAction{border:0;border-radius:20px;padding:9px 13px;background:#128c7e;color:#fff;font-weight:700;cursor:pointer}
 .newsPage{overflow:hidden;background:#fff}
-.newsPage .storiesBar{border:0;padding:14px 12px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;overflow:auto;align-content:start;flex:1}
-.newsPage .storyItem{width:auto;min-width:0;text-align:center;padding:4px}
-.newsPage .storyRing{width:min(92px,24vw);height:min(92px,24vw);margin:0 auto}
-.newsPage .storyLabel{font-size:13px;font-weight:600}
-.newsPage .storySeenLabel{font-size:11px}
+.storiesHeader{min-height:72px;padding:12px 18px;background:#111;color:#fff;border-bottom:0}
+.storiesHeader h2{font-size:27px;line-height:1.1;color:#fff}
+.storiesHeaderActions{display:flex;align-items:center;gap:8px}
+.storiesHeaderIconBtn{width:42px;height:42px;border:0;border-radius:50%;background:transparent;color:#fff;display:flex;align-items:center;justify-content:center;font-size:31px;line-height:1;cursor:pointer}
+.storiesHeaderIconBtn:hover{background:rgba(255,255,255,.1)}
+.storiesHeaderAddBtn{font-size:34px}
+.newsPage .storiesBar{border:0;padding:0 0 18px;display:flex;flex-direction:column;gap:0;overflow:auto;align-content:stretch;flex:1;background:#fff}
+.storySectionTitle{padding:24px 18px 9px;color:#777;font-size:13px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
+.storySectionTitle.first{padding-top:20px}
+.newsPage .storyItem{width:100%;min-width:0;text-align:left;padding:10px 18px;display:flex;align-items:center;gap:14px;background:transparent;border:0;border-bottom:1px solid #f0f0f0;cursor:pointer}
+.newsPage .storyItem:hover{background:#f7f7f7}
+.newsPage .storyRing{width:62px;height:62px;flex:0 0 62px;margin:0}
+.newsPage .storyLabel{font-size:16px;font-weight:500;line-height:1.2;max-width:100%;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.newsPage .storySeenLabel{font-size:13px;color:#777;margin-top:5px;line-height:1.2}
+.newsPage .storyInfo{min-width:0;display:flex;flex-direction:column;justify-content:center;flex:1}
+.newsPage .storyMetaTime{margin-left:auto;align-self:flex-start;padding-top:4px;font-size:12px;color:#777;white-space:nowrap}
+.newsPage .storyItem.storyOwn{padding-top:13px;padding-bottom:13px}
+.newsPage .storyItem.storyOwn .storyLabel{font-weight:600}
 .communityPage,.callsPage,.profilePage{overflow:auto;background:#fff}
 .communityList,.callsList{padding:8px 12px 90px}
 .communityEmpty,.callsEmpty{padding:35px 20px;text-align:center;color:#777}
@@ -456,15 +469,13 @@ button,input,textarea{font:inherit}
      para dejar toda la pantalla al chat. */
   #layout.mobileChat + #mobileBottomNav{display:none !important}
   .mainTabPage{min-height:0}
-  .newsPage .storiesBar{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-  .newsPage .storyRing{width:76px;height:76px}
+  .newsPage .storyRing{width:58px;height:58px;flex-basis:58px}
   .quickActions{right:16px;bottom:72px}
   .mobileChat .mobileBottomNav{display:none}
 }
 @media(min-width:901px){
   #layout{flex:1;width:100%}
   .mainTabPage{min-height:0}
-  .newsPage .storiesBar{grid-template-columns:repeat(5,minmax(0,1fr))}
 }
 @media(max-width:900px){
   .chatHeader{min-height:82px;height:auto;padding:20px 10px 8px;gap:8px} 
@@ -754,7 +765,13 @@ html.darkTheme .storiesBar{
 }
 html.darkTheme .storiesBar{
   border-bottom-color:#303234;
+  background:#181a1b;
 }
+html.darkTheme .storySectionTitle{color:#9aa0a6}
+html.darkTheme .newsPage .storyItem{border-bottom-color:#2a2d2f}
+html.darkTheme .newsPage .storyItem:hover{background:#232628}
+html.darkTheme .newsPage .storySeenLabel,
+html.darkTheme .newsPage .storyMetaTime{color:#9aa0a6}
 html.darkTheme .groupRow:hover,
 html.darkTheme .profileActionBtn:hover,
 html.darkTheme .settingsItem:hover{
@@ -965,12 +982,14 @@ html.darkTheme .commandModalBox input{background:#111827!important;color:#fff!im
       </div>
 
       <div id="newsPage" class="mainTabPage hiddenTab newsPage">
-        <div class="tabPageHeader">
+        <div class="tabPageHeader storiesHeader">
           <div class="tabPageHeaderText">
-            <h2>Novedades</h2>
-            <div class="tabPageHeaderSub">Historias de tus contactos</div>
+            <h2>Estados</h2>
           </div>
-          <button id="newsCreateStoryButton" class="tabPageAction" type="button">＋ Mi historia</button>
+          <div class="storiesHeaderActions">
+            <button id="newsStoryMenuButton" class="storiesHeaderIconBtn" type="button" aria-label="Más opciones">⋮</button>
+            <button id="newsCreateStoryButton" class="storiesHeaderIconBtn storiesHeaderAddBtn" type="button" aria-label="Crear estado">＋</button>
+          </div>
         </div>
         <div id="storiesBar" class="storiesBar"></div>
       </div>
@@ -6493,138 +6512,111 @@ function storyGroupsFromFlat(list){
   );
 }
 
+function formatStoryTime(ts){
+  if(!ts) return "";
+  try{
+    const date = new Date(Number(ts));
+    if(Number.isNaN(date.getTime())) return "";
+    const now = new Date();
+    const sameDay = date.toDateString() === now.toDateString();
+    return sameDay
+      ? `Hoy a la(s) ${date.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}`
+      : date.toLocaleDateString([], {day:"2-digit", month:"2-digit"});
+  }catch{
+    return "";
+  }
+}
+
+function appendStorySectionTitle(text, first = false){
+  const title = document.createElement("div");
+  title.className = `storySectionTitle${first ? " first" : ""}`;
+  title.textContent = text;
+  storiesBar.appendChild(title);
+}
+
+function createStoryRow(group, {own = false} = {}){
+  const lastStory = group.stories[group.stories.length - 1] || {};
+  const hasUnseen = group.stories.some(
+    story => !(story.views || []).some(
+      view => norm(view.username) === norm(myUsername)
+    )
+  );
+
+  const button = document.createElement("button");
+  button.className = `storyItem${own ? " storyOwn" : ""}`;
+  button.innerHTML = `
+    <div class="storyRing ${hasUnseen || own ? "" : "seen"}">
+      <div class="storyAvatar">
+        ${avatarHtml(group)}
+      </div>
+    </div>
+    <div class="storyInfo">
+      <div class="storyLabel">${esc(own ? "Mi estado" : group.displayName)}</div>
+      <div class="storySeenLabel">${own ? (group.stories.length > 1 ? `${group.stories.length} estados` : "Tu historia") : (hasUnseen ? "Nuevo estado" : "Visto")}</div>
+    </div>
+    <div class="storyMetaTime">${formatStoryTime(lastStory.createdAt)}</div>
+  `;
+  button.onclick = () => openStoryViewer(group, 0);
+  storiesBar.appendChild(button);
+}
+
 function renderStories(){
-
-  const groups =
-    storyGroupsFromFlat(
-      storiesList
-    );
-
+  const groups = storyGroupsFromFlat(storiesList);
   storiesBar.innerHTML = "";
 
-  const addButton =
-    document.createElement(
-      "button"
+  const mine = groups.find(group => norm(group.username) === norm(myUsername));
+  const others = groups.filter(group => norm(group.username) !== norm(myUsername));
+  const recent = [];
+  const seen = [];
+
+  for(const group of others){
+    const hasUnseen = group.stories.some(
+      story => !(story.views || []).some(
+        view => norm(view.username) === norm(myUsername)
+      )
     );
+    (hasUnseen ? recent : seen).push(group);
+  }
 
-  addButton.className =
-    "storyItem";
-
-  addButton.innerHTML = `
+  const addButton = document.createElement("button");
+  addButton.className = "storyItem storyOwn";
+  addButton.innerHTML = mine && mine.stories.length ? `
+    <div class="storyRing">
+      <div class="storyAvatar">${avatarHtml(mine)}</div>
+    </div>
+    <div class="storyInfo">
+      <div class="storyLabel">Mi estado</div>
+      <div class="storySeenLabel">${mine.stories.length > 1 ? `${mine.stories.length} estados` : "Tu historia"}</div>
+    </div>
+    <div class="storyMetaTime">${formatStoryTime((mine.stories[mine.stories.length - 1] || {}).createdAt)}</div>
+  ` : `
     <div class="storyRing">
       <div class="storyAvatar storyAdd">＋</div>
     </div>
-
-    <div class="storyLabel">
-      Tu historia
+    <div class="storyInfo">
+      <div class="storyLabel">Mi estado</div>
+      <div class="storySeenLabel">Añade una actualización</div>
     </div>
   `;
+  addButton.onclick = mine && mine.stories.length ? () => openStoryViewer(mine, 0) : openStoryCreator;
+  addButton.ondblclick = openStoryCreator;
+  storiesBar.appendChild(addButton);
 
-  addButton.onclick =
-    openStoryCreator;
-
-  storiesBar.appendChild(
-    addButton
-  );
-
-  for(const group of groups){
-
-    if(
-      norm(group.username) ===
-      norm(myUsername)
-    ){
-      continue;
-    }
-
-    const hasUnseen =
-      group.stories.some(
-        story =>
-          !(story.views || []).some(
-            view =>
-              norm(view.username) ===
-              norm(myUsername)
-          )
-      );
-
-    const button =
-      document.createElement(
-        "button"
-      );
-
-    button.className =
-      "storyItem";
-
-    button.innerHTML = `
-      <div class="storyRing ${
-        hasUnseen ? "" : "seen"
-      }">
-
-        <div class="storyAvatar">
-          ${avatarHtml(group)}
-        </div>
-
-      </div>
-
-      <div class="storyLabel">
-        ${esc(group.displayName)}
-      </div>
-
-      <div class="storySeenLabel">
-        ${
-          hasUnseen
-            ? "No vista"
-            : "Vista"
-        }
-      </div>
-    `;
-
-    button.onclick =
-      () =>
-        openStoryViewer(
-          group,
-          0
-        );
-
-    storiesBar.appendChild(
-      button
-    );
+  if(recent.length){
+    appendStorySectionTitle("Reciente", true);
+    recent.forEach(group => createStoryRow(group));
   }
 
-  const mine =
-    groups.find(
-      group =>
-        norm(group.username) ===
-        norm(myUsername)
-    );
+  if(seen.length){
+    appendStorySectionTitle("Visto", !recent.length);
+    seen.forEach(group => createStoryRow(group));
+  }
 
-  if(
-    mine &&
-    mine.stories.length
-  ){
-
-    addButton.innerHTML = `
-      <div class="storyRing">
-
-        <div class="storyAvatar">
-          ${avatarHtml(mine)}
-        </div>
-
-      </div>
-
-      <div class="storyLabel">
-        Tu historia
-      </div>
-    `;
-
-    addButton.onclick =
-      () =>
-        openStoryViewer(
-          mine,
-          0
-        );
-
-    addButton.ondblclick =
-      openStoryCreator;
+  if(!recent.length && !seen.length){
+    const empty = document.createElement("div");
+    empty.className = "storySectionTitle first";
+    empty.textContent = "No hay estados nuevos";
+    storiesBar.appendChild(empty);
   }
 }
 
