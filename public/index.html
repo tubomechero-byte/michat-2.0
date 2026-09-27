@@ -877,6 +877,215 @@ html.darkTheme .messageLoggingSettingSub{color:#a7adb2}
 html.darkTheme .commandModalBox{background:#0b1120!important;color:#e5e7eb}
 html.darkTheme .commandModalBox input{background:#111827!important;color:#fff!important}
 
+
+/* =====================================================
+   MI CHAT · SISTEMA RESPONSIVE ESTILO WHATSAPP
+   ===================================================== */
+:root{
+  --wa-green:#00a884;
+  --wa-green-deep:#008069;
+  --wa-green-soft:#d9fdd3;
+  --wa-panel:#ffffff;
+  --wa-panel-muted:#f0f2f5;
+  --wa-border:#e9edef;
+  --wa-text:#111b21;
+  --wa-muted:#667781;
+  --wa-chat-bg:#efeae2;
+}
+
+html,body{background:#dfe5e7}
+#app{background:#dfe5e7}
+#layout{width:100%;max-width:1600px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+
+/* rail de escritorio */
+.desktopRail{display:flex;flex-direction:column;justify-content:space-between;width:64px;min-width:64px;background:#f0f2f5;border-right:1px solid var(--wa-border);padding:10px 7px;z-index:30}
+.desktopRailTop,.desktopRailBottom{display:flex;flex-direction:column;align-items:center;gap:8px}
+.desktopRailBtn{width:50px;height:50px;border:0;border-radius:14px;background:transparent;color:#54656f;font-size:23px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s ease,color .15s ease,transform .15s ease}
+.desktopRailBtn:hover{background:#e2e6e8;color:#111b21}
+.desktopRailBtn.active{background:#d9fdd3;color:#008069}
+.desktopRailBtn:active{transform:scale(.97)}
+
+.waIcon{width:25px;height:25px;display:block;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.desktopRailBtn .waIcon{width:24px;height:24px}
+.mobileBottomNav button .waIcon{width:23px;height:23px}
+.mobileBottomNav .navProfileAvatar .waIcon{width:23px;height:23px}
+
+
+/* panel lateral de chats */
+.sidebar{width:410px;min-width:410px;background:var(--wa-panel);border-right:1px solid var(--wa-border)}
+.sidebarHeader{min-height:68px;padding:10px 16px;background:var(--wa-panel);color:var(--wa-text);border-bottom:1px solid var(--wa-border)}
+.headerTop h2{font-size:22px;letter-spacing:-.2px}
+.smallBtn{background:transparent;color:var(--wa-muted);font-size:20px;padding:7px;border-radius:50%}
+.smallBtn:hover{background:var(--wa-panel-muted);color:var(--wa-text)}
+.onlineCount{font-size:11px;color:var(--wa-muted);margin-top:1px}
+.search{padding:8px 12px;border-bottom:1px solid var(--wa-border);background:var(--wa-panel)}
+.search input{background:var(--wa-panel-muted);padding:11px 16px 11px 40px;font-size:14px}
+#users{background:var(--wa-panel)}
+.user{padding:12px 16px;gap:12px;border-bottom:1px solid #f0f2f5;background:var(--wa-panel);cursor:pointer;transition:background .12s ease}
+.user:hover{background:#f5f6f6}
+.user .avatar{width:50px;height:50px}
+.userInfo{min-width:0}
+.userName{font-size:16px;font-weight:500;color:var(--wa-text)}
+.userSub{margin-top:2px;color:var(--wa-muted);font-size:13px}
+.statusRow{margin-top:2px}
+.online,.offline{font-size:11px;color:var(--wa-muted)}
+.badge{min-width:20px;height:20px;background:#25d366;font-size:11px}
+#users .toolBtn[data-action="open"],#users .toolBtn[data-action="remove"],[data-group-open]{display:none}
+#users .toolBtn{border-radius:999px;padding:6px 10px;font-size:11px}
+
+/* pestañas no-chat en escritorio: panel lateral + lienzo de conversación */
+.chat{background:var(--wa-chat-bg)}
+.chatHeader{height:62px;padding:10px 16px;background:var(--wa-panel);border-bottom:1px solid var(--wa-border)}
+.chatTitle{font-size:16px;color:var(--wa-text)}
+.chatSubtitle{font-size:12px;color:var(--wa-muted)}
+.chatTools{gap:4px}
+.chatTools .toolBtn{width:40px;height:40px;padding:0;border-radius:50%;font-size:0;background:transparent;color:var(--wa-muted);display:flex;align-items:center;justify-content:center}
+.chatTools .toolBtn:hover{background:var(--wa-panel-muted);color:var(--wa-text)}
+#callButton::before{content:"📞";font-size:20px}
+#videoCallButton::before{content:"📹";font-size:20px}
+#hangupButton::before{content:"📵";font-size:20px}
+#blockCurrentButton::before{content:"🚫";font-size:18px}
+.groupActionsToggle{border-radius:50%;background:transparent;color:var(--wa-muted)}
+.back{border:0;background:transparent;color:var(--wa-muted);width:40px;height:40px;border-radius:50%}
+.back:hover{background:var(--wa-panel-muted)}
+#messages{background-color:var(--wa-chat-bg);background-image:radial-gradient(rgba(84,70,61,.08) .7px,transparent .7px);background-size:14px 14px;padding:24px 6.5vw}
+.messageRow{margin:2px 0;padding:0 3px}
+.bubble{max-width:min(70%,620px);padding:7px 9px 5px;border-radius:8px;box-shadow:0 1px 1px rgba(0,0,0,.13);font-size:14px;line-height:1.35}
+.messageRow:not(.mine) .bubble:before{content:"";position:absolute}
+.mine .bubble{background:var(--wa-green-soft)}
+.from{color:#128c7e;font-size:11px}
+.time{color:#667781;font-size:10px;margin-top:3px}
+.messageInput{gap:6px;padding:8px 12px;background:var(--wa-panel-muted);border-top:0}
+.messageInput input{height:44px;padding:12px 16px;background:#fff}
+.attachBtn,.locationBtn,.send{width:44px;height:44px}
+.attachBtn,.locationBtn{background:transparent;color:var(--wa-muted)}
+.send{background:var(--wa-green);font-size:0}
+.send::before{content:"➤";font-size:19px}
+
+/* modal ligero tipo WhatsApp */
+.modal{background:rgba(11,20,26,.72)}
+.modalBox{border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.25);border:1px solid rgba(0,0,0,.06)}
+
+/* comunidades, llamadas y perfil */
+.tabPageHeader{min-height:68px;padding:12px 18px;background:var(--wa-panel);border-bottom:1px solid var(--wa-border)}
+.tabPageHeader h2{font-size:20px;color:var(--wa-text)}
+.tabPageHeaderSub{color:var(--wa-muted)}
+.tabPageAction{background:var(--wa-green);border-radius:20px;padding:8px 14px}
+.communityPage,.callsPage,.profilePage{background:var(--wa-panel)}
+.communityList,.callsList{padding:4px 12px 100px}
+.groupRow,.callsItem{padding:11px 8px;border-radius:8px}
+.groupRow:hover,.callsItem:hover{background:#f5f6f6}
+.groupAvatar{width:50px;height:50px;flex-basis:50px;border-radius:50%}
+
+/* estados estilo WhatsApp: conservamos la lista actual pero con medidas del producto */
+.storiesHeader{background:var(--wa-panel);color:var(--wa-text);border-bottom:1px solid var(--wa-border)}
+.storiesHeader h2{color:var(--wa-text);font-size:21px}
+.storiesHeaderIconBtn{color:var(--wa-text)}
+.newsPage .storiesBar{background:var(--wa-panel)}
+.newsPage .storyItem{padding:10px 16px}
+.newsPage .storyItem:hover{background:#f5f6f6}
+.newsPage .storyRing{width:58px;height:58px;flex-basis:58px}
+.newsPage .storySeenLabel,.newsPage .storyMetaTime{color:var(--wa-muted)}
+
+/* pantalla en blanco de WhatsApp Web cuando se navega por una pestaña */
+@media (min-width:901px){
+  #layout.mainTabNonChat .chat{display:flex!important;position:relative;background:#f7f7f7}
+  #layout.mainTabNonChat .chatHeader,#layout.mainTabNonChat #messages,#layout.mainTabNonChat .messageInput{display:none}
+  #layout.mainTabNonChat .chat::before{content:"Mi Chat";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:300;color:#667781;letter-spacing:.1px;background:linear-gradient(180deg,#f7f7f7,#eef1f2)}
+}
+
+/* móvil: interfaz táctil de WhatsApp */
+@media (max-width:900px){
+  html,body,#app{background:#fff}
+  .desktopRail{display:none}
+  .layout{max-width:none;width:100%;box-shadow:none}
+  .sidebar{width:100%;min-width:0;border-right:0;background:#fff}
+  .sidebarHeader{min-height:58px;padding:8px 14px;background:#fff;border-bottom:0}
+  .headerTop h2{font-size:22px}
+  .onlineCount{display:none}
+  .topButtons{gap:0}
+  .smallBtn{width:40px;height:40px;padding:0}
+  #chatsPage .search{padding:6px 12px 8px;border-bottom:0}
+  .search input{height:40px;padding:10px 14px 10px 38px}
+  .user{padding:10px 14px;min-height:72px;border-bottom:1px solid #edf0f2}
+  .user .avatar{width:54px;height:54px}
+  .userName{font-size:15px}
+  .userSub{font-size:12px}
+  #users .toolBtn[data-action="open"],#users .toolBtn[data-action="remove"],[data-group-open]{display:none}
+  #layout.mainTabChats .chat{width:100%}
+  .chatHeader{height:60px;padding:8px 10px;background:#fff}
+  .back{display:flex;align-items:center;justify-content:center;width:38px;height:38px;font-size:24px}
+  .chatTitle{font-size:16px}
+  .chatTools{gap:0}
+  .chatTools .toolBtn{width:38px;height:38px}
+  #messages{padding:14px 8px;background-size:12px 12px}
+  .bubble{max-width:85%;font-size:14px}
+  .messageInput{padding:7px 8px max(7px,env(safe-area-inset-bottom));gap:5px}
+  .messageInput input{height:44px;padding:11px 14px}
+  .attachBtn,.locationBtn,.send{width:44px;height:44px}
+  .mobileBottomNav{background:#fff;border-top:1px solid #e8edef;box-shadow:0 -1px 6px rgba(0,0,0,.05)}
+  .mobileBottomNav button{color:#667781}
+  .mobileBottomNav button.active{color:#008069}
+  .mobileBottomNav button.active .navPill{background:#d9fdd3}
+  .tabPageHeader{min-height:58px;padding:8px 14px}
+  .tabPageHeader h2{font-size:21px}
+  .storiesHeader h2{font-size:21px}
+  .newsPage .storiesBar{padding-bottom:80px}
+  .newsPage .storyItem{padding:10px 14px;min-height:78px}
+  .newsPage .storyRing{width:58px;height:58px;flex-basis:58px}
+  .communityList,.callsList{padding-bottom:90px}
+  .profilePageInner{padding:16px 14px 90px}
+  .profileCard{border-radius:16px;padding:15px}
+  .quickActions{right:16px;bottom:16px}
+  .quickActionsMenu{right:0;bottom:62px}
+  .activeCallControls{gap:10px;max-width:360px}
+  .activeCallControl{width:72px;height:72px}
+}
+
+/* modo oscuro coherente */
+html.darkTheme,html.darkTheme body,html.darkTheme #app{background:#111b21}
+html.darkTheme .desktopRail{background:#202c33;border-right-color:#2a3942}
+html.darkTheme .desktopRailBtn{color:#b6c2c9}
+html.darkTheme .desktopRailBtn:hover{background:#2a3942;color:#fff}
+html.darkTheme .desktopRailBtn.active{background:#075e54;color:#d9fdd3}
+html.darkTheme .sidebar,html.darkTheme .sidebarHeader,html.darkTheme .search,html.darkTheme .chatHeader,html.darkTheme .communityPage,html.darkTheme .callsPage,html.darkTheme .profilePage,html.darkTheme .newsPage,html.darkTheme .newsPage .storiesBar,html.darkTheme .tabPageHeader{background:#111b21;border-color:#22313a}
+html.darkTheme .sidebarHeader,html.darkTheme .tabPageHeader h2,html.darkTheme .chatTitle,html.darkTheme .storiesHeader h2{color:#e9edef}
+html.darkTheme .smallBtn,html.darkTheme .storiesHeaderIconBtn,html.darkTheme .back{color:#aebac2}
+html.darkTheme .user{background:#111b21;border-color:#1f2b33}
+html.darkTheme .user:hover,html.darkTheme .groupRow:hover,html.darkTheme .callsItem:hover{background:#202c33}
+html.darkTheme .userName{color:#e9edef}
+html.darkTheme .userSub,html.darkTheme .online,html.darkTheme .offline,html.darkTheme .tabPageHeaderSub,.darkTheme .newsPage .storySeenLabel,.darkTheme .newsPage .storyMetaTime{color:#8696a0}
+html.darkTheme .search input,html.darkTheme .messageInput{background:#202c33;color:#e9edef}
+html.darkTheme .messageInput input{background:#2a3942;color:#e9edef}
+html.darkTheme #messages{background-color:#0b141a;background-image:radial-gradient(rgba(255,255,255,.035) .7px,transparent .7px)}
+html.darkTheme .bubble{background:#202c33;color:#e9edef}
+html.darkTheme .mine .bubble{background:#005c4b}
+html.darkTheme .time{color:#8696a0}
+html.darkTheme .empty{color:#8696a0}
+html.darkTheme .modalBox{background:#202c33;color:#e9edef;border-color:#2a3942}
+html.darkTheme .mobileBottomNav{background:#111b21;border-top-color:#22313a}
+html.darkTheme .mobileBottomNav button{color:#8696a0}
+html.darkTheme .mobileBottomNav button.active{color:#53bdeb}
+html.darkTheme .mobileBottomNav button.active .navPill{background:#0b4f47}
+
+
+/* Correcciones responsive v2: un solo rail en PC y espacio seguro para la barra de estado en móvil. */
+@media (min-width: 901px){
+  /* La navegación de escritorio vive dentro de #layout; la navegación móvil no debe duplicarla. */
+  #mobileBottomNav{display:none !important;}
+  #layout{width:100% !important;max-width:none !important;margin:0 !important;}
+}
+@media (max-width: 900px){
+  /* Respeta el área superior del sistema para que la barra de estado no tape los controles. */
+  .sidebarHeader,
+  .tabPageHeader,
+  .chatHeader{
+    padding-top:calc(8px + env(safe-area-inset-top, 0px));
+  }
+  .storiesHeader{
+    padding-top:calc(8px + env(safe-area-inset-top, 0px));
+  }
+}
 </style>
 </head>
 
@@ -934,6 +1143,19 @@ html.darkTheme .commandModalBox input{background:#111827!important;color:#fff!im
 
 <div id="app">
   <div id="layout" class="layout">
+
+    <nav id="desktopRail" class="desktopRail" aria-label="Navegación de escritorio">
+      <div class="desktopRailTop">
+        <button type="button" data-desktop-tab="chats" class="desktopRailBtn active" aria-label="Chats" title="Chats"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5 7.3 7.3 0 0 1-3.1-.7L4 20l1.7-4.6A7.3 7.3 0 0 1 5 11.5 7.5 7.5 0 0 1 12.5 4 7.5 7.5 0 0 1 20 11.5Z"/><path d="M8.3 10.4h8.4M8.3 13.5h5.2"/></svg></button>
+        <button type="button" data-desktop-tab="news" class="desktopRailBtn" aria-label="Novedades" title="Novedades"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.2"/><path d="M4.6 8.4a8.4 8.4 0 0 1 3.8-3.2M15.6 5.2a8.4 8.4 0 0 1 3.8 3.2M19.4 15.6a8.4 8.4 0 0 1-3.8 3.2M8.4 18.8a8.4 8.4 0 0 1-3.8-3.2"/></svg></button>
+        <button type="button" data-desktop-tab="communities" class="desktopRailBtn" aria-label="Comunidades" title="Comunidades"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="16.5" cy="9" r="2.3"/><path d="M3.5 19.2c.5-3.1 2.4-4.8 5.5-4.8s5 1.7 5.5 4.8M14 14.9c2.7-.8 5 .7 5.7 3.4"/></svg></button>
+        <button type="button" data-desktop-tab="calls" class="desktopRailBtn" aria-label="Llamadas" title="Llamadas"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8c.5-.6 1.2-.8 1.9-.5l2.2 1c.7.3 1 .9.8 1.6l-.6 2a2 2 0 0 0 .5 1.9l1.4 1.4a2 2 0 0 0 1.9.5l2-.6c.7-.2 1.3.1 1.6.8l1 2.2c.3.7.1 1.4-.5 1.9l-1.4 1.1c-.6.5-1.4.7-2.2.5-2.6-.7-5.1-2.2-7.2-4.3S4.8 10.1 4.1 7.5c-.2-.8 0-1.6.5-2.2L7 4.8Z"/></svg></button>
+      </div>
+      <div class="desktopRailBottom">
+        <button type="button" id="desktopSettingsButton" class="desktopRailBtn" aria-label="Ajustes" title="Ajustes"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.3a3.7 3.7 0 1 0 0 7.4 3.7 3.7 0 0 0 0-7.4Z"/><path d="m19.3 13.1.1 1.7-2 1.2-1.2 1.9-1.8-.5-1.4.9-.3 2.2H9.3L9 18.3l-1.4-.9-1.8.5-1.2-1.9-2-1.2.1-1.7-1.1-1.4 1.1-1.4-.1-1.7 2-1.2 1.2-1.9 1.8.5 1.4-.9.3-2.2h2.8l.3 2.2 1.4.9 1.8-.5 1.2 1.9 2 1.2-.1 1.7 1.1 1.4-1.1 1.4Z"/></svg></button>
+        <button type="button" data-desktop-tab="profile" class="desktopRailBtn" aria-label="Perfil" title="Perfil"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 19.2c.8-3.2 2.9-4.8 6.5-4.8s5.7 1.6 6.5 4.8"/></svg></button>
+      </div>
+    </nav>
 
     <aside class="sidebar">
 
@@ -1098,23 +1320,23 @@ html.darkTheme .commandModalBox input{background:#111827!important;color:#fff!im
 
   <nav id="mobileBottomNav" class="mobileBottomNav" aria-label="Navegación principal">
     <button type="button" data-main-tab="chats" class="active">
-      <span class="navPill"><span class="navIcon">💬</span><span id="navRequestsBadge" class="navBadge hidden">0</span></span>
+      <span class="navPill"><span class="navIcon"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5 7.3 7.3 0 0 1-3.1-.7L4 20l1.7-4.6A7.3 7.3 0 0 1 5 11.5 7.5 7.5 0 0 1 12.5 4 7.5 7.5 0 0 1 20 11.5Z"/><path d="M8.3 10.4h8.4M8.3 13.5h5.2"/></svg></span><span id="navRequestsBadge" class="navBadge hidden">0</span></span>
       <span class="navLabel">Chats</span>
     </button>
     <button type="button" data-main-tab="news">
-      <span class="navPill"><span class="navIcon">◉</span></span>
+      <span class="navPill"><span class="navIcon"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.2"/><path d="M4.6 8.4a8.4 8.4 0 0 1 3.8-3.2M15.6 5.2a8.4 8.4 0 0 1 3.8 3.2M19.4 15.6a8.4 8.4 0 0 1-3.8 3.2M8.4 18.8a8.4 8.4 0 0 1-3.8-3.2"/></svg></span></span>
       <span class="navLabel">Novedades</span>
     </button>
     <button type="button" data-main-tab="communities">
-      <span class="navPill"><span class="navIcon">👥</span></span>
+      <span class="navPill"><span class="navIcon"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="16.5" cy="9" r="2.3"/><path d="M3.5 19.2c.5-3.1 2.4-4.8 5.5-4.8s5 1.7 5.5 4.8M14 14.9c2.7-.8 5 .7 5.7 3.4"/></svg></span></span>
       <span class="navLabel">Comunidades</span>
     </button>
     <button type="button" data-main-tab="calls">
-      <span class="navPill"><span class="navIcon">☎</span></span>
+      <span class="navPill"><span class="navIcon"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8c.5-.6 1.2-.8 1.9-.5l2.2 1c.7.3 1 .9.8 1.6l-.6 2a2 2 0 0 0 .5 1.9l1.4 1.4a2 2 0 0 0 1.9.5l2-.6c.7-.2 1.3.1 1.6.8l1 2.2c.3.7.1 1.4-.5 1.9l-1.4 1.1c-.6.5-1.4.7-2.2.5-2.6-.7-5.1-2.2-7.2-4.3S4.8 10.1 4.1 7.5c-.2-.8 0-1.6.5-2.2L7 4.8Z"/></svg></span></span>
       <span class="navLabel">Llamadas</span>
     </button>
     <button type="button" data-main-tab="profile">
-      <span class="navPill"><span id="navProfileAvatar" class="navProfileAvatar">👤</span></span>
+      <span class="navPill"><span id="navProfileAvatar" class="navProfileAvatar"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 19.2c.8-3.2 2.9-4.8 6.5-4.8s5.7 1.6 6.5 4.8"/></svg></span></span>
       <span class="navLabel">Tú</span>
     </button>
   </nav>
@@ -1652,6 +1874,9 @@ function switchMainTab(tab){
   document.querySelectorAll("#mobileBottomNav [data-main-tab]").forEach(button => {
     button.classList.toggle("active", button.dataset.mainTab === next);
   });
+  document.querySelectorAll("#desktopRail [data-desktop-tab]").forEach(button => {
+    button.classList.toggle("active", button.dataset.desktopTab === next);
+  });
 
   if(next === "communities") renderGroups();
   if(next === "calls") renderCallsTab();
@@ -1769,6 +1994,11 @@ const layout = $("layout");
 document.querySelectorAll("#mobileBottomNav [data-main-tab]").forEach(button => {
   button.addEventListener("click", () => openTopLevelTab(button.dataset.mainTab));
 });
+
+document.querySelectorAll("#desktopRail [data-desktop-tab]").forEach(button => {
+  button.addEventListener("click", () => openTopLevelTab(button.dataset.desktopTab));
+});
+$("desktopSettingsButton")?.addEventListener("click", () => $("settingsButton")?.click());
 
 $("backButton").addEventListener("click", () => { layout.classList.remove("mobileChat"); switchMainTab("chats"); });
 
