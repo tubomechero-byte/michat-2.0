@@ -1797,6 +1797,39 @@ let relationshipData = { contacts: [], incoming: [], outgoing: [] };
 
 const $ = id => document.getElementById(id);
 
+// Mantiene la sesión en Android incluso si WebView pierde su localStorage.
+function getPersistentChatToken(){
+  let token = "";
+  try { token = localStorage.getItem("chatToken") || ""; } catch {}
+  if(!token && window.MiChatAndroidLocation && typeof window.MiChatAndroidLocation.getStoredToken === "function"){
+    try{
+      token = String(window.MiChatAndroidLocation.getStoredToken() || "");
+      if(token) localStorage.setItem("chatToken", token);
+    }catch{}
+  }
+  return token;
+}
+
+function saveChatToken(token){
+  const safe = String(token || "");
+  if(!safe) return;
+  try{ localStorage.setItem("chatToken", safe); }catch{}
+  try{
+    if(window.MiChatAndroidLocation && typeof window.MiChatAndroidLocation.saveStoredToken === "function"){
+      window.MiChatAndroidLocation.saveStoredToken(safe);
+    }
+  }catch{}
+}
+
+function clearChatToken(){
+  try{ clearChatToken(); }catch{}
+  try{
+    if(window.MiChatAndroidLocation && typeof window.MiChatAndroidLocation.clearStoredToken === "function"){
+      window.MiChatAndroidLocation.clearStoredToken();
+    }
+  }catch{}
+}
+
 const authScreen = $("authScreen");
 const app = $("app");
 const mainLayout = $("layout");
@@ -2450,7 +2483,7 @@ $("resetPasswordButton").onclick = async () => {
     if(!response.ok) throw new Error(data.error || "No se pudo cambiar la contraseña.");
     recoveryResetMessage.style.color = "#087f23";
     recoveryResetMessage.textContent = data.message || "Contraseña cambiada correctamente.";
-    localStorage.removeItem("chatToken");
+    clearChatToken();
     setTimeout(() => {
       closeRecoveryModal();
       authPassword.value = "";
@@ -2578,7 +2611,7 @@ async function tryGlobalUnlock(){
     });
     const data = await response.json().catch(() => ({}));
     if(!response.ok) throw new Error(data.error || "No se pudo acceder.");
-    localStorage.setItem("chatToken", data.token);
+    saveChatToken(data.token);
     myUsername = data.username || myUsername;
     hideAccessBlockedModal();
     await loadIdentity();
@@ -2637,13 +2670,13 @@ async function authenticate(){
 
     if(!response.ok){
       if(data.globalLock){
-        localStorage.removeItem("chatToken");
+        clearChatToken();
         authError.textContent = "";
         showAccessBlockedModal({globalLock:true});
         return;
       }
       if(data.accessBlocked){
-        localStorage.removeItem("chatToken");
+        clearChatToken();
         authError.textContent = "";
         showAccessBlockedModal({message:data.error});
         return;
@@ -2653,10 +2686,7 @@ async function authenticate(){
       );
     }
 
-    localStorage.setItem(
-      "chatToken",
-      data.token
-    );
+    saveChatToken(data.token);
 
     myUsername =
       data.username;
@@ -2682,7 +2712,7 @@ async function authenticate(){
 
 $("accessBlockedLogout")?.addEventListener("click", () => {
   hideAccessBlockedModal();
-  localStorage.removeItem("chatToken");
+  clearChatToken();
   authScreen.style.display = "flex";
 });
 $("globalUnlockButton")?.addEventListener("click", tryGlobalUnlock);
@@ -2692,8 +2722,7 @@ $("globalUnlockPassword")?.addEventListener("keydown", event => {
 
 async function checkSession(){
 
-  const token =
-    localStorage.getItem("chatToken");
+  const token = getPersistentChatToken();
 
   if(!token) return;
 
@@ -2721,7 +2750,7 @@ async function checkSession(){
         showAccessBlockedModal({globalLock:true});
         return;
       }
-      localStorage.removeItem("chatToken");
+      clearChatToken();
       if(data.accessBlocked){
         authError.textContent = "";
         showAccessBlockedModal({message:data.error});
@@ -2797,7 +2826,7 @@ socket.on("authenticated",data => {
 
 socket.on("accountUpdated", data => {
   if(data?.token){
-    localStorage.setItem("chatToken", data.token);
+    saveChatToken(data.token);
   }
   if(data?.username){
     myUsername = data.username;
@@ -2969,7 +2998,7 @@ function markModerationSeen(id){
 }
 
 socket.on("kicked", data => {
-  localStorage.removeItem("chatToken");
+  clearChatToken();
   try { closeModerationModal(); } catch {}
   if(socket.connected) socket.disconnect();
   app.style.display = "none";
@@ -2989,7 +3018,7 @@ socket.on("ipBanned", data => {
 });
 
 socket.on("banned", data => {
-  localStorage.removeItem("chatToken");
+  clearChatToken();
   try { closeModerationModal(); } catch {}
   if(socket.connected) socket.disconnect();
   app.style.display = "none";
@@ -3011,7 +3040,7 @@ socket.on("globalAccessLocked", data => {
 });
 
 socket.on("accessBlocked", data => {
-  localStorage.removeItem("chatToken");
+  clearChatToken();
   try { closeModerationModal(); } catch {}
   if(socket.connected) socket.disconnect();
   app.style.display = "none";
@@ -3022,7 +3051,7 @@ socket.on("accessBlocked", data => {
 
 socket.on("authenticationError",() => {
 
-  localStorage.removeItem("chatToken");
+  clearChatToken();
 
   location.reload();
 });
@@ -6123,7 +6152,7 @@ $("saveAccountUsername").onclick = async () => {
     const data = await response.json();
     if(!response.ok) throw new Error(data.error || "No se pudo cambiar el @usuario.");
 
-    localStorage.setItem("chatToken", data.token);
+    saveChatToken(data.token);
     myUsername = data.username || username.toLowerCase();
     $("accountUsernamePassword").value = "";
     $("accountError").style.color = "#087f23";
@@ -6162,7 +6191,7 @@ $("saveAccountPassword").onclick = async () => {
     const data = await response.json();
     if(!response.ok) throw new Error(data.error || "No se pudo cambiar la contraseña.");
 
-    localStorage.setItem("chatToken", data.token);
+    saveChatToken(data.token);
     $("accountCurrentPassword").value = "";
     $("accountNewPassword").value = "";
     $("accountNewPassword2").value = "";
