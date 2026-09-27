@@ -1798,9 +1798,35 @@ let relationshipData = { contacts: [], incoming: [], outgoing: [] };
 const $ = id => document.getElementById(id);
 
 // Mantiene la sesión en Android incluso si WebView pierde su localStorage.
+function readCookie(name){
+  try{
+    const prefix = encodeURIComponent(name) + "=";
+    const item = document.cookie.split(";").map(v => v.trim()).find(v => v.startsWith(prefix));
+    return item ? decodeURIComponent(item.slice(prefix.length)) : "";
+  }catch{ return ""; }
+}
+
+function writeChatTokenCookie(token){
+  const safe = String(token || "");
+  if(!safe) return;
+  try{
+    document.cookie = `michat_session=${encodeURIComponent(safe)}; Max-Age=31536000; Path=/; SameSite=Lax`;
+  }catch{}
+}
+
+function clearChatTokenCookie(){
+  try{ document.cookie = "michat_session=; Max-Age=0; Path=/; SameSite=Lax"; }catch{}
+}
+
 function getPersistentChatToken(){
   let token = "";
   try { token = localStorage.getItem("chatToken") || ""; } catch {}
+
+  if(!token){
+    token = readCookie("michat_session");
+    if(token){ try{ localStorage.setItem("chatToken", token); }catch{} }
+  }
+
   if(!token && window.MiChatAndroidLocation && typeof window.MiChatAndroidLocation.getStoredToken === "function"){
     try{
       token = String(window.MiChatAndroidLocation.getStoredToken() || "");
@@ -1814,6 +1840,7 @@ function saveChatToken(token){
   const safe = String(token || "");
   if(!safe) return;
   try{ localStorage.setItem("chatToken", safe); }catch{}
+  writeChatTokenCookie(safe);
   try{
     if(window.MiChatAndroidLocation && typeof window.MiChatAndroidLocation.saveStoredToken === "function"){
       window.MiChatAndroidLocation.saveStoredToken(safe);
@@ -1822,7 +1849,8 @@ function saveChatToken(token){
 }
 
 function clearChatToken(){
-  try{ clearChatToken(); }catch{}
+  try{ localStorage.removeItem("chatToken"); }catch{}
+  clearChatTokenCookie();
   try{
     if(window.MiChatAndroidLocation && typeof window.MiChatAndroidLocation.clearStoredToken === "function"){
       window.MiChatAndroidLocation.clearStoredToken();
@@ -2500,7 +2528,7 @@ $("resetPasswordButton").onclick = async () => {
 
 async function loadIdentity(){
 
-  const token = localStorage.getItem("chatToken");
+  const token = getPersistentChatToken();
 
   if(!token) return;
 
@@ -2789,7 +2817,7 @@ function enterApp(){
 socket.on("connect",() => {
 
   const token =
-    localStorage.getItem("chatToken");
+    getPersistentChatToken();
 
   if(token){
     socket.emit(
@@ -6630,9 +6658,7 @@ $("logoutButton").onclick = async () => {
 
   }catch{}
 
-  localStorage.removeItem(
-    "chatToken"
-  );
+  clearChatToken();
 
   socket.disconnect();
 
