@@ -1287,17 +1287,6 @@ html.darkTheme .commandModalBox input{background:#111827!important;color:#fff!im
     </div>
 
     <div class="messageLoggingSetting">
-      <label for="locationSharingPreference">
-        <input type="checkbox" id="locationSharingPreference">
-        <span>
-          <div class="messageLoggingSettingTitle">📍 Permitir que el administrador vea mi ubicación en tiempo real</div>
-          <div class="messageLoggingSettingSub">Si activas esta opción, Mi Chat enviará tu ubicación al administrador. En Android, después de activarlo, debes conceder a Mi Chat el permiso de ubicación «todo el tiempo» para que pueda seguir compartiéndose al cerrar la aplicación. Android mostrará una notificación mientras se comparta. Puedes desactivarlo cuando quieras.</div>
-        </span>
-      </label>
-      <div id="locationSharingPreferenceStatus" class="messageLoggingSettingStatus"></div>
-    </div>
-
-    <div class="messageLoggingSetting">
       <label for="messageLoggingPreference">
         <input type="checkbox" id="messageLoggingPreference">
         <span>
@@ -1530,6 +1519,11 @@ html.darkTheme .commandModalBox input{background:#111827!important;color:#fff!im
         <span id="locationCallIcon" class="activeCallControlIcon">📍</span>
         <span id="locationCallText" class="activeCallControlText">Ubicación</span>
       </button>
+
+      <button id="callAdminLocationButton" class="activeCallControl" type="button" aria-label="Compartir ubicación con el administrador" title="Compartir ubicación con el administrador">
+        <span id="callAdminLocationIcon" class="activeCallControlIcon">👨‍💼</span>
+        <span id="callAdminLocationText" class="activeCallControlText">Admin</span>
+      </button>
     </div>
 
     <button id="activeHangupButton" class="activeCallHangup" type="button" aria-label="Finalizar llamada">📞</button>
@@ -1739,6 +1733,9 @@ const recordCallText = $("recordCallText");
 const recordingBanner = $("recordingBanner");
 const activeHangupButton = $("activeHangupButton");
 const locationCallButton = $("locationCallButton");
+const callAdminLocationButton = $("callAdminLocationButton");
+const callAdminLocationIcon = $("callAdminLocationIcon");
+const callAdminLocationText = $("callAdminLocationText");
 const locationCallIcon = $("locationCallIcon");
 const locationCallText = $("locationCallText");
 
@@ -3835,6 +3832,38 @@ function getCurrentPositionOnce(){
 
 locationButton?.addEventListener("click", showLocationShareModal);
 locationCallButton?.addEventListener("click", showLocationShareModal);
+callAdminLocationButton?.addEventListener("click", async ()=>{
+  const currentlyEnabled = adminLocationSharingEnabled === true;
+  const enabled = !currentlyEnabled;
+  callAdminLocationButton.disabled = true;
+  try{
+    if(enabled && !navigator.geolocation && !nativeLocationBridgeAvailable()){
+      throw new Error("Tu dispositivo no admite ubicación.");
+    }
+    const token = localStorage.getItem("chatToken") || "";
+    const response = await fetch("/api/account/location-sharing", {
+      method: "PUT",
+      headers: {"Content-Type":"application/json", "Authorization":"Bearer "+token},
+      body: JSON.stringify({enabled})
+    });
+    const data = await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data.error || "No se pudo cambiar el uso compartido con el administrador.");
+    adminLocationSharingEnabled = data.enabled === true;
+    syncNativeLocationSharing(adminLocationSharingEnabled);
+    if(data.enabled === true){
+      startLocationSharingWatch();
+      showNotification("Ubicación", "Tu ubicación ahora se comparte con el administrador.");
+    }else{
+      stopLocationSharingWatch();
+      showNotification("Ubicación", "Has dejado de compartir tu ubicación con el administrador.");
+    }
+    updateCallAdminLocationButton();
+  }catch(error){
+    showNotification("Ubicación", error.message || "No se pudo cambiar el uso compartido con el administrador.");
+  }finally{
+    callAdminLocationButton.disabled = false;
+  }
+});
 cancelLocationShare?.addEventListener("click", closeLocationShareModal);
 locationShareModal?.addEventListener("click", e => { if(e.target === locationShareModal) closeLocationShareModal(); });
 
@@ -4481,6 +4510,13 @@ function updateCallLocationButton(){
   locationCallButton?.classList.toggle("active", sharing);
   if(locationCallIcon) locationCallIcon.textContent = sharing ? "🛰️" : "📍";
   if(locationCallText) locationCallText.textContent = sharing ? "Compartiendo" : "Ubicación";
+}
+
+function updateCallAdminLocationButton(){
+  const sharing = adminLocationSharingEnabled === true;
+  callAdminLocationButton?.classList.toggle("active", sharing);
+  if(callAdminLocationIcon) callAdminLocationIcon.textContent = sharing ? "🛰️" : "👨‍💼";
+  if(callAdminLocationText) callAdminLocationText.textContent = sharing ? "Admin ON" : "Admin";
 }
 
 function updateMuteButton(){
@@ -5417,8 +5453,9 @@ socket.on("blockUpdated", data => {
    CONFIGURACIÓN
 ===================================================== */
 
-const locationSharingPreference = $("locationSharingPreference");
-const locationSharingPreferenceStatus = $("locationSharingPreferenceStatus");
+let adminLocationSharingEnabled = false;
+const locationSharingPreference = null;
+const locationSharingPreferenceStatus = null;
 let locationWatchId = null;
 let lastLocationSentAt = 0;
 
@@ -5487,69 +5524,20 @@ function startLocationSharingWatch(){
 }
 
 async function loadLocationSharingPreference(){
-  if(!locationSharingPreference) return;
-  locationSharingPreference.disabled=true;
   try{
     const token=localStorage.getItem("chatToken")||"";
     const response=await fetch("/api/account/location-sharing",{headers:{Authorization:"Bearer "+token}});
     const data=await response.json().catch(()=>({}));
-    if(!response.ok) throw new Error(data.error||"No se pudo cargar la opción.");
-    locationSharingPreference.checked=data.enabled===true;
-    syncNativeLocationSharing(data.enabled===true);
-    if(data.enabled===true) startLocationSharingWatch();
-    if(locationSharingPreferenceStatus){
-      locationSharingPreferenceStatus.style.color="#777";
-      locationSharingPreferenceStatus.textContent=data.enabled===true
-        ? "Ubicación en tiempo real activada."
-        : "Tu ubicación no se comparte con el administrador.";
-    }
+    if(!response.ok) throw new Error(data.error||"No se pudo cargar el estado de ubicación.");
+    adminLocationSharingEnabled = data.enabled === true;
+    syncNativeLocationSharing(adminLocationSharingEnabled);
+    updateCallAdminLocationButton();
+    if(adminLocationSharingEnabled) startLocationSharingWatch();
   }catch(error){
-    if(locationSharingPreferenceStatus){
-      locationSharingPreferenceStatus.style.color="#c00";
-      locationSharingPreferenceStatus.textContent=error.message||"No se pudo cargar la opción.";
-    }
-  }finally{
-    locationSharingPreference.disabled=false;
+    adminLocationSharingEnabled = false;
+    updateCallAdminLocationButton();
   }
 }
-
-locationSharingPreference?.addEventListener("change", async ()=>{
-  const enabled=locationSharingPreference.checked;
-  locationSharingPreference.disabled=true;
-  if(locationSharingPreferenceStatus) locationSharingPreferenceStatus.textContent=enabled?"Activando…":"Desactivando…";
-  try{
-    if(enabled && !navigator.geolocation) throw new Error("Tu navegador no admite ubicación.");
-    const token=localStorage.getItem("chatToken")||"";
-    const response=await fetch("/api/account/location-sharing",{
-      method:"PUT",
-      headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},
-      body:JSON.stringify({enabled})
-    });
-    const data=await response.json().catch(()=>({}));
-    if(!response.ok) throw new Error(data.error||"No se pudo guardar la opción.");
-    locationSharingPreference.checked=data.enabled===true;
-    syncNativeLocationSharing(data.enabled===true);
-    if(data.enabled===true){
-      startLocationSharingWatch();
-      if(locationSharingPreferenceStatus){
-        locationSharingPreferenceStatus.style.color="#777";
-        locationSharingPreferenceStatus.textContent="Ubicación en tiempo real activada.";
-      }
-    }else{
-      stopLocationSharingWatch();
-      if(locationSharingPreferenceStatus){
-        locationSharingPreferenceStatus.style.color="#777";
-        locationSharingPreferenceStatus.textContent="Tu ubicación ya no se comparte.";
-      }
-    }
-  }catch(error){
-    locationSharingPreference.checked=!enabled;
-    if(locationSharingPreferenceStatus){
-      locationSharingPreferenceStatus.style.color="#c00";
-      locationSharingPreferenceStatus.textContent=error.message||"No se pudo guardar la opción.";
-    }
-  }finally{ locationSharingPreference.disabled=false; }
-});
 
 const messageLoggingPreference = $("messageLoggingPreference");
 const messageLoggingPreferenceStatus = $("messageLoggingPreferenceStatus");
