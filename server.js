@@ -338,54 +338,6 @@ function saveMessages(v) {
   write(MESSAGES_FILE, v);
 }
 
-// Filtro básico de moderación automática para mensajes de texto.
-// Se aplica en servidor para que el mensaje no llegue ni se persista
-// aunque el cliente intente saltarse el filtro.
-const AUTO_MODERATION_TERMS = [
-  "puto", "puta", "putas", "putos", "mierda", "joder", "jodete",
-  "cabron", "cabrona", "cabrones", "gilipollas", "imbecil", "idiota",
-  "coño", "cono", "follar", "follando", "follame", "follarte",
-  "polla", "pollas", "pene", "vagina", "tetas", "tetitas", "culo",
-  "porno", "porn", "xxx", "nudes", "desnudos", "desnuda", "masturbar",
-  "masturbacion", "masturbación", "blowjob", "dick", "fuck", "bitch",
-  "nigger", "nigga", "whore"
-];
-
-function moderationNormalize(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[0@]/g, "o")
-    .replace(/[1!|]/g, "i")
-    .replace(/[3]/g, "e")
-    .replace(/[4@]/g, "a")
-    .replace(/[5$]/g, "s")
-    .replace(/[7]/g, "t")
-    .replace(/[\s._\-]+/g, " ")
-    .replace(/[^a-z0-9áéíóúüñ ]+/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function findInappropriateTerm(value) {
-  const text = moderationNormalize(value);
-  if (!text) return null;
-
-  for (const term of AUTO_MODERATION_TERMS) {
-    const needle = moderationNormalize(term);
-    if (!needle) continue;
-    const pattern = new RegExp(`(?:^|\\s)${needle.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}(?=\\s|$)`, "i");
-    if (pattern.test(text)) return term;
-  }
-
-  return null;
-}
-
-function isInappropriateMessage(text, fileName = "") {
-  return findInappropriateTerm(text) || findInappropriateTerm(fileName);
-}
-
 function sessions() {
   return read(SESSIONS_FILE, {});
 }
@@ -1703,6 +1655,7 @@ app.use(express.json({ limit: "12mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 const online = new Map();
+const activeLocationShares = new Map();
 
 // =====================================================
 // GRABACIONES DE LLAMADAS (VISIBLES Y CON CONSENTIMIENTO)
@@ -6675,15 +6628,6 @@ io.on("connection", socket => {
       return socket.emit("messageError", "El archivo no es válido, no está permitido o supera el límite de 7 MB.");
     }
 
-    const blockedTerm = isInappropriateMessage(text, hasMedia ? mediaName : "");
-    if (blockedTerm) {
-      addAdminActivity(`Mensaje bloqueado automáticamente por moderación: @${me} -> grupo «${group.name}».`);
-      return socket.emit(
-        "messageError",
-        "Mensaje eliminado por moderación automática. Revisa el contenido e inténtalo de nuevo."
-      );
-    }
-
     const message = {
       id: Date.now() + "-" + crypto.randomBytes(5).toString("hex"),
       from: norm(me),
@@ -6969,6 +6913,12 @@ io.on("connection", socket => {
         ? String(media.type || "file").slice(0, 30)
         : "";
 
+      const location = data?.location && typeof data.location === "object" ? data.location : null;
+      const locationLatitude = location ? Number(location.latitude) : NaN;
+      const locationLongitude = location ? Number(location.longitude) : NaN;
+      const locationAccuracy = location ? Number(location.accuracy) : NaN;
+      const validLocation = Boolean(location && (location.type === "current") && Number.isFinite(locationLatitude) && locationLatitude >= -90 && locationLatitude <= 90 && Number.isFinite(locationLongitude) && locationLongitude >= -180 && locationLongitude <= 180);
+
       const allowedMedia = !mediaMime ||
         mediaMime.startsWith("image/") ||
         mediaMime.startsWith("video/") ||
@@ -6995,7 +6945,7 @@ io.on("connection", socket => {
       if (
         !me ||
         !to ||
-        (!text && !hasMedia) ||
+        (!text && !hasMedia && !validLocation) ||
         text.length > 5000
       ) {
         return;
@@ -7005,15 +6955,6 @@ io.on("connection", socket => {
         return socket.emit(
           "messageError",
           "El archivo no es válido, no está permitido o supera el límite de 7 MB."
-        );
-      }
-
-      const blockedTerm = isInappropriateMessage(text, hasMedia ? mediaName : "");
-      if (blockedTerm) {
-        addAdminActivity(`Mensaje bloqueado automáticamente por moderación: @${me} -> @${to}.`);
-        return socket.emit(
-          "messageError",
-          "Mensaje eliminado por moderación automática. Revisa el contenido e inténtalo de nuevo."
         );
       }
 
@@ -7088,6 +7029,13 @@ io.on("connection", socket => {
           ? mediaMime
           : "",
 
+        location: validLocation ? {
+          type: "current",
+          latitude: locationLatitude,
+          longitude: locationLongitude,
+          accuracy: Number.isFinite(locationAccuracy) && locationAccuracy >= 0 ? Math.min(locationAccuracy, 100000) : null
+        } : null,
+
         time:
           new Date().toISOString(),
 
@@ -7139,10 +7087,11 @@ io.on("connection", socket => {
           from:
             msg.fromDisplay,
           message:
-            msg.message ||
+            msg.location ? "📍 Te ha enviado su ubicación" :
+            (msg.message ||
             (msg.fileName
               ? "📎 " + msg.fileName
-              : "Archivo multimedia"),
+              : "Archivo multimedia")),
           username:
             msg.from
         }
@@ -7668,6 +7617,92 @@ io.on("connection", socket => {
     }
   );
 
+  socket.on("startLocationShare", data => {
+    const me = norm(online.get(socket.id) || "");
+    const to = norm(data?.to || "");
+    const shareId = String(data?.shareId || "").slice(0, 120);
+    const latitude = Number(data?.latitude);
+    const longitude = Number(data?.longitude);
+    const accuracy = Number(data?.accuracy);
+    const durationMinutes = Math.max(1, Math.min(480, Number(data?.durationMinutes || 60)));
+    if(!me || !to || !shareId || to === me || !getUser(to) || !areContacts(me, to) || isEitherBlocked(me, to)) return socket.emit("messageError", "No puedes compartir la ubicación con este usuario.");
+    if(!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) return socket.emit("messageError", "No se pudo obtener una ubicación válida.");
+
+    const existing = activeLocationShares.get(shareId);
+    if(existing) return socket.emit("messageError", "Ese enlace de ubicación ya está activo.");
+
+    const expiresAt = Date.now() + durationMinutes * 60 * 1000;
+    const msg = {
+      id: Date.now() + "-" + crypto.randomBytes(5).toString("hex"),
+      from: me,
+      fromDisplay: getUser(me)?.displayName || me,
+      to,
+      toDisplay: getUser(to)?.displayName || to,
+      message: "",
+      type: "location",
+      media: "",
+      fileName: "",
+      mimeType: "",
+      location: { type:"live", shareId, latitude, longitude, accuracy:Number.isFinite(accuracy) && accuracy >= 0 ? Math.min(accuracy,100000) : null, active:true, expiresAt },
+      time: new Date().toISOString(),
+      read: false,
+      deletedFor: []
+    };
+    const list = messages();
+    list.push(msg);
+    if(list.length > 50000) list.splice(0, list.length - 50000);
+    saveMessages(list);
+
+    const share = { shareId, sender:me, recipient:to, socketId:socket.id, expiresAt, latitude, longitude, accuracy:msg.location.accuracy };
+    activeLocationShares.set(shareId, share);
+    setTimeout(() => {
+      const current = activeLocationShares.get(shareId);
+      if(!current || current.expiresAt > Date.now()) return;
+      activeLocationShares.delete(shareId);
+      const sid = socketIdFor(current.recipient);
+      if(sid) io.to(sid).emit("locationShareStopped", {shareId, latitude:current.latitude, longitude:current.longitude, accuracy:current.accuracy, reason:"expired"});
+      const senderSid = socketIdFor(current.sender);
+      if(senderSid) io.to(senderSid).emit("locationShareStopped", {shareId, latitude:current.latitude, longitude:current.longitude, accuracy:current.accuracy, reason:"expired"});
+    }, durationMinutes * 60 * 1000 + 100);
+
+    const targetSid = socketIdFor(to);
+    if(targetSid) io.to(targetSid).emit("privateMessage", msg);
+    socket.emit("messageSent", msg);
+    addAdminMessageActivity(me, `${msg.fromDisplay} ha compartido su ubicación en tiempo real con ${msg.toDisplay}.`);
+    sendPushToUser(to, { type:"message", from:msg.fromDisplay, message:"📍 Te ha enviado su ubicación en tiempo real", username:msg.from });
+  });
+
+  socket.on("updateLocationShare", data => {
+    const me = norm(online.get(socket.id) || "");
+    const shareId = String(data?.shareId || "");
+    const share = activeLocationShares.get(shareId);
+    const latitude = Number(data?.latitude);
+    const longitude = Number(data?.longitude);
+    const accuracy = Number(data?.accuracy);
+    if(!me || !share || share.sender !== me || share.socketId !== socket.id) return;
+    if(share.expiresAt <= Date.now()){
+      activeLocationShares.delete(shareId);
+      return socket.emit("locationShareStopped", {shareId, reason:"expired"});
+    }
+    if(!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) return;
+    share.latitude = latitude; share.longitude = longitude; share.accuracy = Number.isFinite(accuracy) && accuracy >= 0 ? Math.min(accuracy,100000) : null;
+    const targetSid = socketIdFor(share.recipient);
+    if(targetSid) io.to(targetSid).emit("locationShareUpdate", {shareId, latitude:share.latitude, longitude:share.longitude, accuracy:share.accuracy, updatedAt:Date.now()});
+  });
+
+  socket.on("stopLocationShare", data => {
+    const me = norm(online.get(socket.id) || "");
+    const shareId = String(data?.shareId || "");
+    const share = activeLocationShares.get(shareId);
+    if(!me || !share || share.sender !== me || share.socketId !== socket.id) return;
+    activeLocationShares.delete(shareId);
+    const payload = {shareId, latitude:share.latitude, longitude:share.longitude, accuracy:share.accuracy, reason:"stopped"};
+    const targetSid = socketIdFor(share.recipient);
+    if(targetSid) io.to(targetSid).emit("locationShareStopped", payload);
+    socket.emit("locationShareStopped", payload);
+    addAdminMessageActivity(me, `${getUser(me)?.displayName || me} ha detenido la ubicación en tiempo real para @${share.recipient}.`);
+  });
+
   socket.on(
     "recordingStarted",
     ({ to }) => {
@@ -7726,6 +7761,13 @@ io.on("connection", socket => {
     () => {
       const username = online.get(socket.id);
       if (username) {
+        for(const [shareId, share] of activeLocationShares.entries()){
+          if(share.socketId === socket.id){
+            activeLocationShares.delete(shareId);
+            const targetSid = socketIdFor(share.recipient);
+            if(targetSid) io.to(targetSid).emit("locationShareStopped", {shareId, latitude:share.latitude, longitude:share.longitude, accuracy:share.accuracy, reason:"disconnected"});
+          }
+        }
         removeUserLocation(username);
         addAdminActivity(
           `@${username} se ha desconectado.`
