@@ -905,6 +905,12 @@ html,body{background:#dfe5e7}
 .desktopRailBtn.active{background:#d9fdd3;color:#008069}
 .desktopRailBtn:active{transform:scale(.97)}
 
+.waIcon{width:25px;height:25px;display:block;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.desktopRailBtn .waIcon{width:24px;height:24px}
+.mobileBottomNav button .waIcon{width:23px;height:23px}
+.mobileBottomNav .navProfileAvatar .waIcon{width:23px;height:23px}
+
+
 /* panel lateral de chats */
 .sidebar{width:410px;min-width:410px;background:var(--wa-panel);border-right:1px solid var(--wa-border)}
 .sidebarHeader{min-height:68px;padding:10px 16px;background:var(--wa-panel);color:var(--wa-text);border-bottom:1px solid var(--wa-border)}
@@ -1140,14 +1146,14 @@ html.darkTheme .mobileBottomNav button.active .navPill{background:#0b4f47}
 
     <nav id="desktopRail" class="desktopRail" aria-label="Navegación de escritorio">
       <div class="desktopRailTop">
-        <button type="button" data-desktop-tab="chats" class="desktopRailBtn active" aria-label="Chats" title="Chats">💬</button>
-        <button type="button" data-desktop-tab="news" class="desktopRailBtn" aria-label="Novedades" title="Novedades">◉</button>
-        <button type="button" data-desktop-tab="communities" class="desktopRailBtn" aria-label="Comunidades" title="Comunidades">👥</button>
-        <button type="button" data-desktop-tab="calls" class="desktopRailBtn" aria-label="Llamadas" title="Llamadas">☎</button>
+        <button type="button" data-desktop-tab="chats" class="desktopRailBtn active" aria-label="Chats" title="Chats"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5 7.3 7.3 0 0 1-3.1-.7L4 20l1.7-4.6A7.3 7.3 0 0 1 5 11.5 7.5 7.5 0 0 1 12.5 4 7.5 7.5 0 0 1 20 11.5Z"/><path d="M8.3 10.4h8.4M8.3 13.5h5.2"/></svg></button>
+        <button type="button" data-desktop-tab="news" class="desktopRailBtn" aria-label="Novedades" title="Novedades"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.2"/><path d="M4.6 8.4a8.4 8.4 0 0 1 3.8-3.2M15.6 5.2a8.4 8.4 0 0 1 3.8 3.2M19.4 15.6a8.4 8.4 0 0 1-3.8 3.2M8.4 18.8a8.4 8.4 0 0 1-3.8-3.2"/></svg></button>
+        <button type="button" data-desktop-tab="communities" class="desktopRailBtn" aria-label="Comunidades" title="Comunidades"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="16.5" cy="9" r="2.3"/><path d="M3.5 19.2c.5-3.1 2.4-4.8 5.5-4.8s5 1.7 5.5 4.8M14 14.9c2.7-.8 5 .7 5.7 3.4"/></svg></button>
+        <button type="button" data-desktop-tab="calls" class="desktopRailBtn" aria-label="Llamadas" title="Llamadas"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8c.5-.6 1.2-.8 1.9-.5l2.2 1c.7.3 1 .9.8 1.6l-.6 2a2 2 0 0 0 .5 1.9l1.4 1.4a2 2 0 0 0 1.9.5l2-.6c.7-.2 1.3.1 1.6.8l1 2.2c.3.7.1 1.4-.5 1.9l-1.4 1.1c-.6.5-1.4.7-2.2.5-2.6-.7-5.1-2.2-7.2-4.3S4.8 10.1 4.1 7.5c-.2-.8 0-1.6.5-2.2L7 4.8Z"/></svg></button>
       </div>
       <div class="desktopRailBottom">
-        <button type="button" id="desktopSettingsButton" class="desktopRailBtn" aria-label="Ajustes" title="Ajustes">⚙️</button>
-        <button type="button" data-desktop-tab="profile" class="desktopRailBtn" aria-label="Perfil" title="Perfil">👤</button>
+        <button type="button" id="desktopSettingsButton" class="desktopRailBtn" aria-label="Ajustes" title="Ajustes"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.3a3.7 3.7 0 1 0 0 7.4 3.7 3.7 0 0 0 0-7.4Z"/><path d="m19.3 13.1.1 1.7-2 1.2-1.2 1.9-1.8-.5-1.4.9-.3 2.2H9.3L9 18.3l-1.4-.9-1.8.5-1.2-1.9-2-1.2.1-1.7-1.1-1.4 1.1-1.4-.1-1.7 2-1.2 1.2-1.9 1.8.5 1.4-.9.3-2.2h2.8l.3 2.2 1.4.9 1.8-.5 1.2 1.9 2 1.2-.1 1.7 1.1 1.4-1.1 1.4Z"/></svg></button>
+        <button type="button" data-desktop-tab="profile" class="desktopRailBtn" aria-label="Perfil" title="Perfil"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 19.2c.8-3.2 2.9-4.8 6.5-4.8s5.7 1.6 6.5 4.8"/></svg></button>
       </div>
     </nav>
 
@@ -1314,23 +1320,23 @@ html.darkTheme .mobileBottomNav button.active .navPill{background:#0b4f47}
 
   <nav id="mobileBottomNav" class="mobileBottomNav" aria-label="Navegación principal">
     <button type="button" data-main-tab="chats" class="active">
-      <span class="navPill"><span class="navIcon">💬</span><span id="navRequestsBadge" class="navBadge hidden">0</span></span>
+      <span class="navPill"><span class="navIcon"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5 7.3 7.3 0 0 1-3.1-.7L4 20l1.7-4.6A7.3 7.3 0 0 1 5 11.5 7.5 7.5 0 0 1 12.5 4 7.5 7.5 0 0 1 20 11.5Z"/><path d="M8.3 10.4h8.4M8.3 13.5h5.2"/></svg></span><span id="navRequestsBadge" class="navBadge hidden">0</span></span>
       <span class="navLabel">Chats</span>
     </button>
     <button type="button" data-main-tab="news">
-      <span class="navPill"><span class="navIcon">◉</span></span>
+      <span class="navPill"><span class="navIcon"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.2"/><path d="M4.6 8.4a8.4 8.4 0 0 1 3.8-3.2M15.6 5.2a8.4 8.4 0 0 1 3.8 3.2M19.4 15.6a8.4 8.4 0 0 1-3.8 3.2M8.4 18.8a8.4 8.4 0 0 1-3.8-3.2"/></svg></span></span>
       <span class="navLabel">Novedades</span>
     </button>
     <button type="button" data-main-tab="communities">
-      <span class="navPill"><span class="navIcon">👥</span></span>
+      <span class="navPill"><span class="navIcon"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="16.5" cy="9" r="2.3"/><path d="M3.5 19.2c.5-3.1 2.4-4.8 5.5-4.8s5 1.7 5.5 4.8M14 14.9c2.7-.8 5 .7 5.7 3.4"/></svg></span></span>
       <span class="navLabel">Comunidades</span>
     </button>
     <button type="button" data-main-tab="calls">
-      <span class="navPill"><span class="navIcon">☎</span></span>
+      <span class="navPill"><span class="navIcon"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8c.5-.6 1.2-.8 1.9-.5l2.2 1c.7.3 1 .9.8 1.6l-.6 2a2 2 0 0 0 .5 1.9l1.4 1.4a2 2 0 0 0 1.9.5l2-.6c.7-.2 1.3.1 1.6.8l1 2.2c.3.7.1 1.4-.5 1.9l-1.4 1.1c-.6.5-1.4.7-2.2.5-2.6-.7-5.1-2.2-7.2-4.3S4.8 10.1 4.1 7.5c-.2-.8 0-1.6.5-2.2L7 4.8Z"/></svg></span></span>
       <span class="navLabel">Llamadas</span>
     </button>
     <button type="button" data-main-tab="profile">
-      <span class="navPill"><span id="navProfileAvatar" class="navProfileAvatar">👤</span></span>
+      <span class="navPill"><span id="navProfileAvatar" class="navProfileAvatar"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 19.2c.8-3.2 2.9-4.8 6.5-4.8s5.7 1.6 6.5 4.8"/></svg></span></span>
       <span class="navLabel">Tú</span>
     </button>
   </nav>
