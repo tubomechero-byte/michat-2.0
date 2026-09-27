@@ -1521,25 +1521,42 @@ function verifySessionToken(token) {
 }
 
 function newSession(username) {
-  return createSessionToken(username);
+  // Sesiones persistentes: el token es opaco y se guarda en sessions.json,
+  // que forma parte de la persistencia de Supabase. Así la sesión no depende
+  // de que Render conserve el sistema de archivos local ni de un secreto
+  // firmado que pueda cambiar entre despliegues.
+  const token = crypto.randomBytes(48).toString("hex");
+  const now = Date.now();
+  const data = sessions();
+  data[token] = {
+    username: norm(username),
+    createdAt: now,
+    expiresAt: now + 31536000000
+  };
+  saveSessions(data);
+  return token;
 }
 
 function sessionUserRaw(token) {
   if (!token) return null;
 
-  // Tokens nuevos: no dependen de sessions.json.
-  const signed = verifySessionToken(token);
+  // Sesiones persistentes nuevas almacenadas en sessions.json.
+  const stored = sessions()[token];
+  if (stored) {
+    if (stored.expiresAt && Number(stored.expiresAt) <= Date.now()) {
+      deleteSession(token);
+      return null;
+    }
+    return getUser(stored.username);
+  }
 
+  // Compatibilidad con tokens firmados de versiones anteriores.
+  const signed = verifySessionToken(token);
   if (signed) {
     return getUser(signed.username);
   }
 
-  // Compatibilidad con sesiones antiguas ya creadas.
-  const legacy = sessions()[token];
-
-  if (!legacy) return null;
-
-  return getUser(legacy.username);
+  return null;
 }
 
 function sessionUser(token) {
