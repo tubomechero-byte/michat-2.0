@@ -163,6 +163,16 @@ button,input,textarea{font:inherit}
 .mediaName{font-size:12px;color:#555;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .send{width:50px;height:50px;border:0;border-radius:50%;background:#128c7e;color:#fff;cursor:pointer;font-size:20px;flex-shrink:0}
 .send:disabled{opacity:.5;cursor:not-allowed}
+.locationBtn{width:50px;height:50px;border:0;border-radius:50%;background:#fff;color:#128c7e;cursor:pointer;font-size:21px;flex-shrink:0}
+.locationBtn:disabled{opacity:.5;cursor:not-allowed}
+.locationCard{min-width:230px;max-width:320px;border-radius:14px;overflow:hidden;background:#f6f7f8;border:1px solid rgba(0,0,0,.08)}
+.locationCardHead{display:flex;align-items:center;gap:10px;padding:12px 14px;font-weight:700}
+.locationPin{font-size:26px}
+.locationCardBody{padding:0 14px 12px;color:#555;font-size:13px;line-height:1.4}
+.locationCardActions{display:flex;gap:8px;padding:0 14px 14px}
+.locationCardActions a,.locationCardActions button{flex:1;border:0;border-radius:9px;padding:9px;text-align:center;text-decoration:none;background:#128c7e;color:#fff;cursor:pointer;font-size:13px}
+.locationCardActions .secondary{background:#e7e7e7;color:#222}
+.locationLiveStatus{font-size:12px;margin-top:3px;color:#128c7e;font-weight:700}
 .chatMedia{max-width:min(320px,70vw);border-radius:12px;margin:5px 0;display:block}
 .chatVideo{max-height:280px;background:#000}
 .chatAudio{width:min(320px,70vw);margin:5px 0}
@@ -357,8 +367,12 @@ button,input,textarea{font:inherit}
 .activeCallControls{
   display:flex;
   justify-content:center;
-  gap:22px;
+  gap:14px;
   margin-bottom:28px;
+  flex-wrap:wrap;
+  max-width:390px;
+  margin-left:auto;
+  margin-right:auto;
 }
 
 .activeCallControl{
@@ -431,6 +445,7 @@ button,input,textarea{font:inherit}
   .activeCallAvatar{width:104px;height:104px}
   .activeCallName{font-size:24px}
   .activeCallControl{width:74px;height:74px}
+  .activeCallControls{gap:10px;max-width:340px}
   .activeCallHangup{width:76px;height:76px}
 }
 
@@ -1052,6 +1067,7 @@ html.darkTheme .commandModalBox input{background:#111827!important;color:#fff!im
 
       <div class="messageInput">
         <button id="attachButton" class="attachBtn" type="button" disabled title="Enviar archivo">📎</button>
+        <button id="locationButton" class="locationBtn" type="button" disabled title="Compartir ubicación">📍</button>
         <input id="fileInput" type="file" hidden accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx">
         <span id="mediaName" class="mediaName" style="display:none"></span>
         <input id="messageInput" placeholder="Escribe un mensaje..." autocomplete="off" disabled maxlength="5000">
@@ -1126,6 +1142,22 @@ html.darkTheme .commandModalBox input{background:#111827!important;color:#fff!im
       <button id="cancelGroupAdd" class="muted" type="button">Cancelar</button>
       <button id="confirmGroupAdd" class="primary" type="button">Añadir al grupo</button>
     </div>
+  </div>
+</div>
+
+<!-- COMPARTIR UBICACIÓN -->
+<div id="locationShareModal" class="modal">
+  <div class="modalBox">
+    <h2>📍 Compartir ubicación</h2>
+    <p style="color:#666;line-height:1.45">Elige qué quieres enviar a la persona de este chat.</p>
+    <div class="modalRow">
+      <button id="sendCurrentLocationButton" class="primary" type="button">📍 Ubicación actual</button>
+      <button id="startLiveLocationButton" class="primary" type="button">🛰️ En tiempo real</button>
+    </div>
+    <div class="modalRow">
+      <button id="cancelLocationShare" class="muted" type="button">Cancelar</button>
+    </div>
+    <div id="locationShareError" class="modalError"></div>
   </div>
 </div>
 
@@ -1493,6 +1525,11 @@ html.darkTheme .commandModalBox input{background:#111827!important;color:#fff!im
         <span id="speakerCallIcon" class="activeCallControlIcon">🔊</span>
         <span id="speakerCallText" class="activeCallControlText">Altavoz</span>
       </button>
+
+      <button id="locationCallButton" class="activeCallControl" type="button" aria-label="Compartir ubicación durante la llamada" title="Compartir ubicación">
+        <span id="locationCallIcon" class="activeCallControlIcon">📍</span>
+        <span id="locationCallText" class="activeCallControlText">Ubicación</span>
+      </button>
     </div>
 
     <button id="activeHangupButton" class="activeCallHangup" type="button" aria-label="Finalizar llamada">📞</button>
@@ -1519,6 +1556,9 @@ let authMode = "login";
 let unread = {};
 let conversations = {};
 let pendingContactUser = null;
+let locationLiveWatchId = null;
+let activeOutgoingLocationShareId = "";
+const activeIncomingLocationShares = new Map();
 let relationshipData = { contacts: [], incoming: [], outgoing: [] };
 
 const $ = id => document.getElementById(id);
@@ -1650,6 +1690,7 @@ const messagesContainer = $("messages");
 const messageInput = $("messageInput");
 const sendButton = $("sendButton");
 const attachButton = $("attachButton");
+const locationButton = $("locationButton");
 const fileInput = $("fileInput");
 const mediaName = $("mediaName");
 let pendingMedia = null;
@@ -1697,6 +1738,9 @@ const recordCallIcon = $("recordCallIcon");
 const recordCallText = $("recordCallText");
 const recordingBanner = $("recordingBanner");
 const activeHangupButton = $("activeHangupButton");
+const locationCallButton = $("locationCallButton");
+const locationCallIcon = $("locationCallIcon");
+const locationCallText = $("locationCallText");
 
 let activeCallTimerInterval = null;
 let activeCallStartTime = null;
@@ -3409,6 +3453,7 @@ function openChat(
     messageInput.disabled = true;
     sendButton.disabled = true;
     attachButton.disabled = true;
+    locationButton.disabled = true;
     messagesContainer.innerHTML = `<div class="empty">Para poder hablar con ${esc(displayName || username)}, primero debes enviar una solicitud y esperar a que la acepte.</div>`;
     chatTitle.textContent = displayName || username;
     chatSubtitle.textContent = "🔒 Solicitud de contacto necesaria";
@@ -3450,6 +3495,7 @@ function openChat(
   messageInput.disabled = false;
   sendButton.disabled = false;
   attachButton.disabled = false;
+  locationButton.disabled = false;
 
   messagesContainer.innerHTML =
     `<div class="empty">
@@ -3591,6 +3637,36 @@ function addMessage(message){
     </div>
   `;
 
+  if(!message.deleted && message.location){
+    const loc = message.location;
+    const lat = Number(loc.latitude);
+    const lng = Number(loc.longitude);
+    if(Number.isFinite(lat) && Number.isFinite(lng)){
+      const card = document.createElement("div");
+      card.className = "locationCard";
+      const mapsUrl = `https://www.google.com/maps?q=${encodeURIComponent(lat + "," + lng)}`;
+      const accuracy = Number.isFinite(Number(loc.accuracy)) ? `Precisión aproximada: ${Math.round(Number(loc.accuracy))} m` : "Ubicación compartida";
+      const live = message.location.type === "live";
+      const status = live ? `<div class="locationLiveStatus" data-location-live-status="${esc(message.id)}">${loc.active === false ? "⏹️ Compartición finalizada" : "🟢 En tiempo real"}</div>` : "";
+      card.innerHTML = `<div class="locationCardHead"><span class="locationPin">📍</span><div>${live ? "Ubicación en tiempo real" : "Ubicación actual"}${status}</div></div><div class="locationCardBody">${accuracy}</div><div class="locationCardActions"><a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">Abrir mapa</a></div>`;
+      if(live){
+        card.dataset.locationShareId = String(loc.shareId || "");
+        card.dataset.messageId = String(message.id || "");
+        const stopBtn = document.createElement("button");
+        stopBtn.className = "secondary";
+        stopBtn.type = "button";
+        stopBtn.textContent = mine && loc.active !== false ? "Detener" : "";
+        if(!mine) stopBtn.style.display = "none";
+        stopBtn.onclick = () => {
+          const shareId = String(loc.shareId || "");
+          if(shareId) socket.emit("stopLocationShare", {shareId});
+        };
+        card.querySelector(".locationCardActions").appendChild(stopBtn);
+      }
+      bubble.insertBefore(card, bubble.querySelector(".time"));
+    }
+  }
+
   if(!message.deleted && message.media){
     const mediaWrap = document.createElement("div");
     mediaWrap.innerHTML = mediaHtml(message);
@@ -3716,6 +3792,152 @@ function clearPendingMedia(){
   mediaName.textContent = "";
   mediaName.style.display = "none";
 }
+
+const locationShareModal = $("locationShareModal");
+const sendCurrentLocationButton = $("sendCurrentLocationButton");
+const startLiveLocationButton = $("startLiveLocationButton");
+const cancelLocationShare = $("cancelLocationShare");
+const locationShareError = $("locationShareError");
+let locationShareTargetUser = "";
+
+function getLocationShareTarget(){
+  if(activeCallScreen?.classList.contains("visible") && callPeer){
+    return callPeer;
+  }
+  return selectedUser || "";
+}
+
+function showLocationShareModal(){
+  const target = getLocationShareTarget();
+  if(!target){
+    showNotification("Ubicación", "Selecciona un chat de una persona primero.");
+    return;
+  }
+  locationShareTargetUser = target;
+  if(locationShareError) locationShareError.textContent = "";
+  const title = locationShareModal?.querySelector("h2");
+  if(title) title.textContent = activeCallScreen?.classList.contains("visible") ? "📍 Compartir ubicación durante la llamada" : "📍 Compartir ubicación";
+  locationShareModal.style.display = "flex";
+}
+function closeLocationShareModal(){
+  locationShareModal.style.display = "none";
+  locationShareTargetUser = "";
+  if(locationShareError) locationShareError.textContent = "";
+}
+function getCurrentPositionOnce(){
+  return new Promise((resolve,reject)=>{
+    if(!navigator.geolocation) return reject(new Error("Tu dispositivo no admite ubicación."));
+    navigator.geolocation.getCurrentPosition(resolve, error => {
+      reject(new Error(error?.code === 1 ? "Debes permitir la ubicación para compartirla." : "No se pudo obtener tu ubicación."));
+    }, {enableHighAccuracy:true, maximumAge:5000, timeout:15000});
+  });
+}
+
+locationButton?.addEventListener("click", showLocationShareModal);
+locationCallButton?.addEventListener("click", showLocationShareModal);
+cancelLocationShare?.addEventListener("click", closeLocationShareModal);
+locationShareModal?.addEventListener("click", e => { if(e.target === locationShareModal) closeLocationShareModal(); });
+
+sendCurrentLocationButton?.addEventListener("click", async ()=>{
+  const target = locationShareTargetUser || getLocationShareTarget();
+  if(!target) return;
+  sendCurrentLocationButton.disabled = true;
+  try{
+    const pos = await getCurrentPositionOnce();
+    socket.emit("privateMessage", {
+      to:target,
+      message:"",
+      location:{type:"current",latitude:Number(pos.coords.latitude),longitude:Number(pos.coords.longitude),accuracy:Number(pos.coords.accuracy)}
+    });
+    closeLocationShareModal();
+  }catch(error){
+    if(locationShareError) locationShareError.textContent = error.message || "No se pudo compartir la ubicación.";
+  }finally{ sendCurrentLocationButton.disabled = false; }
+});
+
+startLiveLocationButton?.addEventListener("click", async ()=>{
+  const target = locationShareTargetUser || getLocationShareTarget();
+  if(!target) return;
+  if(activeOutgoingLocationShareId) {
+    if(locationShareError) locationShareError.textContent = "Ya estás compartiendo tu ubicación en tiempo real en este chat.";
+    return;
+  }
+  startLiveLocationButton.disabled = true;
+  try{
+    const pos = await getCurrentPositionOnce();
+    const shareId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    activeOutgoingLocationShareId = shareId;
+    socket.emit("startLocationShare", {
+      to:target,
+      shareId,
+      durationMinutes:60,
+      latitude:Number(pos.coords.latitude),
+      longitude:Number(pos.coords.longitude),
+      accuracy:Number(pos.coords.accuracy)
+    });
+    startLiveLocationWatch(shareId);
+    updateCallLocationButton();
+    closeLocationShareModal();
+  }catch(error){
+    activeOutgoingLocationShareId = "";
+    if(locationShareError) locationShareError.textContent = error.message || "No se pudo iniciar la ubicación en tiempo real.";
+  }finally{ startLiveLocationButton.disabled = false; }
+});
+
+function stopOutgoingLiveLocationShare(){
+  if(locationLiveWatchId !== null && navigator.geolocation){
+    navigator.geolocation.clearWatch(locationLiveWatchId);
+  }
+  locationLiveWatchId = null;
+  if(activeOutgoingLocationShareId){
+    socket.emit("stopLocationShare", {shareId:activeOutgoingLocationShareId});
+  }
+  activeOutgoingLocationShareId = "";
+  updateCallLocationButton();
+}
+
+function startLiveLocationWatch(shareId){
+  if(locationLiveWatchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(locationLiveWatchId);
+  if(!navigator.geolocation){
+    socket.emit("stopLocationShare", {shareId});
+    activeOutgoingLocationShareId = "";
+    return;
+  }
+  locationLiveWatchId = navigator.geolocation.watchPosition(pos=>{
+    if(activeOutgoingLocationShareId !== shareId) return;
+    socket.emit("updateLocationShare", {shareId, latitude:Number(pos.coords.latitude), longitude:Number(pos.coords.longitude), accuracy:Number(pos.coords.accuracy)});
+  }, ()=>{}, {enableHighAccuracy:true, maximumAge:5000, timeout:15000});
+}
+
+function updateLiveLocationMessage(shareId, payload, stopped=false){
+  const key = String(shareId || "");
+  if(!key) return;
+  for(const convKey of Object.keys(conversations)){
+    const list = conversations[convKey] || [];
+    const item = list.find(m => String(m?.location?.shareId || "") === key);
+    if(!item) continue;
+    item.location = {...(item.location||{}), latitude:Number(payload?.latitude ?? item.location.latitude), longitude:Number(payload?.longitude ?? item.location.longitude), accuracy:Number(payload?.accuracy ?? item.location.accuracy), active:!stopped};
+    if((selectedUser && convKey === selectedUser) || (selectedGroupId && convKey === `group:${selectedGroupId}`)) renderConversation(convKey);
+  }
+}
+
+socket.on("locationShareStopped", data=>{
+  const shareId = String(data?.shareId || "");
+  if(!shareId) return;
+  if(activeOutgoingLocationShareId === shareId){
+    if(locationLiveWatchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(locationLiveWatchId);
+    locationLiveWatchId = null;
+    activeOutgoingLocationShareId = "";
+  }
+  updateLiveLocationMessage(shareId, data, true);
+});
+socket.on("locationShareUpdate", data=> updateLiveLocationMessage(data?.shareId, data, false));
+socket.on("locationShareStarted", message=>{
+  const other = norm(message?.from) === norm(myUsername) ? norm(message?.to) : norm(message?.from);
+  if(!conversations[other]) conversations[other] = [];
+  if(message?.id && !conversations[other].some(item=>item.id===message.id)) conversations[other].push(message);
+  if(selectedUser === other){ addMessage(message); messagesContainer.scrollTop = messagesContainer.scrollHeight; socket.emit("markConversationRead", other); }
+});
 
 function mediaHtml(message){
   const src = esc(message.media || "");
@@ -4187,6 +4409,7 @@ function showActiveCallScreen(username, status = "Conectando..."){
   updateMuteButton();
   updateSpeakerButton();
   updateCameraButton();
+  updateCallLocationButton();
   if(videoCallTopName) videoCallTopName.textContent = name;
   if(videoCallTopStatus) videoCallTopStatus.textContent = status;
   updateVideoCallUI();
@@ -4209,6 +4432,7 @@ function hideActiveCallScreen(){
   localVideo.classList.remove("visible");
   videoCallOverlay.classList.remove("visible");
   videoCallTopInfo.style.display = "none";
+  locationShareTargetUser = "";
 }
 
 function setActiveCallStatus(status){
@@ -4250,6 +4474,13 @@ function updateCallTimer(){
   const timeText = String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0");
   activeCallTimer.textContent = timeText;
   if(videoCallTopTimer) videoCallTopTimer.textContent = timeText;
+}
+
+function updateCallLocationButton(){
+  const sharing = !!activeOutgoingLocationShareId;
+  locationCallButton?.classList.toggle("active", sharing);
+  if(locationCallIcon) locationCallIcon.textContent = sharing ? "🛰️" : "📍";
+  if(locationCallText) locationCallText.textContent = sharing ? "Compartiendo" : "Ubicación";
 }
 
 function updateMuteButton(){
