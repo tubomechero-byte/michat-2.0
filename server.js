@@ -1620,8 +1620,11 @@ function clearSessionCookie(res) {
 }
 
 function authToken(req) {
-  const a = req.headers.authorization || "";
-  if (a.startsWith("Bearer ")) return a.slice(7);
+  const a = String(req.headers.authorization || "");
+  if (a.startsWith("Bearer ")) {
+    const bearer = a.slice(7).trim();
+    if (bearer) return bearer;
+  }
   return readCookieHeader(req, "michat_session");
 }
 
