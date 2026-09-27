@@ -7226,11 +7226,7 @@ async function loadStories(){
 
   try{
 
-    const token =
-      localStorage.getItem(
-        "chatToken"
-      );
-
+    const token = getPersistentChatToken();
     if(!token) return;
 
     const response =
@@ -7278,6 +7274,14 @@ socket.on(
         ? list
         : [];
 
+    renderStories();
+  }
+);
+
+socket.on(
+  "storiesUpdated",
+  list => {
+    storiesList = Array.isArray(list) ? list : [];
     renderStories();
   }
 );
@@ -7535,10 +7539,7 @@ $("publishStory").onclick =
 
     try{
 
-      const token =
-        localStorage.getItem(
-          "chatToken"
-        );
+      const token = getPersistentChatToken();
 
       const response =
         await fetch(
@@ -7611,11 +7612,7 @@ async function markStoryViewed(
 
   try{
 
-    const token =
-      localStorage.getItem(
-        "chatToken"
-      );
-
+    const token = getPersistentChatToken();
     if(!token) return;
 
     await fetch(
