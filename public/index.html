@@ -22,25 +22,25 @@ body{margin:0;font-family:Arial,sans-serif;height:100vh;height:100dvh;overflow:h
 button,input,textarea{font:inherit}
 .hidden{display:none!important}
 
-#authScreen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(135deg,#0a6e5f,#05463e)}
+#authScreen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(135deg,#128c7e,#075e54)}
 .authBox{width:100%;max-width:420px;padding:30px;background:#fff;border-radius:20px;text-align:center;box-shadow:0 15px 40px rgba(0,0,0,.25)}
 .authInput{width:100%;padding:14px;margin:7px 0;border:1px solid #ddd;border-radius:10px;outline:none}
-.authButton{width:100%;min-height:68px;padding:20px 22px;margin-top:14px;border:0;border-radius:14px;background:#0a6e5f;color:#fff;font-size:22px;font-weight:bold;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.16);letter-spacing:.2px}.authButton:active{transform:translateY(1px) scale(.99)}
-.switchButton{border:0;background:transparent;color:#05463e;cursor:pointer;margin-top:15px}
+.authButton{width:100%;min-height:68px;padding:20px 22px;margin-top:14px;border:0;border-radius:14px;background:#128c7e;color:#fff;font-size:22px;font-weight:bold;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.16);letter-spacing:.2px}.authButton:active{transform:translateY(1px) scale(.99)}
+.switchButton{border:0;background:transparent;color:#075e54;cursor:pointer;margin-top:15px}
 #authError{min-height:22px;margin-top:10px;color:#c00}
 
 #app{display:none;height:100vh;height:100dvh;min-height:0;flex-direction:column}
 .layout{display:flex;height:100%;min-height:0;max-width:1500px;margin:auto;background:#fff}
 
 .sidebar{width:350px;border-right:1px solid #ddd;display:flex;flex-direction:column;background:#fff;position:relative}
-.sidebarHeader{padding:15px;background:#05463e;color:#fff}
+.sidebarHeader{padding:15px;background:#075e54;color:#fff}
 .headerTop{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .headerTop h2{margin:0}
 .topButtons{display:flex;gap:6px}
 .smallBtn{border:0;border-radius:8px;padding:7px 10px;background:rgba(255,255,255,.14);color:#fff;cursor:pointer}
 
 .actions{padding:10px;border-bottom:1px solid #ddd}
-.actionBtn{width:100%;border:0;border-radius:10px;padding:11px;cursor:pointer;background:#1aa357;color:#fff;font-weight:bold}
+.actionBtn{width:100%;border:0;border-radius:10px;padding:11px;cursor:pointer;background:#25d366;color:#fff;font-weight:bold}
 .actions{display:grid;gap:8px}
 .quickActions{position:absolute;right:18px;bottom:18px;z-index:60}
 /* =====================================================
@@ -52,7 +52,7 @@ button,input,textarea{font:inherit}
 .tabPageHeader h2{margin:0;font-size:24px}
 .tabPageHeaderSub{margin:4px 0 0;color:#777;font-size:13px}
 .tabPageHeaderText{min-width:0}
-.tabPageAction{border:0;border-radius:20px;padding:9px 13px;background:#0a6e5f;color:#fff;font-weight:700;cursor:pointer}
+.tabPageAction{border:0;border-radius:20px;padding:9px 13px;background:#128c7e;color:#fff;font-weight:700;cursor:pointer}
 .newsPage{overflow:hidden;background:#fff}
 .storiesHeader{min-height:72px;padding:12px 18px;background:#111;color:#fff;border-bottom:0}
 .storiesHeader h2{font-size:27px;line-height:1.1;color:#fff}
@@ -78,7 +78,7 @@ button,input,textarea{font:inherit}
 .communityCreate{margin:0 12px 10px}
 .callsItem{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid #eee}
 .callsItem .userInfo{min-width:0}
-.callsItem .toolBtn{margin-left:auto;background:#1aa357;color:#fff;border-radius:50%;width:44px;height:44px;padding:0}
+.callsItem .toolBtn{margin-left:auto;background:#25d366;color:#fff;border-radius:50%;width:44px;height:44px;padding:0}
 .profilePageInner{padding:20px 16px 100px}
 .profileCard{display:flex;align-items:center;gap:14px;padding:18px;border-radius:18px;background:#f0f2f5;margin-bottom:14px}
 .profileCard .avatar{width:68px;height:68px;font-size:24px}
@@ -92,24 +92,24 @@ button,input,textarea{font:inherit}
 .mobileBottomNav button{flex:1;border:0;background:transparent;color:#666;border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;min-width:0}
 .mobileBottomNav button .navIcon{font-size:23px;line-height:1}
 .mobileBottomNav button .navLabel{font-size:11px;font-weight:600;white-space:nowrap}
-.mobileBottomNav button.active{color:#05463e}
-.mobileBottomNav button.active .navPill{background:#c2ead3;border-radius:18px;min-width:52px;height:30px;display:flex;align-items:center;justify-content:center}
+.mobileBottomNav button.active{color:#075e54}
+.mobileBottomNav button.active .navPill{background:#d9fdd3;border-radius:18px;min-width:52px;height:30px;display:flex;align-items:center;justify-content:center}
 .mobileBottomNav button:not(.active) .navPill{height:30px;display:flex;align-items:center;justify-content:center}
-.mobileBottomNav .navBadge{position:absolute;margin:-25px 0 0 25px;min-width:17px;height:17px;padding:0 4px;border-radius:10px;background:#1aa357;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center}
-.mobileBottomNav .navProfileAvatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:23px;line-height:1;background:#0a6e5f;color:#fff;font-weight:700}
+.mobileBottomNav .navBadge{position:absolute;margin:-25px 0 0 25px;min-width:17px;height:17px;padding:0 4px;border-radius:10px;background:#25d366;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center}
+.mobileBottomNav .navProfileAvatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:23px;line-height:1;background:#128c7e;color:#fff;font-weight:700}
 .mobileBottomNav .navProfileAvatar img{width:100%;height:100%;display:block;object-fit:cover;border-radius:50%}
 #layout.mainTabChats .sidebar{display:flex}
 #layout.mainTabChats .chat{display:flex}
 #layout.mainTabNonChat .chat{display:none}
 #layout.mainTabNonChat .sidebar{width:100%;border-right:0}
 
-.quickActionsFab{position:relative;width:52px;height:52px;border:0;border-radius:50%;background:#0a6e5f;color:#fff;font-size:30px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 14px rgba(0,0,0,.18);transition:transform .16s ease,background .16s ease}
-.quickActionsFab.open{transform:rotate(45deg);background:#05463e}
-.quickActionsFab .requestFabDot{position:absolute;top:2px;right:2px;width:11px;height:11px;border-radius:50%;background:#1aa357;border:2px solid #fff;box-sizing:border-box;box-shadow:0 1px 4px rgba(0,0,0,.18);z-index:2}
+.quickActionsFab{position:relative;width:52px;height:52px;border:0;border-radius:50%;background:#128c7e;color:#fff;font-size:30px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 14px rgba(0,0,0,.18);transition:transform .16s ease,background .16s ease}
+.quickActionsFab.open{transform:rotate(45deg);background:#075e54}
+.quickActionsFab .requestFabDot{position:absolute;top:2px;right:2px;width:11px;height:11px;border-radius:50%;background:#25d366;border:2px solid #fff;box-sizing:border-box;box-shadow:0 1px 4px rgba(0,0,0,.18);z-index:2}
 .quickActionsMenu{position:absolute;right:12px;bottom:66px;display:grid;gap:8px;width:min(240px,calc(100vw - 36px));padding:10px;background:#fff;border:1px solid #ddd;border-radius:14px;box-shadow:0 14px 35px rgba(0,0,0,.18);z-index:50}
 .quickActionsMenu .actionBtn{width:100%;box-shadow:none}
-.requestBtn{background:#0a6e5f}
-.requestBadge{display:inline-flex;min-width:20px;height:20px;padding:0 6px;margin-left:4px;border-radius:20px;align-items:center;justify-content:center;background:#fff;color:#0a6e5f;font-size:12px}
+.requestBtn{background:#128c7e}
+.requestBadge{display:inline-flex;min-width:20px;height:20px;padding:0 6px;margin-left:4px;border-radius:20px;align-items:center;justify-content:center;background:#fff;color:#128c7e;font-size:12px}
 .requestItem{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #eee}
 .requestItem .avatar{width:42px;height:42px}
 .requestItemInfo{flex:1;min-width:0}
@@ -127,7 +127,7 @@ button,input,textarea{font:inherit}
 #users{flex:1;overflow-y:auto}
 
 .user{display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid #eee}
-.avatar{width:45px;height:45px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#0a6e5f;color:#fff;font-weight:bold;overflow:hidden}
+.avatar{width:45px;height:45px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#128c7e;color:#fff;font-weight:bold;overflow:hidden}
 .avatar img{width:100%;height:100%;object-fit:cover}
 .userInfo{flex:1;min-width:0}
 .userName{font-weight:bold}
@@ -135,7 +135,7 @@ button,input,textarea{font:inherit}
 .statusRow{display:flex;justify-content:space-between;align-items:center;gap:5px}
 .online{color:#18a558}
 .offline{color:#999}
-.badge{min-width:21px;height:21px;padding:0 6px;display:flex;align-items:center;justify-content:center;border-radius:20px;background:#1aa357;color:#fff;font-size:12px;font-weight:bold}
+.badge{min-width:21px;height:21px;padding:0 6px;display:flex;align-items:center;justify-content:center;border-radius:20px;background:#25d366;color:#fff;font-size:12px;font-weight:bold}
 
 .chat{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .chatHeader{height:70px;padding:12px 18px;border-bottom:1px solid #ddd;display:flex;align-items:center;gap:12px}
@@ -143,8 +143,8 @@ button,input,textarea{font:inherit}
 .chatTitle{font-weight:bold}
 .chatSubtitle{margin-top:3px;font-size:13px;color:#777}
 .chatTools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.groupActionsWrap{position:relative;display:none}.groupActionsWrap.visible{display:block}.groupActionsToggle{width:42px;height:42px;border:0;border-radius:10px;background:#f0f2f5;cursor:pointer;font-size:23px;line-height:1;display:flex;align-items:center;justify-content:center}.groupActionsMenu{position:absolute;top:calc(100% + 8px);right:0;display:grid;gap:6px;min-width:170px;padding:8px;background:#fff;border:1px solid #ddd;border-radius:12px;box-shadow:0 14px 32px rgba(0,0,0,.18);z-index:120}.groupActionsMenu .toolBtn{width:100%;text-align:left}.groupActionsMenu.hidden{display:none}.toolBtn{border:0;background:#f0f2f5;border-radius:8px;padding:7px 9px;cursor:pointer}.enterChatBtn{padding:11px 18px!important;min-height:46px;font-size:15px;font-weight:700;border-radius:10px!important}
-.callBtn{background:#1aa357;color:#fff}
-.videoBtn{background:#0a6e5f;color:#fff}
+.callBtn{background:#25d366;color:#fff}
+.videoBtn{background:#128c7e;color:#fff}
 .hangBtn{background:#b00020;color:#fff}
 .remoteVideo{display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;z-index:0}
 .remoteVideo.visible{display:block}
@@ -162,7 +162,7 @@ button,input,textarea{font:inherit}
 .messageRow{display:flex;margin:7px 0}
 .mine{justify-content:flex-end}
 .bubble{max-width:75%;padding:9px 12px;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.15);word-break:break-word}
-.mine .bubble{background:#c2ead3}
+.mine .bubble{background:#d9fdd3}
 .from{margin-bottom:4px;color:#666;font-size:11px;font-weight:bold}
 .time{margin-top:5px;color:#777;font-size:10px;text-align:right}
 .deletedText{font-style:italic;color:#777}
@@ -171,21 +171,21 @@ button,input,textarea{font:inherit}
 
 .messageInput{display:flex;gap:8px;padding:10px;background:#f0f2f5;border-top:1px solid #ddd;align-items:center;flex:0 0 auto;position:relative;z-index:20;padding-bottom:max(10px,env(safe-area-inset-bottom))}
 .messageInput input{flex:1;border:0;outline:none;border-radius:25px;padding:14px 18px;min-width:0}
-.attachBtn{width:50px;height:50px;border:0;border-radius:50%;background:#fff;color:#0a6e5f;cursor:pointer;font-size:21px;flex-shrink:0}
+.attachBtn{width:50px;height:50px;border:0;border-radius:50%;background:#fff;color:#128c7e;cursor:pointer;font-size:21px;flex-shrink:0}
 .attachBtn:disabled{opacity:.5;cursor:not-allowed}
 .mediaName{font-size:12px;color:#555;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.send{width:50px;height:50px;border:0;border-radius:50%;background:#0a6e5f;color:#fff;cursor:pointer;font-size:20px;flex-shrink:0}
+.send{width:50px;height:50px;border:0;border-radius:50%;background:#128c7e;color:#fff;cursor:pointer;font-size:20px;flex-shrink:0}
 .send:disabled{opacity:.5;cursor:not-allowed}
-.locationBtn{width:50px;height:50px;border:0;border-radius:50%;background:#fff;color:#0a6e5f;cursor:pointer;font-size:21px;flex-shrink:0}
+.locationBtn{width:50px;height:50px;border:0;border-radius:50%;background:#fff;color:#128c7e;cursor:pointer;font-size:21px;flex-shrink:0}
 .locationBtn:disabled{opacity:.5;cursor:not-allowed}
 .locationCard{min-width:230px;max-width:320px;border-radius:14px;overflow:hidden;background:#f6f7f8;border:1px solid rgba(0,0,0,.08)}
 .locationCardHead{display:flex;align-items:center;gap:10px;padding:12px 14px;font-weight:700}
 .locationPin{font-size:26px}
 .locationCardBody{padding:0 14px 12px;color:#555;font-size:13px;line-height:1.4}
 .locationCardActions{display:flex;gap:8px;padding:0 14px 14px}
-.locationCardActions a,.locationCardActions button{flex:1;border:0;border-radius:9px;padding:9px;text-align:center;text-decoration:none;background:#0a6e5f;color:#fff;cursor:pointer;font-size:13px}
+.locationCardActions a,.locationCardActions button{flex:1;border:0;border-radius:9px;padding:9px;text-align:center;text-decoration:none;background:#128c7e;color:#fff;cursor:pointer;font-size:13px}
 .locationCardActions .secondary{background:#e7e7e7;color:#222}
-.locationLiveStatus{font-size:12px;margin-top:3px;color:#0a6e5f;font-weight:700}
+.locationLiveStatus{font-size:12px;margin-top:3px;color:#128c7e;font-weight:700}
 .chatMedia{max-width:min(320px,70vw);border-radius:12px;margin:5px 0;display:block}
 .chatVideo{max-height:280px;background:#000}
 .chatAudio{width:min(320px,70vw);margin:5px 0}
@@ -196,9 +196,9 @@ button,input,textarea{font:inherit}
 
 #notifications{position:fixed;top:15px;right:15px;z-index:9999;width:min(360px,calc(100vw - 30px))}
 
-.moderationModalBackdrop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.62);z-index:12000}.moderationModalBackdrop.open{display:flex}.moderationModalBox{width:min(560px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 18px 70px rgba(0,0,0,.35);padding:24px;box-sizing:border-box}.moderationModalHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.moderationModalIcon{font-size:38px;line-height:1}.moderationModalTitle{margin:0;font-size:22px}.moderationModalMeta{margin-top:4px;color:#777;font-size:13px}.moderationModalMessage{margin:18px 0;padding:16px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;white-space:pre-wrap;word-break:break-word;color:#3f3f46}.moderationAppealLabel{display:block;font-weight:700;margin:12px 0 7px}.moderationAppealText{width:100%;min-height:130px;resize:vertical;box-sizing:border-box;padding:13px;border:1px solid #d4d4d8;border-radius:12px;font:inherit;outline:none}.moderationAppealText:focus{border-color:#0a6e5f;box-shadow:0 0 0 3px rgba(18,140,126,.1)}.moderationModalActions{display:flex;gap:10px;margin-top:14px}.moderationModalActions button{flex:1;padding:12px;border:0;border-radius:12px;cursor:pointer}.moderationClose{background:#eee}.moderationAppeal{background:#0a6e5f;color:#fff}.moderationModalStatus{min-height:22px;margin-top:10px;font-size:14px}.moderationCloseTop{min-width:44px;min-height:44px;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center}.moderationModalBackdrop.open{display:flex !important}.moderationModalBackdrop button{pointer-events:auto}.moderationModalBackdrop{pointer-events:auto}
+.moderationModalBackdrop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.62);z-index:12000}.moderationModalBackdrop.open{display:flex}.moderationModalBox{width:min(560px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 18px 70px rgba(0,0,0,.35);padding:24px;box-sizing:border-box}.moderationModalHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.moderationModalIcon{font-size:38px;line-height:1}.moderationModalTitle{margin:0;font-size:22px}.moderationModalMeta{margin-top:4px;color:#777;font-size:13px}.moderationModalMessage{margin:18px 0;padding:16px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;white-space:pre-wrap;word-break:break-word;color:#3f3f46}.moderationAppealLabel{display:block;font-weight:700;margin:12px 0 7px}.moderationAppealText{width:100%;min-height:130px;resize:vertical;box-sizing:border-box;padding:13px;border:1px solid #d4d4d8;border-radius:12px;font:inherit;outline:none}.moderationAppealText:focus{border-color:#128c7e;box-shadow:0 0 0 3px rgba(18,140,126,.1)}.moderationModalActions{display:flex;gap:10px;margin-top:14px}.moderationModalActions button{flex:1;padding:12px;border:0;border-radius:12px;cursor:pointer}.moderationClose{background:#eee}.moderationAppeal{background:#128c7e;color:#fff}.moderationModalStatus{min-height:22px;margin-top:10px;font-size:14px}.moderationCloseTop{min-width:44px;min-height:44px;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center}.moderationModalBackdrop.open{display:flex !important}.moderationModalBackdrop button{pointer-events:auto}.moderationModalBackdrop{pointer-events:auto}
 .commandBtn{background:#111827!important;color:#fff}.commandModalBox{max-width:820px!important;background:#0b1120!important;color:#e5e7eb}.commandModalHeader{display:flex;align-items:center;justify-content:space-between;gap:10px}.commandModalHeader h2{margin:0}.commandOutput{height:340px;max-height:55vh;overflow:auto;background:#020617;border:1px solid #1f2937;border-radius:12px;padding:12px;font-family:Consolas,Monaco,monospace;font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-word}.commandOutputLine{margin:0 0 6px}.commandOutputPrompt{color:#60a5fa}.commandOutputOk{color:#e5e7eb}.commandOutputError{color:#fca5a5}.commandInputRow{display:flex;gap:8px;margin-top:10px}.commandInputRow input{flex:1;min-width:0;background:#111827;color:#fff;border:1px solid #374151;padding:12px;border-radius:10px;outline:none}.commandInputRow input:focus{border-color:#60a5fa}.commandInputRow button{padding:12px 16px;border:0;border-radius:10px;background:#2563eb;color:#fff;cursor:pointer}.commandHint{margin-top:8px;font-size:12px;color:#9ca3af;line-height:1.4}.commandRankBadge{display:inline-block;margin-left:8px;padding:3px 8px;border-radius:999px;background:#1f2937;color:#93c5fd;font-size:11px;font-weight:700;vertical-align:middle}
-.notification{padding:14px;margin-bottom:10px;background:#fff;border-left:5px solid #1aa357;border-radius:14px;box-shadow:0 6px 25px rgba(0,0,0,.2);cursor:pointer}
+.notification{padding:14px;margin-bottom:10px;background:#fff;border-left:5px solid #25d366;border-radius:14px;box-shadow:0 6px 25px rgba(0,0,0,.2);cursor:pointer}
 .notificationTitle{font-weight:bold;margin-bottom:5px}
 .notificationText{color:#555;font-size:14px}
 
@@ -208,7 +208,7 @@ button,input,textarea{font:inherit}
 .modalInput{width:100%;padding:13px;border:1px solid #ddd;border-radius:10px;outline:none;margin:6px 0}
 .modalRow{display:flex;gap:10px;margin-top:12px}
 .modalRow button{flex:1;padding:12px;border:0;border-radius:10px;cursor:pointer}
-.primary{background:#0a6e5f;color:#fff}
+.primary{background:#128c7e;color:#fff}
 .danger{background:#b00020;color:#fff}
 .muted{background:#eee}
 .modalError{min-height:20px;color:#c00;font-size:14px;margin-top:7px}
@@ -231,21 +231,21 @@ button,input,textarea{font:inherit}
 
 .storiesBar{padding:10px;border-bottom:1px solid #ddd;display:flex;gap:10px;overflow-x:auto;background:#fff}
 .storyItem{border:0;background:transparent;min-width:62px;width:62px;padding:0;cursor:pointer}
-.storyRing{width:58px;height:58px;border-radius:50%;padding:3px;background:linear-gradient(135deg,#1aa357,#0a6e5f,#05463e)}
+.storyRing{width:58px;height:58px;border-radius:50%;padding:3px;background:linear-gradient(135deg,#25d366,#128c7e,#075e54)}
 .storyRing.seen{background:#b8b8b8}
 .storySeenLabel{font-size:9px;color:#777;margin-top:2px}
-.storyAvatar{width:100%;height:100%;border-radius:50%;overflow:hidden;background:#eee;display:flex;align-items:center;justify-content:center;border:3px solid #fff;font-weight:bold;color:#05463e}
+.storyAvatar{width:100%;height:100%;border-radius:50%;overflow:hidden;background:#eee;display:flex;align-items:center;justify-content:center;border:3px solid #fff;font-weight:bold;color:#075e54}
 .storyAvatar img{width:100%;height:100%;object-fit:cover}
 .storyLabel{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
-.storyAdd{font-size:30px;color:#0a6e5f}
+.storyAdd{font-size:30px;color:#128c7e}
 .storyModal .modalBox{max-width:520px;padding:18px}
 .storyComposer{display:grid;gap:10px}
 .storyComposer textarea{width:100%;min-height:140px;resize:none;border:1px solid #ddd;border-radius:12px;padding:14px;outline:none}
-.storyPreview{min-height:260px;border-radius:16px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#05463e;color:#fff;font-size:26px;text-align:center;padding:25px;word-break:break-word}
+.storyPreview{min-height:260px;border-radius:16px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#075e54;color:#fff;font-size:26px;text-align:center;padding:25px;word-break:break-word}
 .storyPreview img{width:100%;height:100%;object-fit:cover}
 .storyTypeRow{display:flex;gap:8px}
 .storyTypeRow button{flex:1;padding:10px;border:0;border-radius:10px;background:#eee;cursor:pointer}
-.storyTypeRow .active{background:#0a6e5f;color:#fff}
+.storyTypeRow .active{background:#128c7e;color:#fff}
 
 .storyViewer{position:relative;background:#111;color:#fff;width:min(520px,95vw);height:min(800px,90vh);border-radius:16px;overflow:hidden;display:flex;align-items:center;justify-content:center}
 .storyViewer img{width:100%;height:100%;object-fit:contain}
@@ -272,7 +272,7 @@ button,input,textarea{font:inherit}
   display:none;
   align-items:center;
   justify-content:center;
-  background:linear-gradient(180deg,#05463e 0%,#063f3a 42%,#111827 100%);
+  background:linear-gradient(180deg,#075e54 0%,#063f3a 42%,#111827 100%);
   color:#fff;
 }
 
@@ -307,7 +307,7 @@ button,input,textarea{font:inherit}
   display:flex;
   align-items:center;
   justify-content:center;
-  background:#0a6e5f;
+  background:#128c7e;
   border:4px solid rgba(255,255,255,.22);
   box-shadow:0 12px 35px rgba(0,0,0,.30);
   flex-shrink:0;
@@ -574,7 +574,7 @@ button,input,textarea{font:inherit}
   }
 
   #mobileBottomNav button.active .navPill{
-    background:#c2ead3;
+    background:#d9fdd3;
   }
 
   #mobileBottomNav button .navIcon{
@@ -832,7 +832,7 @@ html.darkTheme .storySeenLabel{
 html.darkTheme .storyComposer textarea:focus,
 html.darkTheme .modalInput:focus,
 html.darkTheme .moderationAppealText:focus{
-  border-color:#0a6e5f;
+  border-color:#128c7e;
   box-shadow:0 0 0 3px rgba(18,140,126,.18);
 }
 html.darkTheme .modal,
@@ -877,215 +877,6 @@ html.darkTheme .messageLoggingSettingSub{color:#a7adb2}
 html.darkTheme .commandModalBox{background:#0b1120!important;color:#e5e7eb}
 html.darkTheme .commandModalBox input{background:#111827!important;color:#fff!important}
 
-
-/* =====================================================
-   MI CHAT · SISTEMA RESPONSIVE ESTILO WHATSAPP
-   ===================================================== */
-:root{
-  --wa-green:#007a66;
-  --wa-green-deep:#005f50;
-  --wa-green-soft:#c2ead3;
-  --wa-panel:#ffffff;
-  --wa-panel-muted:#f0f2f5;
-  --wa-border:#e9edef;
-  --wa-text:#111b21;
-  --wa-muted:#667781;
-  --wa-chat-bg:#efeae2;
-}
-
-html,body{background:#dfe5e7}
-#app{background:#dfe5e7}
-#layout{width:100%;max-width:1600px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
-
-/* rail de escritorio */
-.desktopRail{display:flex;flex-direction:column;justify-content:space-between;width:64px;min-width:64px;background:#f0f2f5;border-right:1px solid var(--wa-border);padding:10px 7px;z-index:30}
-.desktopRailTop,.desktopRailBottom{display:flex;flex-direction:column;align-items:center;gap:8px}
-.desktopRailBtn{width:50px;height:50px;border:0;border-radius:14px;background:transparent;color:#54656f;font-size:23px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s ease,color .15s ease,transform .15s ease}
-.desktopRailBtn:hover{background:#e2e6e8;color:#111b21}
-.desktopRailBtn.active{background:#c2ead3;color:#005f50}
-.desktopRailBtn:active{transform:scale(.97)}
-
-.waIcon{width:25px;height:25px;display:block;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-.desktopRailBtn .waIcon{width:24px;height:24px}
-.mobileBottomNav button .waIcon{width:23px;height:23px}
-.mobileBottomNav .navProfileAvatar .waIcon{width:23px;height:23px}
-
-
-/* panel lateral de chats */
-.sidebar{width:410px;min-width:410px;background:var(--wa-panel);border-right:1px solid var(--wa-border)}
-.sidebarHeader{min-height:68px;padding:10px 16px;background:var(--wa-panel);color:var(--wa-text);border-bottom:1px solid var(--wa-border)}
-.headerTop h2{font-size:22px;letter-spacing:-.2px}
-.smallBtn{background:transparent;color:var(--wa-muted);font-size:20px;padding:7px;border-radius:50%}
-.smallBtn:hover{background:var(--wa-panel-muted);color:var(--wa-text)}
-.onlineCount{font-size:11px;color:var(--wa-muted);margin-top:1px}
-.search{padding:8px 12px;border-bottom:1px solid var(--wa-border);background:var(--wa-panel)}
-.search input{background:var(--wa-panel-muted);padding:11px 16px 11px 40px;font-size:14px}
-#users{background:var(--wa-panel)}
-.user{padding:12px 16px;gap:12px;border-bottom:1px solid #f0f2f5;background:var(--wa-panel);cursor:pointer;transition:background .12s ease}
-.user:hover{background:#f5f6f6}
-.user .avatar{width:50px;height:50px}
-.userInfo{min-width:0}
-.userName{font-size:16px;font-weight:500;color:var(--wa-text)}
-.userSub{margin-top:2px;color:var(--wa-muted);font-size:13px}
-.statusRow{margin-top:2px}
-.online,.offline{font-size:11px;color:var(--wa-muted)}
-.badge{min-width:20px;height:20px;background:#1aa357;font-size:11px}
-#users .toolBtn[data-action="open"],#users .toolBtn[data-action="remove"],[data-group-open]{display:none}
-#users .toolBtn{border-radius:999px;padding:6px 10px;font-size:11px}
-
-/* pestañas no-chat en escritorio: panel lateral + lienzo de conversación */
-.chat{background:var(--wa-chat-bg)}
-.chatHeader{height:62px;padding:10px 16px;background:var(--wa-panel);border-bottom:1px solid var(--wa-border)}
-.chatTitle{font-size:16px;color:var(--wa-text)}
-.chatSubtitle{font-size:12px;color:var(--wa-muted)}
-.chatTools{gap:4px}
-.chatTools .toolBtn{width:40px;height:40px;padding:0;border-radius:50%;font-size:0;background:transparent;color:var(--wa-muted);display:flex;align-items:center;justify-content:center}
-.chatTools .toolBtn:hover{background:var(--wa-panel-muted);color:var(--wa-text)}
-#callButton::before{content:"📞";font-size:20px}
-#videoCallButton::before{content:"📹";font-size:20px}
-#hangupButton::before{content:"📵";font-size:20px}
-#blockCurrentButton::before{content:"🚫";font-size:18px}
-.groupActionsToggle{border-radius:50%;background:transparent;color:var(--wa-muted)}
-.back{border:0;background:transparent;color:var(--wa-muted);width:40px;height:40px;border-radius:50%}
-.back:hover{background:var(--wa-panel-muted)}
-#messages{background-color:var(--wa-chat-bg);background-image:radial-gradient(rgba(84,70,61,.08) .7px,transparent .7px);background-size:14px 14px;padding:24px 6.5vw}
-.messageRow{margin:2px 0;padding:0 3px}
-.bubble{max-width:min(70%,620px);padding:7px 9px 5px;border-radius:8px;box-shadow:0 1px 1px rgba(0,0,0,.13);font-size:14px;line-height:1.35}
-.messageRow:not(.mine) .bubble:before{content:"";position:absolute}
-.mine .bubble{background:var(--wa-green-soft)}
-.from{color:#0a6e5f;font-size:11px}
-.time{color:#667781;font-size:10px;margin-top:3px}
-.messageInput{gap:6px;padding:8px 12px;background:var(--wa-panel-muted);border-top:0}
-.messageInput input{height:44px;padding:12px 16px;background:#fff}
-.attachBtn,.locationBtn,.send{width:44px;height:44px}
-.attachBtn,.locationBtn{background:transparent;color:var(--wa-muted)}
-.send{background:var(--wa-green);font-size:0}
-.send::before{content:"➤";font-size:19px}
-
-/* modal ligero tipo WhatsApp */
-.modal{background:rgba(11,20,26,.72)}
-.modalBox{border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.25);border:1px solid rgba(0,0,0,.06)}
-
-/* comunidades, llamadas y perfil */
-.tabPageHeader{min-height:68px;padding:12px 18px;background:var(--wa-panel);border-bottom:1px solid var(--wa-border)}
-.tabPageHeader h2{font-size:20px;color:var(--wa-text)}
-.tabPageHeaderSub{color:var(--wa-muted)}
-.tabPageAction{background:var(--wa-green);border-radius:20px;padding:8px 14px}
-.communityPage,.callsPage,.profilePage{background:var(--wa-panel)}
-.communityList,.callsList{padding:4px 12px 100px}
-.groupRow,.callsItem{padding:11px 8px;border-radius:8px}
-.groupRow:hover,.callsItem:hover{background:#f5f6f6}
-.groupAvatar{width:50px;height:50px;flex-basis:50px;border-radius:50%}
-
-/* estados estilo WhatsApp: conservamos la lista actual pero con medidas del producto */
-.storiesHeader{background:var(--wa-panel);color:var(--wa-text);border-bottom:1px solid var(--wa-border)}
-.storiesHeader h2{color:var(--wa-text);font-size:21px}
-.storiesHeaderIconBtn{color:var(--wa-text)}
-.newsPage .storiesBar{background:var(--wa-panel)}
-.newsPage .storyItem{padding:10px 16px}
-.newsPage .storyItem:hover{background:#f5f6f6}
-.newsPage .storyRing{width:58px;height:58px;flex-basis:58px}
-.newsPage .storySeenLabel,.newsPage .storyMetaTime{color:var(--wa-muted)}
-
-/* pantalla en blanco de WhatsApp Web cuando se navega por una pestaña */
-@media (min-width:901px){
-  #layout.mainTabNonChat .chat{display:flex!important;position:relative;background:#f7f7f7}
-  #layout.mainTabNonChat .chatHeader,#layout.mainTabNonChat #messages,#layout.mainTabNonChat .messageInput{display:none}
-  #layout.mainTabNonChat .chat::before{content:"Mi Chat";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:300;color:#667781;letter-spacing:.1px;background:linear-gradient(180deg,#f7f7f7,#eef1f2)}
-}
-
-/* móvil: interfaz táctil de WhatsApp */
-@media (max-width:900px){
-  html,body,#app{background:#fff}
-  .desktopRail{display:none}
-  .layout{max-width:none;width:100%;box-shadow:none}
-  .sidebar{width:100%;min-width:0;border-right:0;background:#fff}
-  .sidebarHeader{min-height:58px;padding:8px 14px;background:#fff;border-bottom:0}
-  .headerTop h2{font-size:22px}
-  .onlineCount{display:none}
-  .topButtons{gap:0}
-  .smallBtn{width:40px;height:40px;padding:0}
-  #chatsPage .search{padding:6px 12px 8px;border-bottom:0}
-  .search input{height:40px;padding:10px 14px 10px 38px}
-  .user{padding:10px 14px;min-height:72px;border-bottom:1px solid #edf0f2}
-  .user .avatar{width:54px;height:54px}
-  .userName{font-size:15px}
-  .userSub{font-size:12px}
-  #users .toolBtn[data-action="open"],#users .toolBtn[data-action="remove"],[data-group-open]{display:none}
-  #layout.mainTabChats .chat{width:100%}
-  .chatHeader{height:60px;padding:8px 10px;background:#fff}
-  .back{display:flex;align-items:center;justify-content:center;width:38px;height:38px;font-size:24px}
-  .chatTitle{font-size:16px}
-  .chatTools{gap:0}
-  .chatTools .toolBtn{width:38px;height:38px}
-  #messages{padding:14px 8px;background-size:12px 12px}
-  .bubble{max-width:85%;font-size:14px}
-  .messageInput{padding:7px 8px max(7px,env(safe-area-inset-bottom));gap:5px}
-  .messageInput input{height:44px;padding:11px 14px}
-  .attachBtn,.locationBtn,.send{width:44px;height:44px}
-  .mobileBottomNav{background:#fff;border-top:1px solid #e8edef;box-shadow:0 -1px 6px rgba(0,0,0,.05)}
-  .mobileBottomNav button{color:#667781}
-  .mobileBottomNav button.active{color:#005f50}
-  .mobileBottomNav button.active .navPill{background:#c2ead3}
-  .tabPageHeader{min-height:58px;padding:8px 14px}
-  .tabPageHeader h2{font-size:21px}
-  .storiesHeader h2{font-size:21px}
-  .newsPage .storiesBar{padding-bottom:80px}
-  .newsPage .storyItem{padding:10px 14px;min-height:78px}
-  .newsPage .storyRing{width:58px;height:58px;flex-basis:58px}
-  .communityList,.callsList{padding-bottom:90px}
-  .profilePageInner{padding:16px 14px 90px}
-  .profileCard{border-radius:16px;padding:15px}
-  .quickActions{right:16px;bottom:16px}
-  .quickActionsMenu{right:0;bottom:62px}
-  .activeCallControls{gap:10px;max-width:360px}
-  .activeCallControl{width:72px;height:72px}
-}
-
-/* modo oscuro coherente */
-html.darkTheme,html.darkTheme body,html.darkTheme #app{background:#111b21}
-html.darkTheme .desktopRail{background:#202c33;border-right-color:#2a3942}
-html.darkTheme .desktopRailBtn{color:#b6c2c9}
-html.darkTheme .desktopRailBtn:hover{background:#2a3942;color:#fff}
-html.darkTheme .desktopRailBtn.active{background:#05463e;color:#c2ead3}
-html.darkTheme .sidebar,html.darkTheme .sidebarHeader,html.darkTheme .search,html.darkTheme .chatHeader,html.darkTheme .communityPage,html.darkTheme .callsPage,html.darkTheme .profilePage,html.darkTheme .newsPage,html.darkTheme .newsPage .storiesBar,html.darkTheme .tabPageHeader{background:#111b21;border-color:#22313a}
-html.darkTheme .sidebarHeader,html.darkTheme .tabPageHeader h2,html.darkTheme .chatTitle,html.darkTheme .storiesHeader h2{color:#e9edef}
-html.darkTheme .smallBtn,html.darkTheme .storiesHeaderIconBtn,html.darkTheme .back{color:#aebac2}
-html.darkTheme .user{background:#111b21;border-color:#1f2b33}
-html.darkTheme .user:hover,html.darkTheme .groupRow:hover,html.darkTheme .callsItem:hover{background:#202c33}
-html.darkTheme .userName{color:#e9edef}
-html.darkTheme .userSub,html.darkTheme .online,html.darkTheme .offline,html.darkTheme .tabPageHeaderSub,.darkTheme .newsPage .storySeenLabel,.darkTheme .newsPage .storyMetaTime{color:#8696a0}
-html.darkTheme .search input,html.darkTheme .messageInput{background:#202c33;color:#e9edef}
-html.darkTheme .messageInput input{background:#2a3942;color:#e9edef}
-html.darkTheme #messages{background-color:#0b141a;background-image:radial-gradient(rgba(255,255,255,.035) .7px,transparent .7px)}
-html.darkTheme .bubble{background:#202c33;color:#e9edef}
-html.darkTheme .mine .bubble{background:#005c4b}
-html.darkTheme .time{color:#8696a0}
-html.darkTheme .empty{color:#8696a0}
-html.darkTheme .modalBox{background:#202c33;color:#e9edef;border-color:#2a3942}
-html.darkTheme .mobileBottomNav{background:#111b21;border-top-color:#22313a}
-html.darkTheme .mobileBottomNav button{color:#8696a0}
-html.darkTheme .mobileBottomNav button.active{color:#53bdeb}
-html.darkTheme .mobileBottomNav button.active .navPill{background:#0b4f47}
-
-
-/* Correcciones responsive v2: un solo rail en PC y espacio seguro para la barra de estado en móvil. */
-@media (min-width: 901px){
-  /* La navegación de escritorio vive dentro de #layout; la navegación móvil no debe duplicarla. */
-  #mobileBottomNav{display:none !important;}
-  #layout{width:100% !important;max-width:none !important;margin:0 !important;}
-}
-@media (max-width: 900px){
-  /* Respeta el área superior del sistema para que la barra de estado no tape los controles. */
-  .sidebarHeader,
-  .tabPageHeader,
-  .chatHeader{
-    padding-top:calc(8px + env(safe-area-inset-top, 0px));
-  }
-  .storiesHeader{
-    padding-top:calc(8px + env(safe-area-inset-top, 0px));
-  }
-}
 </style>
 </head>
 
@@ -1144,19 +935,6 @@ html.darkTheme .mobileBottomNav button.active .navPill{background:#0b4f47}
 <div id="app">
   <div id="layout" class="layout">
 
-    <nav id="desktopRail" class="desktopRail" aria-label="Navegación de escritorio">
-      <div class="desktopRailTop">
-        <button type="button" data-desktop-tab="chats" class="desktopRailBtn active" aria-label="Chats" title="Chats"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5 7.3 7.3 0 0 1-3.1-.7L4 20l1.7-4.6A7.3 7.3 0 0 1 5 11.5 7.5 7.5 0 0 1 12.5 4 7.5 7.5 0 0 1 20 11.5Z"/><path d="M8.3 10.4h8.4M8.3 13.5h5.2"/></svg></button>
-        <button type="button" data-desktop-tab="news" class="desktopRailBtn" aria-label="Novedades" title="Novedades"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.2"/><path d="M4.6 8.4a8.4 8.4 0 0 1 3.8-3.2M15.6 5.2a8.4 8.4 0 0 1 3.8 3.2M19.4 15.6a8.4 8.4 0 0 1-3.8 3.2M8.4 18.8a8.4 8.4 0 0 1-3.8-3.2"/></svg></button>
-        <button type="button" data-desktop-tab="communities" class="desktopRailBtn" aria-label="Comunidades" title="Comunidades"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="16.5" cy="9" r="2.3"/><path d="M3.5 19.2c.5-3.1 2.4-4.8 5.5-4.8s5 1.7 5.5 4.8M14 14.9c2.7-.8 5 .7 5.7 3.4"/></svg></button>
-        <button type="button" data-desktop-tab="calls" class="desktopRailBtn" aria-label="Llamadas" title="Llamadas"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8c.5-.6 1.2-.8 1.9-.5l2.2 1c.7.3 1 .9.8 1.6l-.6 2a2 2 0 0 0 .5 1.9l1.4 1.4a2 2 0 0 0 1.9.5l2-.6c.7-.2 1.3.1 1.6.8l1 2.2c.3.7.1 1.4-.5 1.9l-1.4 1.1c-.6.5-1.4.7-2.2.5-2.6-.7-5.1-2.2-7.2-4.3S4.8 10.1 4.1 7.5c-.2-.8 0-1.6.5-2.2L7 4.8Z"/></svg></button>
-      </div>
-      <div class="desktopRailBottom">
-        <button type="button" id="desktopSettingsButton" class="desktopRailBtn" aria-label="Ajustes" title="Ajustes"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.3a3.7 3.7 0 1 0 0 7.4 3.7 3.7 0 0 0 0-7.4Z"/><path d="m19.3 13.1.1 1.7-2 1.2-1.2 1.9-1.8-.5-1.4.9-.3 2.2H9.3L9 18.3l-1.4-.9-1.8.5-1.2-1.9-2-1.2.1-1.7-1.1-1.4 1.1-1.4-.1-1.7 2-1.2 1.2-1.9 1.8.5 1.4-.9.3-2.2h2.8l.3 2.2 1.4.9 1.8-.5 1.2 1.9 2 1.2-.1 1.7 1.1 1.4-1.1 1.4Z"/></svg></button>
-        <button type="button" data-desktop-tab="profile" class="desktopRailBtn" aria-label="Perfil" title="Perfil"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 19.2c.8-3.2 2.9-4.8 6.5-4.8s5.7 1.6 6.5 4.8"/></svg></button>
-      </div>
-    </nav>
-
     <aside class="sidebar">
 
       <div class="sidebarHeader">
@@ -1165,6 +943,7 @@ html.darkTheme .mobileBottomNav button.active .navPill{background:#0b4f47}
 
           <div class="topButtons">
             <button class="smallBtn" id="settingsButton">⚙️</button>
+            <button class="smallBtn" id="logoutButton">Salir</button>
           </div>
         </div>
 
@@ -1319,23 +1098,23 @@ html.darkTheme .mobileBottomNav button.active .navPill{background:#0b4f47}
 
   <nav id="mobileBottomNav" class="mobileBottomNav" aria-label="Navegación principal">
     <button type="button" data-main-tab="chats" class="active">
-      <span class="navPill"><span class="navIcon"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5 7.3 7.3 0 0 1-3.1-.7L4 20l1.7-4.6A7.3 7.3 0 0 1 5 11.5 7.5 7.5 0 0 1 12.5 4 7.5 7.5 0 0 1 20 11.5Z"/><path d="M8.3 10.4h8.4M8.3 13.5h5.2"/></svg></span><span id="navRequestsBadge" class="navBadge hidden">0</span></span>
+      <span class="navPill"><span class="navIcon">💬</span><span id="navRequestsBadge" class="navBadge hidden">0</span></span>
       <span class="navLabel">Chats</span>
     </button>
     <button type="button" data-main-tab="news">
-      <span class="navPill"><span class="navIcon"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.2"/><path d="M4.6 8.4a8.4 8.4 0 0 1 3.8-3.2M15.6 5.2a8.4 8.4 0 0 1 3.8 3.2M19.4 15.6a8.4 8.4 0 0 1-3.8 3.2M8.4 18.8a8.4 8.4 0 0 1-3.8-3.2"/></svg></span></span>
+      <span class="navPill"><span class="navIcon">◉</span></span>
       <span class="navLabel">Novedades</span>
     </button>
     <button type="button" data-main-tab="communities">
-      <span class="navPill"><span class="navIcon"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="16.5" cy="9" r="2.3"/><path d="M3.5 19.2c.5-3.1 2.4-4.8 5.5-4.8s5 1.7 5.5 4.8M14 14.9c2.7-.8 5 .7 5.7 3.4"/></svg></span></span>
+      <span class="navPill"><span class="navIcon">👥</span></span>
       <span class="navLabel">Comunidades</span>
     </button>
     <button type="button" data-main-tab="calls">
-      <span class="navPill"><span class="navIcon"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8c.5-.6 1.2-.8 1.9-.5l2.2 1c.7.3 1 .9.8 1.6l-.6 2a2 2 0 0 0 .5 1.9l1.4 1.4a2 2 0 0 0 1.9.5l2-.6c.7-.2 1.3.1 1.6.8l1 2.2c.3.7.1 1.4-.5 1.9l-1.4 1.1c-.6.5-1.4.7-2.2.5-2.6-.7-5.1-2.2-7.2-4.3S4.8 10.1 4.1 7.5c-.2-.8 0-1.6.5-2.2L7 4.8Z"/></svg></span></span>
+      <span class="navPill"><span class="navIcon">☎</span></span>
       <span class="navLabel">Llamadas</span>
     </button>
     <button type="button" data-main-tab="profile">
-      <span class="navPill"><span id="navProfileAvatar" class="navProfileAvatar"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 19.2c.8-3.2 2.9-4.8 6.5-4.8s5.7 1.6 6.5 4.8"/></svg></span></span>
+      <span class="navPill"><span id="navProfileAvatar" class="navProfileAvatar">👤</span></span>
       <span class="navLabel">Tú</span>
     </button>
   </nav>
@@ -1873,9 +1652,6 @@ function switchMainTab(tab){
   document.querySelectorAll("#mobileBottomNav [data-main-tab]").forEach(button => {
     button.classList.toggle("active", button.dataset.mainTab === next);
   });
-  document.querySelectorAll("#desktopRail [data-desktop-tab]").forEach(button => {
-    button.classList.toggle("active", button.dataset.desktopTab === next);
-  });
 
   if(next === "communities") renderGroups();
   if(next === "calls") renderCallsTab();
@@ -1993,11 +1769,6 @@ const layout = $("layout");
 document.querySelectorAll("#mobileBottomNav [data-main-tab]").forEach(button => {
   button.addEventListener("click", () => openTopLevelTab(button.dataset.mainTab));
 });
-
-document.querySelectorAll("#desktopRail [data-desktop-tab]").forEach(button => {
-  button.addEventListener("click", () => openTopLevelTab(button.dataset.desktopTab));
-});
-$("desktopSettingsButton")?.addEventListener("click", () => $("settingsButton")?.click());
 
 $("backButton").addEventListener("click", () => { layout.classList.remove("mobileChat"); switchMainTab("chats"); });
 
@@ -7025,7 +6796,7 @@ function openStoryCreator(){
   );
 
   storyPreview.style.background =
-    "#05463e";
+    "#075e54";
 
   storyPreview.innerHTML =
     "Tu historia aparecerá aquí";
@@ -7081,7 +6852,7 @@ storyImageType.onclick = () => {
 storyText.oninput = () => {
 
   storyPreview.style.background =
-    "#05463e";
+    "#075e54";
 
   storyPreview.textContent =
     storyText.value.trim() ||
@@ -7312,7 +7083,7 @@ function renderCurrentStory(){
           style="
             background:${esc(
               story.background ||
-              "#05463e"
+              "#075e54"
             )};
             width:100%;
             height:100%;
