@@ -115,6 +115,8 @@ const STATE_FILES = {
   "password-resets.json": [],
   "command-access.json": {},
   "message-logging.json": {},
+  "location-sharing.json": {},
+  "locations.json": {},
   "access-blocks.json": {},
   "global-access.json": { enabled: false, ownerUsername: "", salt: "", passwordHash: "", updatedAt: 0 },
   "admin-activity.json": [],
