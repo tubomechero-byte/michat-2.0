@@ -2034,17 +2034,21 @@ function clearChatTokenCookie(){
 
 function getPersistentChatToken(){
   let token = "";
-  try { token = localStorage.getItem("chatToken") || ""; } catch {}
+  // La cookie del servidor es la fuente principal para evitar usar una copia vieja.
+  token = readCookie("michat_session");
 
   if(!token){
-    token = readCookie("michat_session");
-    if(token){ try{ localStorage.setItem("chatToken", token); }catch{} }
+    try { token = localStorage.getItem("chatToken") || ""; } catch {}
+    if(token) writeChatTokenCookie(token);
   }
 
   if(!token && window.MiChatAndroidLocation && typeof window.MiChatAndroidLocation.getStoredToken === "function"){
     try{
       token = String(window.MiChatAndroidLocation.getStoredToken() || "");
-      if(token) localStorage.setItem("chatToken", token);
+      if(token){
+        try{ localStorage.setItem("chatToken", token); }catch{}
+        writeChatTokenCookie(token);
+      }
     }catch{}
   }
   return token;
@@ -2970,18 +2974,21 @@ async function checkSession(){
 
   try{
 
-    const response =
-      await fetch(
-        "/api/session",
-        {
-          headers:{
-            Authorization:"Bearer " + token
-          }
-        }
-      );
+    // Primero intentamos la cookie persistente; el Bearer queda como respaldo.
+    let response = await fetch("/api/session", {
+      credentials: "same-origin",
+      cache: "no-store"
+    });
+    let data = await response.json().catch(() => ({}));
 
-    const data =
-      await response.json().catch(() => ({}));
+    if(!response.ok && token){
+      response = await fetch("/api/session", {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { Authorization:"Bearer " + token }
+      });
+      data = await response.json().catch(() => ({}));
+    }
 
     if(!response.ok){
       if(data.globalLock){
@@ -3291,10 +3298,36 @@ socket.on("accessBlocked", data => {
   showAccessBlockedModal({message:data?.reason});
 });
 
-socket.on("authenticationError",() => {
+socket.on("authenticationError", async () => {
+  // Una reconexión no debe borrar la sesión automáticamente.
+  try {
+    const response = await fetch("/api/session", { credentials:"same-origin", cache:"no-store" });
+    const data = await response.json().catch(() => ({}));
+    if(response.ok && data.loggedIn){
+      const cookieToken = readCookie("michat_session");
+      if(cookieToken) saveChatToken(cookieToken);
+      if(!socket.connected) socket.connect();
+      return;
+    }
+  } catch {}
+
+  const fallbackToken = getPersistentChatToken();
+  if(fallbackToken){
+    try {
+      const retry = await fetch("/api/session", {
+        credentials:"same-origin",
+        cache:"no-store",
+        headers:{ Authorization:"Bearer " + fallbackToken }
+      });
+      const retryData = await retry.json().catch(() => ({}));
+      if(retry.ok && retryData.loggedIn){
+        if(!socket.connected) socket.connect();
+        return;
+      }
+    } catch {}
+  }
 
   clearChatToken();
-
   location.reload();
 });
 
@@ -7913,6 +7946,11 @@ window.addEventListener(
     }
   }
 );
+
+// Recupera la sesión cuando el usuario vuelve a la pestaña.
+document.addEventListener("visibilitychange", () => {
+  if(document.visibilityState === "visible" && getPersistentChatToken()) checkSession();
+});
 
 /* =====================================================
    ARRANQUE
