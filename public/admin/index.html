@@ -832,7 +832,7 @@ function populateCameraTargets(list=[]){
   if(!select)return;
   const current=select.value;
   const online=(Array.isArray(list)?list:[]).filter(u=>u.online);
-  select.innerHTML='<option value="">Selecciona un usuario</option>'+online.map(u=>`<option value="${escAttr(u.username)}">@${esc(u.username)} · ${esc(u.displayName||u.username)}${u.cameraAllowed?" · 📷 Permitido":" · 🔒 Sin permiso"}</option>`).join('');
+  select.innerHTML='<option value="">Selecciona un usuario</option>'+online.map(u=>`<option value="${escAttr(u.username)}">@${esc(u.username)} · ${esc(u.displayName||u.username)}${u.online ? " · 📷 Cámara disponible con permiso del navegador" : ""}</option>`).join('');
   if(online.some(u=>u.username===current))select.value=current;
 }
 
@@ -877,7 +877,7 @@ function ensureAdminCameraSocket(){
   });
   adminCameraSocket.on('cameraSupervisionRequested',data=>{
     adminCameraRequestId=String(data?.requestId||'');
-    setCameraAdminStatus('📨 Solicitud enviada. Si el usuario tiene autorización permanente, la cámara se abrirá automáticamente; si no, tendrá que aceptar.','msg');
+    setCameraAdminStatus('📨 Acceso de cámara iniciado. El usuario verá el aviso y el navegador puede solicitar permiso de cámara.','msg');
     $('stopCameraSupervision').disabled=false;
   });
   adminCameraSocket.on('cameraSupervisionAccepted',data=>{
