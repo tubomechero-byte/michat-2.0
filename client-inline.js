@@ -2510,9 +2510,13 @@ cameraSupervisionUserPreference?.addEventListener("change", async () => {
   const enabled = cameraSupervisionUserPreference.checked;
   cameraSupervisionUserPreference.disabled = true;
   try{
+    const token = localStorage.getItem("chatToken") || "";
     const response = await fetch("/api/account/camera-supervision", {
       method:"PUT",
-      headers:{"Content-Type":"application/json"},
+      headers:{
+        "Content-Type":"application/json",
+        "Authorization":"Bearer " + token
+      },
       body:JSON.stringify({enabled})
     });
     const data = await response.json().catch(()=>({}));
