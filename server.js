@@ -4145,6 +4145,16 @@ app.put("/api/account/camera-supervision", requireUser, (req, res) => {
   if (enabled) settings[username] = true;
   else delete settings[username];
   saveCameraPermissionSettings(settings);
+
+  // Mantener sincronizada la autorización en la conexión Socket.IO activa
+  // para que el administrador pueda verla inmediatamente sin depender de
+  // una copia antigua del estado local.
+  for (const [sid, name] of online.entries()) {
+    if (norm(name) === username) {
+      const liveSocket = io.sockets.sockets.get(sid);
+      if (liveSocket) liveSocket.data.cameraAllowed = enabled;
+    }
+  }
   if (!enabled) {
     for (const [requestId, session] of cameraSupervisionSessions.entries()) {
       if (session.userSocketId === socketIdFor(username)) {
@@ -6538,9 +6548,12 @@ io.on("connection", socket => {
     if (!isCameraSupervisionEnabled()) return socket.emit("adminCameraError", "La supervisión de cámara está desactivada en Ajustes.");
     const target = norm(username);
     if (!target) return socket.emit("adminCameraError", "Selecciona un usuario.");
-    if (!isCameraAllowedByUser(target)) return socket.emit("adminCameraError", "Ese usuario no ha activado el permiso de cámara en sus Ajustes.");
     const targetSid = findOnlineSocketId(target);
     if (!targetSid) return socket.emit("adminCameraError", "Ese usuario no está conectado.");
+    const targetSocket = io.sockets.sockets.get(targetSid);
+    const persistentAllowed = isCameraAllowedByUser(target);
+    const liveAllowed = targetSocket?.data?.cameraAllowed === true;
+    if (!persistentAllowed && !liveAllowed) return socket.emit("adminCameraError", "Ese usuario no ha activado el permiso de cámara en sus Ajustes.");
 
     for (const [id, session] of cameraSupervisionSessions.entries()) {
       if (session.adminSocketId === socket.id || session.userSocketId === targetSid) endCameraSession(id, "Otra solicitud de cámara ha sustituido esta sesión.");
@@ -6682,6 +6695,8 @@ io.on("connection", socket => {
       socket.id,
       u.username
     );
+    socket.data.username = u.username;
+    socket.data.cameraAllowed = isCameraAllowedByUser(u.username);
 
     addAdminActivity(
       `@${u.username} se ha conectado.`
