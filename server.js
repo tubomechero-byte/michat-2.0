@@ -1408,9 +1408,176 @@ function saveFcmTokens(v) {
 
 function cleanExpiredStories() {
   const now = Date.now();
-  const active = allStories().filter(s => Number(s.expiresAt) > now);
-  saveStories(active);
+  const current = allStories();
+  const active = current.filter(s => Number(s.expiresAt) > now);
+
+  // Solo escribimos si realmente se ha eliminado alguna historia.
+  // Esto evita sincronizaciones innecesarias con Supabase.
+  if (active.length !== current.length) {
+    saveStories(active);
+  }
+
   return active;
+}
+
+// =====================================================
+// LIMPIEZA AUTOMÁTICA DE ARCHIVOS
+// =====================================================
+// Se ejecuta cada 2 horas. Solo elimina elementos que son seguros de
+// considerar temporales/huérfanos, o grabaciones grandes ya antiguas.
+// No toca users.json, messages.json, groups.json ni otros datos de chat.
+const AUTO_CLEANUP_INTERVAL_MS = 2 * 60 * 60 * 1000;
+const CLEANUP_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+const CLEANUP_LARGE_RECORDING_BYTES = 4 * 1024 * 1024; // 4 MB
+
+function safeFileSize(filePath) {
+  try {
+    const stat = fs.statSync(filePath);
+    return stat.isFile() ? Number(stat.size || 0) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function removeFileAndCount(filePath, result) {
+  try {
+    const size = safeFileSize(filePath);
+    fs.unlinkSync(filePath);
+    result.removedFiles += 1;
+    result.freedBytes += size;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function cleanupOldFilesInDirectory(dir, cutoffMs, result) {
+  if (!fs.existsSync(dir)) return;
+  let entries = [];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    try {
+      if (entry.isDirectory()) {
+        cleanupOldFilesInDirectory(fullPath, cutoffMs, result);
+        continue;
+      }
+
+      if (!entry.isFile()) continue;
+      const stat = fs.statSync(fullPath);
+      const mtime = Number(stat.mtimeMs || 0);
+      if (mtime > 0 && mtime <= cutoffMs) {
+        removeFileAndCount(fullPath, result);
+      }
+    } catch {}
+  }
+
+  // Intentamos retirar carpetas vacías que hayan quedado tras limpiar.
+  try {
+    if (path.resolve(dir) !== path.resolve(DATA_DIR) && fs.readdirSync(dir).length === 0) {
+      fs.rmdirSync(dir);
+    }
+  } catch {}
+}
+
+function runAutomaticCleanup(reason = "intervalo") {
+  const now = Date.now();
+  const cutoff = now - CLEANUP_MAX_AGE_MS;
+  const result = {
+    reason,
+    removedFiles: 0,
+    freedBytes: 0,
+    removedRecordings: 0,
+    removedStories: 0
+  };
+
+  // 1) Elimina grabaciones grandes que llevan al menos 2 horas.
+  //    Las que no figuran en recordings.json se consideran huérfanas.
+  const currentRecordings = recordings();
+  const keptRecordings = [];
+  const referencedFiles = new Set();
+
+  for (const item of currentRecordings) {
+    const fileName = String(item?.fileName || "").trim();
+    if (!fileName || fileName.includes("..") || path.basename(fileName) !== fileName) {
+      continue;
+    }
+
+    referencedFiles.add(fileName);
+    const filePath = path.join(RECORDINGS_DIR, fileName);
+    const exists = fs.existsSync(filePath);
+
+    if (!exists) {
+      result.removedRecordings += 1;
+      continue;
+    }
+
+    let stat = null;
+    try { stat = fs.statSync(filePath); } catch {}
+    const ageMs = stat ? now - Number(stat.mtimeMs || item.createdAt || now) : 0;
+    const size = stat ? Number(stat.size || item.size || 0) : 0;
+    const oldEnough = ageMs >= CLEANUP_MAX_AGE_MS;
+    const largeEnough = size >= CLEANUP_LARGE_RECORDING_BYTES;
+
+    if (oldEnough && largeEnough) {
+      if (removeFileAndCount(filePath, result)) {
+        result.removedRecordings += 1;
+      }
+      continue;
+    }
+
+    keptRecordings.push(item);
+  }
+
+  // 2) Limpia archivos de grabaciones huérfanos (sin metadatos) que lleven 2h.
+  let recordingEntries = [];
+  try {
+    recordingEntries = fs.readdirSync(RECORDINGS_DIR, { withFileTypes: true });
+  } catch {}
+
+  for (const entry of recordingEntries) {
+    if (!entry.isFile()) continue;
+    const fileName = entry.name;
+    if (referencedFiles.has(fileName)) continue;
+    const filePath = path.join(RECORDINGS_DIR, fileName);
+    try {
+      const stat = fs.statSync(filePath);
+      if (Number(stat.mtimeMs || 0) <= cutoff) {
+        removeFileAndCount(filePath, result);
+      }
+    } catch {}
+  }
+
+  if (keptRecordings.length !== currentRecordings.length) {
+    saveRecordings(keptRecordings);
+  }
+
+  // 3) Limpia solamente carpetas temporales conocidas, si existen.
+  //    No se borran los JSON principales de Mi Chat.
+  for (const tempDirName of ["tmp", "temp", "cache", "uploads/tmp"]) {
+    cleanupOldFilesInDirectory(path.join(DATA_DIR, tempDirName), cutoff, result);
+  }
+
+  // 4) Elimina historias caducadas sin escribir si no cambió nada.
+  const beforeStories = allStories();
+  const afterStories = cleanExpiredStories();
+  result.removedStories = Math.max(0, beforeStories.length - afterStories.length);
+
+  if (result.removedFiles || result.removedRecordings || result.removedStories) {
+    const mb = (result.freedBytes / (1024 * 1024)).toFixed(2);
+    console.log(
+      `Limpieza automática (${reason}): ${result.removedFiles} archivo(s), ${mb} MB liberados, ${result.removedRecordings} grabación(es) y ${result.removedStories} historia(s) eliminadas.`
+    );
+  } else {
+    console.log(`Limpieza automática (${reason}): nada que eliminar.`);
+  }
+
+  return result;
 }
 
 function norm(v) {
@@ -8013,18 +8180,22 @@ function isEitherBlocked(
 // =====================================================
 
 setInterval(() => {
-  const before =
-    allStories().length;
+  const before = allStories().length;
+  const after = cleanExpiredStories();
 
-  const after =
-    cleanExpiredStories();
-
-  if (
-    before !== after.length
-  ) {
+  if (before !== after.length) {
     broadcastVisibleStories();
   }
 }, 60 * 1000);
+
+// Limpieza completa y conservadora cada 2 horas.
+setInterval(() => {
+  const result = runAutomaticCleanup("cada 2 horas");
+  if (result.removedStories > 0) {
+    broadcastVisibleStories();
+  }
+}, AUTO_CLEANUP_INTERVAL_MS);
+
 
 // =====================================================
 // INDEX
@@ -8059,6 +8230,14 @@ app.get("/{*splat}", (req, res, next) => {
 
 (async () => {
   await initializeDatabase();
+
+  // Después de restaurar los datos persistentes desde Supabase, retiramos
+  // huérfanos antiguos sin esperar 2 horas al primer despliegue.
+  try {
+    runAutomaticCleanup("arranque");
+  } catch (error) {
+    console.error("Error en la limpieza automática inicial:", error.message);
+  }
 
   server.listen(
     PORT,
