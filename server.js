@@ -2658,6 +2658,148 @@ async function getSupabaseUsage() {
   return result;
 }
 
+
+const RENDER_API_BASE = "https://api.render.com/v1";
+const RENDER_API_KEY = String(process.env.RENDER_API_KEY || "").trim();
+const RENDER_SERVICE_ID = String(process.env.RENDER_SERVICE_ID || "").trim();
+const RENDER_MONTHLY_BANDWIDTH_GB = Number(process.env.RENDER_MONTHLY_BANDWIDTH_GB || 5);
+
+function renderMetricValueSeries(payload) {
+  const list = Array.isArray(payload) ? payload : [];
+  return list.flatMap(series => Array.isArray(series?.values) ? series.values.map(point => Number(point?.value)).filter(Number.isFinite) : []);
+}
+
+function renderMetricLabel(series, field) {
+  const labels = Array.isArray(series?.labels) ? series.labels : [];
+  const hit = labels.find(label => String(label?.field || "") === field);
+  return hit ? String(hit.value || "") : "";
+}
+
+function sumRenderMetric(payload, { labelField = null, labelValue = null } = {}) {
+  const list = Array.isArray(payload) ? payload : [];
+  let chosen = list;
+  if (labelField && labelValue) {
+    const matching = list.filter(series => renderMetricLabel(series, labelField) === labelValue);
+    if (matching.length) chosen = matching;
+  }
+  let total = 0;
+  for (const series of chosen) {
+    for (const point of Array.isArray(series?.values) ? series.values : []) {
+      const value = Number(point?.value);
+      if (Number.isFinite(value)) total += value;
+    }
+  }
+  return total;
+}
+
+function latestRenderMetric(payload) {
+  const points = [];
+  for (const series of Array.isArray(payload) ? payload : []) {
+    for (const point of Array.isArray(series?.values) ? series.values : []) {
+      const value = Number(point?.value);
+      const timestamp = Date.parse(String(point?.timestamp || ""));
+      if (Number.isFinite(value)) points.push({ value, timestamp: Number.isFinite(timestamp) ? timestamp : 0 });
+    }
+  }
+  points.sort((a, b) => a.timestamp - b.timestamp);
+  return points.length ? points[points.length - 1].value : null;
+}
+
+async function renderApiGet(pathname, params) {
+  if (!RENDER_API_KEY) throw new Error("Falta RENDER_API_KEY en las variables de entorno de Render.");
+  const url = new URL(RENDER_API_BASE + pathname);
+  for (const [key, value] of Object.entries(params || {})) url.searchParams.append(key, String(value));
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${RENDER_API_KEY}`
+    }
+  });
+  const text = await response.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  if (!response.ok) {
+    const detail = typeof data === "string" ? data : (data?.message || data?.error || JSON.stringify(data));
+    throw new Error(`Render API HTTP ${response.status}: ${detail}`);
+  }
+  return data;
+}
+
+app.get("/api/admin/render/usage", requireAdmin, async (req, res) => {
+  if (!RENDER_API_KEY || !RENDER_SERVICE_ID) {
+    return res.json({
+      configured: false,
+      missing: [
+        ...(!RENDER_API_KEY ? ["RENDER_API_KEY"] : []),
+        ...(!RENDER_SERVICE_ID ? ["RENDER_SERVICE_ID"] : [])
+      ],
+      includedBandwidthGb: Number.isFinite(RENDER_MONTHLY_BANDWIDTH_GB) && RENDER_MONTHLY_BANDWIDTH_GB > 0 ? RENDER_MONTHLY_BANDWIDTH_GB : 5
+    });
+  }
+
+  try {
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const common = {
+      startTime: start.toISOString(),
+      endTime: now.toISOString(),
+      resource: RENDER_SERVICE_ID
+    };
+
+    const [bandwidth, bandwidthSources, disk] = await Promise.allSettled([
+      renderApiGet("/metrics/bandwidth", common),
+      renderApiGet("/metrics/bandwidth-sources", common),
+      renderApiGet("/metrics/disk-usage", { ...common, resolutionSeconds: 300 })
+    ]);
+
+    if (bandwidth.status === "rejected") throw bandwidth.reason;
+
+    const bandwidthGb = sumRenderMetric(bandwidth.value, { labelField: "resource", labelValue: RENDER_SERVICE_ID }) / (1024 ** 3);
+    const totalFallback = sumRenderMetric(bandwidth.value) / (1024 ** 3);
+    const totalGb = bandwidthGb > 0 ? bandwidthGb : totalFallback;
+
+    const breakdown = { http: 0, websocket: 0, serviceInitiated: 0, privateLink: 0 };
+    if (bandwidthSources.status === "fulfilled" && Array.isArray(bandwidthSources.value)) {
+      for (const series of bandwidthSources.value) {
+        const rawSource = String(renderMetricLabel(series, "trafficSource") || renderMetricLabel(series, "source") || "").toLowerCase();
+        if (!rawSource || rawSource === "total") continue;
+        const bytes = renderMetricValueSeries([series]).reduce((a, b) => a + b, 0);
+        if (rawSource.includes("websocket")) breakdown.websocket += bytes / (1024 ** 3);
+        else if (rawSource.includes("private") || rawSource.includes("privatelink")) breakdown.privateLink += bytes / (1024 ** 3);
+        else if (rawSource.includes("service") || rawSource.includes("nat")) breakdown.serviceInitiated += bytes / (1024 ** 3);
+        else if (rawSource.includes("http")) breakdown.http += bytes / (1024 ** 3);
+      }
+    }
+
+    let diskUsageBytes = null;
+    let diskStatus = "unavailable";
+    if (disk.status === "fulfilled") {
+      diskUsageBytes = latestRenderMetric(disk.value);
+      diskStatus = diskUsageBytes == null ? "no-data" : "ok";
+    } else if (disk.reason) {
+      diskStatus = /404|400/.test(String(disk.reason.message || "")) ? "no-persistent-disk" : "error";
+    }
+
+    const includedBandwidthGb = Number.isFinite(RENDER_MONTHLY_BANDWIDTH_GB) && RENDER_MONTHLY_BANDWIDTH_GB > 0 ? RENDER_MONTHLY_BANDWIDTH_GB : 5;
+    res.json({
+      configured: true,
+      serviceId: RENDER_SERVICE_ID,
+      periodStart: start.toISOString(),
+      periodEnd: now.toISOString(),
+      bandwidthGb: Math.max(0, totalGb),
+      includedBandwidthGb,
+      remainingBandwidthGb: Math.max(0, includedBandwidthGb - Math.max(0, totalGb)),
+      breakdown,
+      diskUsageBytes,
+      diskStatus,
+      observedAt: now.toISOString()
+    });
+  } catch (error) {
+    console.error("Error consultando métricas de Render:", error.message);
+    res.status(502).json({ error: error.message || "No se pudieron consultar las métricas de Render." });
+  }
+});
+
 app.get("/api/admin/supabase/usage", requireAdmin, async (req, res) => {
   try {
     const usage = await getSupabaseUsage();
