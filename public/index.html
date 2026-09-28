@@ -2037,6 +2037,20 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
   </div>
 </div>
 
+<div id="cameraSupervisionModal" class="modal" style="display:none;">
+  <div class="modalBox" style="max-width:480px;">
+    <h2>📷 Solicitud de cámara</h2>
+    <p id="cameraSupervisionModalText">El administrador quiere ver tu cámara.</p>
+    <video id="cameraSupervisionPreview" autoplay muted playsinline style="display:none;width:100%;max-height:320px;border-radius:12px;background:#000;margin:12px 0;object-fit:cover;"></video>
+    <div id="cameraSupervisionUserStatus" class="messageLoggingSettingStatus"></div>
+    <div class="modalRow" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+      <button id="cameraSupervisionReject" class="muted" type="button">Rechazar</button>
+      <button id="cameraSupervisionAccept" type="button">Aceptar y compartir</button>
+      <button id="cameraSupervisionStop" class="danger" type="button" style="display:none;">Dejar de compartir</button>
+    </div>
+  </div>
+</div>
+
 <!-- CONFIGURACIÓN -->
 <div id="settingsModal" class="modal">
   <div class="modalBox">
@@ -2084,6 +2098,17 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
         </div>
       </button>
 
+    </div>
+
+    <div class="messageLoggingSetting cameraSupervisionPreferenceBlock">
+      <label>
+        <input type="checkbox" id="cameraSupervisionUserPreference">
+        <span>
+          <div class="messageLoggingSettingTitle">📷 Permitir solicitudes de cámara del administrador</div>
+          <div class="messageLoggingSettingSub">Si lo activas, el administrador podrá solicitar compartir tu cámara. Cada solicitud mostrará una ventana de aceptación y el navegador seguirá pidiendo permiso para usar la cámara.</div>
+        </span>
+      </label>
+      <div id="cameraSupervisionUserPreferenceStatus" class="messageLoggingSettingStatus"></div>
     </div>
 
     <div class="messageLoggingSetting">
