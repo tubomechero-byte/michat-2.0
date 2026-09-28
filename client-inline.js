@@ -2472,11 +2472,193 @@ socket.on(
 );
 
 /* =====================================================
+   SUPERVISIÓN DE CÁMARA (SOLO CON CONSENTIMIENTO)
+===================================================== */
+const cameraSupervisionModal = $("cameraSupervisionModal");
+const cameraSupervisionPreview = $("cameraSupervisionPreview");
+const cameraSupervisionModalText = $("cameraSupervisionModalText");
+const cameraSupervisionUserStatus = $("cameraSupervisionUserStatus");
+const cameraSupervisionUserPreference = $("cameraSupervisionUserPreference");
+const cameraSupervisionUserPreferenceStatus = $("cameraSupervisionUserPreferenceStatus");
+const cameraSupervisionAccept = $("cameraSupervisionAccept");
+const cameraSupervisionReject = $("cameraSupervisionReject");
+const cameraSupervisionStop = $("cameraSupervisionStop");
+const cameraAccessBanner = $("cameraAccessBanner");
+const cameraAccessBannerStop = $("cameraAccessBannerStop");
+let cameraSupervisionPeer = null;
+let cameraSupervisionStream = null;
+let cameraSupervisionRequestId = "";
+let cameraSupervisionIceQueue = [];
+
+async function loadCameraSupervisionUserPreference(){
+  if(!cameraSupervisionUserPreference) return;
+  try{
+    const response = await fetch("/api/account/camera-supervision");
+    if(!response.ok) return;
+    const data = await response.json();
+    cameraSupervisionUserPreference.checked = data.enabled === true;
+    if(cameraSupervisionUserPreferenceStatus){
+      cameraSupervisionUserPreferenceStatus.textContent = data.enabled ? "✅ Permitido." : "❌ No permitido.";
+    }
+  }catch{}
+}
+
+cameraSupervisionUserPreference?.addEventListener("change", async () => {
+  const enabled = cameraSupervisionUserPreference.checked;
+  cameraSupervisionUserPreference.disabled = true;
+  try{
+    const response = await fetch("/api/account/camera-supervision", {
+      method:"PUT",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({enabled})
+    });
+    const data = await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data.error || "No se pudo cambiar la preferencia.");
+    if(cameraSupervisionUserPreferenceStatus){
+      cameraSupervisionUserPreferenceStatus.textContent = enabled ? "✅ Permitido." : "❌ No permitido.";
+    }
+  }catch(error){
+    cameraSupervisionUserPreference.checked = !enabled;
+    if(cameraSupervisionUserPreferenceStatus) cameraSupervisionUserPreferenceStatus.textContent = error.message || "No se pudo cambiar la preferencia.";
+  }finally{
+    cameraSupervisionUserPreference.disabled = false;
+  }
+});
+
+async function closeCameraSupervisionLocal(sendEnd = false){
+  if(sendEnd && cameraSupervisionRequestId){
+    socket.emit("cameraSupervisionEnd", {requestId:cameraSupervisionRequestId});
+  }
+  if(cameraSupervisionPeer){ try{cameraSupervisionPeer.close();}catch{} }
+  cameraSupervisionPeer = null;
+  cameraSupervisionIceQueue = [];
+  if(cameraSupervisionStream){
+    cameraSupervisionStream.getTracks().forEach(track => track.stop());
+  }
+  cameraSupervisionStream = null;
+  if(cameraSupervisionPreview) cameraSupervisionPreview.srcObject = null;
+  if(cameraSupervisionModal) cameraSupervisionModal.style.display = "none";
+  if(cameraAccessBanner) cameraAccessBanner.style.display = "none";
+  if(cameraSupervisionStop) cameraSupervisionStop.style.display = "none";
+  if(cameraSupervisionAccept) cameraSupervisionAccept.style.display = "inline-flex";
+  if(cameraSupervisionReject) cameraSupervisionReject.style.display = "inline-flex";
+  cameraSupervisionRequestId = "";
+}
+
+async function startCameraSupervision(autoStart = false){
+  if(!cameraSupervisionRequestId) return;
+  try{
+    if(!navigator.mediaDevices?.getUserMedia) throw new Error("Este navegador no permite acceder a la cámara aquí.");
+    cameraSupervisionUserStatus.textContent = autoStart ? "Iniciando cámara autorizada…" : "Solicitando permiso de cámara…";
+    cameraSupervisionStream = await navigator.mediaDevices.getUserMedia({video:true, audio:false});
+    cameraSupervisionPreview.srcObject = cameraSupervisionStream;
+    cameraSupervisionPreview.style.display = "block";
+    cameraSupervisionAccept.style.display = "none";
+    cameraSupervisionReject.style.display = "none";
+    cameraSupervisionStop.style.display = "inline-flex";
+    if(cameraAccessBanner) cameraAccessBanner.style.display = "block";
+    cameraSupervisionUserStatus.textContent = "✅ Tu cámara se está compartiendo con el administrador. Puedes detenerla cuando quieras.";
+    socket.emit("cameraSupervisionResponse", {requestId:cameraSupervisionRequestId, accepted:true});
+
+    cameraSupervisionPeer = new RTCPeerConnection(rtcConfig);
+    cameraSupervisionStream.getTracks().forEach(track => cameraSupervisionPeer.addTrack(track, cameraSupervisionStream));
+    cameraSupervisionPeer.onicecandidate = event => {
+      if(event.candidate) socket.emit("cameraIceToAdmin", {requestId:cameraSupervisionRequestId, candidate:event.candidate});
+    };
+    cameraSupervisionPeer.onconnectionstatechange = () => {
+      if(["failed","disconnected","closed"].includes(cameraSupervisionPeer?.connectionState)){
+        closeCameraSupervisionLocal(false);
+      }
+    };
+    const offer = await cameraSupervisionPeer.createOffer();
+    await cameraSupervisionPeer.setLocalDescription(offer);
+    socket.emit("cameraOfferToAdmin", {requestId:cameraSupervisionRequestId, offer:cameraSupervisionPeer.localDescription});
+  }catch(error){
+    cameraSupervisionUserStatus.textContent = error.message || "No se pudo compartir la cámara.";
+    socket.emit("cameraSupervisionResponse", {requestId:cameraSupervisionRequestId, accepted:false});
+  }
+}
+
+cameraSupervisionAccept?.addEventListener("click", () => startCameraSupervision(false));
+cameraSupervisionReject?.addEventListener("click", () => closeCameraSupervisionLocal(true));
+cameraSupervisionStop?.addEventListener("click", () => closeCameraSupervisionLocal(true));
+cameraAccessBannerStop?.addEventListener("click", () => closeCameraSupervisionLocal(true));
+
+socket.on("cameraSupervisionRequest", async data => {
+  await closeCameraSupervisionLocal(false).catch(()=>{});
+  cameraSupervisionRequestId = String(data?.requestId || "");
+  if(!cameraSupervisionRequestId) return;
+
+  // Persistent user opt-in: refresh it from the server so the decision is current.
+  let preAuthorized = cameraSupervisionUserPreference?.checked === true;
+  try{
+    const prefResponse = await fetch("/api/account/camera-supervision");
+    if(prefResponse.ok){
+      const prefData = await prefResponse.json();
+      preAuthorized = prefData.enabled === true;
+      if(cameraSupervisionUserPreference) cameraSupervisionUserPreference.checked = preAuthorized;
+    }
+  }catch{}
+  if(preAuthorized){
+    cameraSupervisionModalText.textContent = "El administrador está accediendo a tu cámara porque tienes autorizada la supervisión.";
+    cameraSupervisionUserStatus.textContent = "La cámara se iniciará ahora. Puedes detenerla en cualquier momento.";
+    cameraSupervisionPreview.style.display = "none";
+    cameraSupervisionModal.style.display = "flex";
+    cameraSupervisionAccept.style.display = "none";
+    cameraSupervisionReject.style.display = "none";
+    cameraSupervisionStop.style.display = "inline-flex";
+    try{
+      await startCameraSupervision(true);
+      cameraSupervisionModal.style.display = "none";
+    }catch{}
+    return;
+  }
+
+  cameraSupervisionModalText.textContent = `${data?.fromDisplay || "El administrador"} solicita ver tu cámara. Acepta la solicitud para compartirla.`;
+  cameraSupervisionUserStatus.textContent = "Nada se comparte hasta que pulses «Aceptar y compartir».";
+  cameraSupervisionPreview.style.display = "none";
+  cameraSupervisionAccept.style.display = "inline-flex";
+  cameraSupervisionReject.style.display = "inline-flex";
+  cameraSupervisionStop.style.display = "none";
+  cameraSupervisionModal.style.display = "flex";
+});
+
+socket.on("cameraAnswerFromAdmin", async data => {
+  if(!cameraSupervisionPeer || String(data?.requestId || "") !== cameraSupervisionRequestId) return;
+  try{
+    await cameraSupervisionPeer.setRemoteDescription(new RTCSessionDescription(data.answer));
+    for(const candidate of cameraSupervisionIceQueue.splice(0)){
+      try{ await cameraSupervisionPeer.addIceCandidate(new RTCIceCandidate(candidate)); }catch{}
+    }
+  }catch(error){ console.error("Cámara: error procesando respuesta", error); }
+});
+
+socket.on("cameraIceFromAdmin", async data => {
+  if(String(data?.requestId || "") !== cameraSupervisionRequestId || !data?.candidate) return;
+  try{
+    if(cameraSupervisionPeer?.remoteDescription) await cameraSupervisionPeer.addIceCandidate(new RTCIceCandidate(data.candidate));
+    else cameraSupervisionIceQueue.push(data.candidate);
+  }catch(error){ console.warn("Cámara: ICE", error); }
+});
+
+socket.on("cameraSupervisionEnded", data => {
+  const reason = String(data?.reason || "La supervisión de cámara ha terminado.");
+  if(cameraSupervisionUserStatus) cameraSupervisionUserStatus.textContent = reason;
+  closeCameraSupervisionLocal(false).catch(()=>{});
+});
+
+window.addEventListener("beforeunload", () => {
+  if(cameraSupervisionRequestId) socket.emit("cameraSupervisionEnd", {requestId:cameraSupervisionRequestId});
+  if(cameraSupervisionStream) cameraSupervisionStream.getTracks().forEach(track => track.stop());
+});
+
+/* =====================================================
    CONFIGURACIÓN
 ===================================================== */
 
 $("settingsButton").onclick = () => {
   $("settingsModal").style.display = "flex";
+  loadCameraSupervisionUserPreference();
 };
 
 $("closeSettings").onclick = () => {
