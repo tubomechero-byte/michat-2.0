@@ -818,6 +818,7 @@ let adminCameraSocket = null;
 let adminCameraPeer = null;
 let adminCameraRequestId = "";
 let adminCameraIceQueue = [];
+let adminCameraAuthenticated = false;
 
 function setCameraAdminStatus(text, kind="msg"){
   const el=$("cameraSupervisionStatus");
@@ -867,8 +868,13 @@ function ensureAdminCameraSocket(){
   if(adminCameraSocket && adminCameraSocket.connected)return;
   adminCameraSocket=io();
   adminCameraSocket.on('connect',()=>adminCameraSocket.emit('adminAuthenticate',localStorage.getItem(tokenKey)||''));
-  adminCameraSocket.on('adminAuthenticationError',msg=>setCameraAdminStatus(msg||'No autorizado.','msg error'));
-  adminCameraSocket.on('adminAuthenticated',()=>setCameraAdminStatus('✅ Panel de cámara conectado.','msg ok'));
+  adminCameraSocket.on('adminAuthenticationError',msg=>{adminCameraAuthenticated=false;setCameraAdminStatus(msg||'No autorizado.','msg error');});
+  adminCameraSocket.on('adminAuthenticated',()=>{adminCameraAuthenticated=true;setCameraAdminStatus('✅ Panel de cámara conectado.','msg ok');});
+  adminCameraSocket.on('adminCameraError',msg=>{
+    setCameraAdminStatus(String(msg||'No se pudo iniciar la supervisión de cámara.'),'msg error');
+    if($('stopCameraSupervision'))$('stopCameraSupervision').disabled=true;
+    adminCameraRequestId='';
+  });
   adminCameraSocket.on('cameraSupervisionRequested',data=>{
     adminCameraRequestId=String(data?.requestId||'');
     setCameraAdminStatus('📨 Solicitud enviada. Si el usuario tiene autorización permanente, la cámara se abrirá automáticamente; si no, tendrá que aceptar.','msg');
@@ -923,7 +929,7 @@ function requestCameraSupervision(){
   if(!enabled)return setCameraAdminStatus('Activa primero la casilla de supervisión de cámara.','msg error');
   if(!username)return setCameraAdminStatus('Selecciona un usuario conectado.','msg error');
   ensureAdminCameraSocket();
-  if(!adminCameraSocket?.connected)return setCameraAdminStatus('Conectando con el servidor… vuelve a pulsar en un momento.','msg');
+  if(!adminCameraSocket?.connected || !adminCameraAuthenticated)return setCameraAdminStatus('Conectando y autenticando el panel de cámara… vuelve a pulsar en un momento.','msg');
   stopAdminCamera(false);
   adminCameraSocket.emit('adminCameraRequest',{username});
   setCameraAdminStatus(`Enviando solicitud de cámara a @${username}…`,'msg');
