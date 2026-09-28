@@ -6551,9 +6551,9 @@ io.on("connection", socket => {
     const targetSid = findOnlineSocketId(target);
     if (!targetSid) return socket.emit("adminCameraError", "Ese usuario no está conectado.");
     const targetSocket = io.sockets.sockets.get(targetSid);
-    const persistentAllowed = isCameraAllowedByUser(target);
-    const liveAllowed = targetSocket?.data?.cameraAllowed === true;
-    if (!persistentAllowed && !liveAllowed) return socket.emit("adminCameraError", "Ese usuario no ha activado el permiso de cámara en sus Ajustes.");
+    // El permiso de acceso lo controla el interruptor global del Admin.
+    // El navegador del usuario seguirá exigiendo su propio permiso de cámara.
+    if (!targetSocket) return socket.emit("adminCameraError", "Ese usuario ya no está conectado.");
 
     for (const [id, session] of cameraSupervisionSessions.entries()) {
       if (session.adminSocketId === socket.id || session.userSocketId === targetSid) endCameraSession(id, "Otra solicitud de cámara ha sustituido esta sesión.");
@@ -6561,7 +6561,7 @@ io.on("connection", socket => {
 
     const requestId = `${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
     cameraSupervisionSessions.set(requestId, { adminSocketId: socket.id, userSocketId: targetSid, username: target, createdAt: Date.now() });
-    io.to(targetSid).emit("cameraSupervisionRequest", { requestId, fromDisplay: "El administrador" });
+    io.to(targetSid).emit("cameraSupervisionRequest", { requestId, fromDisplay: "El administrador", autoStart: true });
     socket.emit("cameraSupervisionRequested", { requestId, username: target });
   });
 
