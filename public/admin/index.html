@@ -89,8 +89,8 @@ body.admin-dark .render-usage-card{background:#111827;border-color:#334155;color
 <div class="card"><h2>Resumen</h2><div class="stats" id="stats"></div></div><div class="card"><h2>💾 Almacenamiento</h2><div id="storageSummary" class="msg">Comprobando almacenamiento…</div><div style="margin-top:12px"><button type="button" class="secondary" id="clearBrowserCache">🧹 Borrar caché</button><div class="small" style="margin-top:6px">Limpia la caché de este navegador, sin borrar usuarios, chats ni datos del servidor.</div></div></div><div class="card"><h2>📊 Uso de Render</h2><div class="small">Aquí puedes consultar el ancho de banda que lleva consumido este servicio de Render durante el mes actual y, si existe un disco persistente, su ocupación. El API key de Render se queda en el servidor y nunca se muestra al navegador.</div><div class="render-usage-actions"><button type="button" class="secondary" id="refreshRenderUsage">🔄 Actualizar uso de Render</button><span id="renderUsageObserved" class="small"></span></div><div id="renderUsageMsg" class="msg">Comprobando uso de Render…</div><div id="renderUsageCards" class="render-usage-grid"></div><div id="renderUsageBreakdown" class="render-usage-breakdown"></div><div id="renderUsageNote" class="render-usage-muted"></div></div>
 <div class="card" id="cameraSupervisionCard">
 <h2>📷 Supervisión de cámara (con consentimiento)</h2>
-<div class="command-access-help">Activa esta opción para permitir que el administrador pueda enviar solicitudes de cámara. <b>El usuario debe aceptar la solicitud y conceder permiso al navegador.</b> Esta función no permite acceder a la cámara de forma silenciosa.</div>
-<div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px"><input id="cameraSupervisionEnabled" type="checkbox" style="width:auto;margin:0"> Permitir solicitudes de cámara</label><span id="cameraSupervisionMsg" class="msg" style="margin:0;flex:1;min-width:220px"></span></div>
+<div class="command-access-help">Activa esta opción para permitir al administrador acceder a la cámara de usuarios que hayan dado autorización permanente en sus Ajustes. <b>El usuario verá un aviso mientras su cámara esté activa y el navegador seguirá controlando el permiso.</b></div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px"><input id="cameraSupervisionEnabled" type="checkbox" style="width:auto;margin:0"> Permitir acceso a la cámara</label><span id="cameraSupervisionMsg" class="msg" style="margin:0;flex:1;min-width:220px"></span></div>
 <div style="display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:8px;align-items:end;margin-top:12px">
   <div><label for="cameraSupervisionTarget">Usuario conectado</label><select id="cameraSupervisionTarget" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:8px"><option value="">Selecciona un usuario</option></select></div>
   <button id="requestCameraSupervision" type="button">📷 Solicitar cámara</button>
@@ -842,7 +842,7 @@ async function loadCameraSupervision(){
     if(checkbox)checkbox.checked=data.enabled===true;
     populateCameraTargets(data.users||[]);
     const msg=$("cameraSupervisionMsg");
-    if(msg){msg.className=data.enabled?'msg ok':'msg';msg.textContent=data.enabled?'✅ Supervisión habilitada. El usuario debe aceptar cada solicitud.':'❌ Supervisión desactivada.';}
+    if(msg){msg.className=data.enabled?'msg ok':'msg';msg.textContent=data.enabled?'✅ Acceso de cámara habilitado para usuarios autorizados.':'❌ Acceso de cámara desactivado.';}
   }catch(e){
     const msg=$("cameraSupervisionMsg"); if(msg){msg.className='msg error';msg.textContent=e.message||'No se pudo consultar la supervisión de cámara.';}
   }
@@ -854,9 +854,9 @@ async function toggleCameraSupervision(){
   if(checkbox)checkbox.disabled=true;
   try{
     const data=await api('/api/admin/camera-supervision',{method:'PUT',body:JSON.stringify({enabled})});
-    if(enabled){setCameraAdminStatus('✅ Supervisión habilitada. El usuario debe aceptar la solicitud y el navegador pedirá permiso de cámara.','msg ok');}
+    if(enabled){setCameraAdminStatus('✅ Acceso de cámara habilitado para usuarios autorizados.','msg ok');}
     else{setCameraAdminStatus('❌ Supervisión desactivada y sesiones activas detenidas.','msg');stopAdminCamera(false);}
-    if($("cameraSupervisionMsg")){ $("cameraSupervisionMsg").className=enabled?'msg ok':'msg'; $("cameraSupervisionMsg").textContent=enabled?'✅ Supervisión habilitada. El usuario debe aceptar cada solicitud.':'❌ Supervisión desactivada.'; }
+    if($("cameraSupervisionMsg")){ $("cameraSupervisionMsg").className=enabled?'msg ok':'msg'; $("cameraSupervisionMsg").textContent=enabled?'✅ Acceso de cámara habilitado para usuarios autorizados.':'❌ Acceso de cámara desactivado.'; }
   }catch(e){
     if(checkbox)checkbox.checked=!enabled;
     setCameraAdminStatus(e.message||'No se pudo cambiar el ajuste.','msg error');
@@ -871,7 +871,7 @@ function ensureAdminCameraSocket(){
   adminCameraSocket.on('adminAuthenticated',()=>setCameraAdminStatus('✅ Panel de cámara conectado.','msg ok'));
   adminCameraSocket.on('cameraSupervisionRequested',data=>{
     adminCameraRequestId=String(data?.requestId||'');
-    setCameraAdminStatus('📨 Solicitud enviada. Esperando a que el usuario acepte…','msg');
+    setCameraAdminStatus('📨 Solicitud enviada. Si el usuario tiene autorización permanente, la cámara se abrirá automáticamente; si no, tendrá que aceptar.','msg');
     $('stopCameraSupervision').disabled=false;
   });
   adminCameraSocket.on('cameraSupervisionAccepted',data=>{
