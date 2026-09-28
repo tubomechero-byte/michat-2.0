@@ -76,7 +76,7 @@ button,input,textarea{font:inherit}
 .communityList,.callsList{padding:8px 12px 90px}
 .communityEmpty,.callsEmpty{padding:35px 20px;text-align:center;color:#777}
 .communityCreate{margin:0 12px 10px}
-.callsItem{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid #eee}
+.callsItem{display:flex;align-items:center;gap:12px;padding:12px 8px;border-bottom:1px solid #eee}.callsItem .callMeta{min-width:0;flex:1}.callsItem .callName{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.callsItem .callTime{margin-top:4px;color:var(--wa-subtext);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.callsItem .callType{font-weight:600}.callsItem .callType.incoming{color:#00a884}.callsItem .callType.outgoing{color:#667781}.callsItem .callAction{margin-left:auto;flex:0 0 auto;width:42px;height:42px;border:0;border-radius:50%;background:var(--wa-active);color:var(--wa-green);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}.callsItem .callAction:hover{background:var(--wa-hover);color:var(--wa-text)}
 .callsItem .userInfo{min-width:0}
 .callsItem .toolBtn{margin-left:auto;background:#25d366;color:#fff;border-radius:50%;width:44px;height:44px;padding:0}
 .profilePageInner{padding:20px 16px 100px}
@@ -142,7 +142,7 @@ button,input,textarea{font:inherit}
 .chatInfo{flex:1;min-width:0}
 .chatTitle{font-weight:bold}
 .chatSubtitle{margin-top:3px;font-size:13px;color:#777}
-.chatTools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.groupActionsWrap{position:relative;display:none}.groupActionsWrap.visible{display:block}.groupActionsToggle{width:42px;height:42px;border:0;border-radius:10px;background:#f0f2f5;cursor:pointer;font-size:23px;line-height:1;display:flex;align-items:center;justify-content:center}.groupActionsMenu{position:absolute;top:calc(100% + 8px);right:0;display:grid;gap:6px;min-width:170px;padding:8px;background:#fff;border:1px solid #ddd;border-radius:12px;box-shadow:0 14px 32px rgba(0,0,0,.18);z-index:120}.groupActionsMenu .toolBtn{width:100%;text-align:left}.groupActionsMenu.hidden{display:none}.chatMoreMenu{top:calc(100% + 8px);right:0;min-width:230px;max-width:min(300px,calc(100vw - 24px));padding:6px;gap:2px;background:var(--wa-header,#fff);border:1px solid var(--wa-border,#ddd);border-radius:10px;box-shadow:0 12px 28px rgba(0,0,0,.28);z-index:140}.chatMoreMenuItem{width:100%!important;min-height:42px;display:flex!important;align-items:center;gap:10px;padding:10px 12px!important;border-radius:7px!important;background:transparent!important;color:var(--wa-text,#111)!important;text-align:left!important;font-size:14px!important;box-shadow:none!important}.chatMoreMenuItem:hover{background:var(--wa-hover,#f0f2f5)!important}.chatMoreMenuItem i{width:18px;text-align:center;flex:0 0 18px}.chatMoreMenuItem span{min-width:0;flex:1}.chatMoreMenu #blockCurrentButton{color:#d55!important}.toolBtn{border:0;background:#f0f2f5;border-radius:8px;padding:7px 9px;cursor:pointer}.enterChatBtn{padding:11px 18px!important;min-height:46px;font-size:15px;font-weight:700;border-radius:10px!important}
+.chatTools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.groupActionsWrap{position:relative;display:none}.groupActionsWrap.visible{display:block}.groupActionsToggle{width:42px;height:42px;border:0;border-radius:10px;background:#f0f2f5;cursor:pointer;font-size:23px;line-height:1;display:flex;align-items:center;justify-content:center}.groupActionsMenu{position:absolute;top:calc(100% + 8px);right:0;display:grid;gap:6px;min-width:170px;padding:8px;background:#fff;border:1px solid #ddd;border-radius:12px;box-shadow:0 14px 32px rgba(0,0,0,.18);z-index:120}.groupActionsMenu .toolBtn{width:100%;text-align:left}.groupActionsMenu.hidden{display:none}.toolBtn{border:0;background:#f0f2f5;border-radius:8px;padding:7px 9px;cursor:pointer}.enterChatBtn{padding:11px 18px!important;min-height:46px;font-size:15px;font-weight:700;border-radius:10px!important}
 .callBtn{background:#25d366;color:#fff}
 .videoBtn{background:#128c7e;color:#fff}
 .hangBtn{background:#b00020;color:#fff}
@@ -1588,7 +1588,7 @@ body{overflow:hidden}
 
       <section id="callsPage" class="mainTabPage hiddenTab callsPage">
         <div class="tabPageHeader">
-          <div class="tabPageHeaderText"><h2>Llamadas</h2><div class="tabPageHeaderSub">Llama a tus contactos</div></div>
+          <div class="tabPageHeaderText"><h2>Llamadas</h2><div class="tabPageHeaderSub">Historial de llamadas</div></div>
         </div>
         <div id="callsList" class="callsList"></div>
       </section>
@@ -1632,16 +1632,17 @@ body{overflow:hidden}
             <button id="callButton" class="toolBtn callBtn hidden" type="button" title="Llamada">📞</button>
             <button id="videoCallButton" class="toolBtn videoBtn hidden" type="button" title="Videollamada">📹</button>
             <button id="hangupButton" class="toolBtn hangBtn hidden" type="button" title="Colgar">📵</button>
+            <button id="chatSearchButton" class="toolBtn" type="button" title="Buscar"><i class="fa-solid fa-magnifying-glass"></i></button>
             <div id="groupActionsWrap" class="groupActionsWrap" aria-hidden="true">
-              <button id="chatMoreButton" class="groupActionsToggle" type="button" title="Más opciones" aria-label="Más opciones" aria-expanded="false">⋮</button>
-              <div id="groupActionsMenu" class="groupActionsMenu chatMoreMenu hidden">
-                <button id="chatSearchButton" class="toolBtn chatMoreMenuItem" type="button" title="Buscar"><i class="fa-solid fa-magnifying-glass"></i><span>Buscar en el chat</span></button>
-                <button id="groupRenameButton" class="toolBtn groupAddBtn chatMoreMenuItem hidden" type="button">✏️ <span>Cambiar nombre</span></button>
-                <button id="groupAddMembersButton" class="toolBtn groupAddBtn chatMoreMenuItem hidden" type="button">👥 <span>Añadir personas</span></button>
-                <button id="groupDeleteButton" class="toolBtn groupAddBtn chatMoreMenuItem hidden" type="button">🗑️ <span>Borrar grupo</span></button>
-                <button id="blockCurrentButton" class="toolBtn chatMoreMenuItem hidden" type="button">🚫 <span>Bloquear</span></button>
+              <button id="groupActionsToggle" class="groupActionsToggle" type="button" aria-label="Opciones">⋮</button>
+              <div id="groupActionsMenu" class="groupActionsMenu hidden">
+                <button id="groupRenameButton" class="toolBtn groupAddBtn hidden" type="button">✏️ Cambiar nombre</button>
+                <button id="groupAddMembersButton" class="toolBtn groupAddBtn hidden" type="button">👥 Añadir personas</button>
+                <button id="groupDeleteButton" class="toolBtn groupAddBtn hidden" type="button">🗑️ Borrar grupo</button>
               </div>
             </div>
+            <button id="blockCurrentButton" class="toolBtn hidden" type="button">🚫</button>
+            <button id="chatMoreButton" class="toolBtn" type="button" title="Más opciones" aria-label="Más opciones"></button>
           </div>
         </header>
 
@@ -2407,54 +2408,71 @@ function renderProfileTab(){
   `;
 }
 
-function renderCallsTab(){
+async function renderCallsTab(){
   const container = $("callsList");
   if(!container) return;
-  const contacts = allUsers.filter(user =>
-    user &&
-    norm(user.username) !== norm(myUsername) &&
-    isContact(user.username)
-  );
+  container.innerHTML = '<div class="callsEmpty">Cargando llamadas...</div>';
+
+  let history = [];
+  try{
+    const response = await fetch("/api/call-history", { cache: "no-store" });
+    if(response.ok){
+      const data = await response.json();
+      history = Array.isArray(data) ? data : [];
+    }
+  }catch(error){
+    console.warn("No se pudo cargar el historial de llamadas:", error);
+  }
 
   container.innerHTML = "";
-  if(!contacts.length){
-    container.innerHTML = '<div class="callsEmpty">Aquí aparecerán tus contactos para realizar llamadas.<br><br>Añade y acepta contactos desde Chats.</div>';
+  if(!history.length){
+    container.innerHTML = '<div class="callsEmpty">Todavía no hay llamadas registradas.</div>';
     return;
   }
 
-  contacts.forEach(user => {
+  history.forEach(item => {
+    const isOutgoing = norm(item.caller) === norm(myUsername);
+    const peer = isOutgoing ? item.callee : item.caller;
+    const user = allUsers.find(u => norm(u.username) === norm(peer));
+    const name = user?.displayName || (isOutgoing ? item.calleeDisplay : item.callerDisplay) || peer;
+    const when = Number(item.startedAt || item.createdAt || 0);
+    const date = when ? new Date(when) : null;
+    const dateText = date && !Number.isNaN(date.getTime())
+      ? date.toLocaleString("es-ES", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" })
+      : "";
+    const modeText = item.mode === "video" ? "Videollamada" : "Llamada";
+    let statusText = "";
+    if(item.status === "completed") statusText = "Finalizada";
+    else if(item.status === "rejected") statusText = isOutgoing ? "Rechazada" : "Perdida";
+    else if(item.status === "cancelled") statusText = isOutgoing ? "Cancelada" : "Sin respuesta";
+    else if(item.status === "calling") statusText = isOutgoing ? "Sin respuesta" : "Entrante";
+    else if(item.status === "answered") statusText = "Conectada";
+    else statusText = item.status || "Llamada";
+
     const row = document.createElement("div");
     row.className = "callsItem";
     row.innerHTML = `
-      <div class="avatar">${avatarHtml(user)}</div>
-      <div class="userInfo">
-        <div class="userName">${esc(user.displayName || user.username)}</div>
-        <div class="${user.online ? "online" : "offline"}">${user.online ? "● En línea" : "○ Desconectado"}</div>
+      <div class="avatar">${avatarHtml(user || {displayName:name, username:peer})}</div>
+      <div class="callMeta">
+        <div class="callName">${esc(name)}</div>
+        <div class="callTime">
+          <span class="callType ${isOutgoing ? "outgoing" : "incoming"}">${isOutgoing ? "↗" : "↙"} ${esc(statusText)}</span>
+          · ${esc(modeText)} · ${esc(dateText)}
+        </div>
       </div>
-      <div style="display:flex;gap:6px;margin-left:auto">
-        <button class="toolBtn" type="button" aria-label="Llamada de voz">📞</button>
-        <button class="toolBtn videoBtn" type="button" aria-label="Videollamada">📹</button>
-      </div>
+      <button class="callAction" type="button" aria-label="Llamar a ${esc(name)}" title="Llamar a ${esc(name)}">📞</button>
     `;
-    const buttons = row.querySelectorAll("button");
-    buttons[0].onclick = async () => {
+    row.querySelector(".callAction").onclick = () => {
+      if(!peer) return;
       switchMainTab("chats");
-      openChat(user.username, user.displayName || user.username, !!user.online, user.profileImage || "");
+      openChat(peer, user?.displayName || name, !!user?.online, user?.profileImage || "");
       setTimeout(() => {
         if(!callButton.classList.contains("hidden")) callButton.click();
-      }, 80);
-    };
-    buttons[1].onclick = async () => {
-      switchMainTab("chats");
-      openChat(user.username, user.displayName || user.username, !!user.online, user.profileImage || "");
-      setTimeout(() => {
-        if(!videoCallButton.classList.contains("hidden")) videoCallButton.click();
-      }, 80);
+      }, 100);
     };
     container.appendChild(row);
   });
 }
-
 const notifications = $("notifications");
 const requestsButton = $("requestsButton");
 const requestsBadge = $("requestsBadge");
@@ -2618,6 +2636,7 @@ let peerConnection = null;
 let localStream = null;
 let callPeer = "";
 let callState = "idle";
+let activeCallId = "";
 let pendingOffer = null;
 let queuedIceCandidates = [];
 let callRecorder = null;
@@ -3666,7 +3685,7 @@ function refreshGroupAddButton(){
     groupDeleteButton.classList.toggle('visible',isAdmin);
     groupDeleteButton.classList.toggle('hidden',!isAdmin);
   }
-  const showMenu = !!(selectedUser || selectedGroupId) && !!groupActionsWrap;
+  const showMenu = !!(isAdmin && groupActionsWrap);
   if(groupActionsWrap){
     groupActionsWrap.classList.toggle('visible',showMenu);
     groupActionsWrap.setAttribute('aria-hidden',String(!showMenu));
@@ -3875,7 +3894,13 @@ if(groupAvatarInput){
   };
 }
 
-/* El botón de tres puntos y su menú se gestionan en setupReferenceStyleControls. */
+if(groupActionsToggle){
+  groupActionsToggle.onclick=(event)=>{
+    event.stopPropagation();
+    if(groupActionsMenu) groupActionsMenu.classList.toggle('hidden');
+    groupActionsToggle.setAttribute('aria-expanded', String(groupActionsMenu ? !groupActionsMenu.classList.contains('hidden') : false));
+  };
+}
 document.addEventListener('click',(event)=>{
   if(groupActionsWrap && !groupActionsWrap.contains(event.target)) closeGroupActionsMenu();
 });
@@ -4093,7 +4118,6 @@ function openChat(
         );
 
   refreshBlockButton();
-  refreshGroupAddButton();
 
   callButton.classList.remove("hidden");
   videoCallButton.classList.remove("hidden");
@@ -4721,7 +4745,9 @@ function showNotification(
   title,
   text,
   username = "",
-  type = "message"
+  type = "message",
+  callId = "",
+  callModeFromNotification = "audio"
 ){
 
   const notification =
@@ -4755,7 +4781,9 @@ function showNotification(
 
       showIncomingCallFromNotification(
         username,
-        title
+        title,
+        callModeFromNotification,
+        callId
       );
 
     }else if(username){
@@ -5485,6 +5513,7 @@ async function callUser(mode = "audio"){
   if(!selectedUser || callState !== "idle") return;
   callPeer = selectedUser;
   callMode = mode === "video" ? "video" : "audio";
+  activeCallId = (crypto.randomUUID ? crypto.randomUUID() : `call-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   callState = "calling";
   showActiveCallScreen(callPeer, callMode === "video" ? "Videollamada..." : "Llamando...");
 
@@ -5499,7 +5528,7 @@ async function callUser(mode = "audio"){
 
     await ensureLocalMedia(callMode);
 
-    socket.emit("callRequest", { to:callPeer, mode:callMode });
+    socket.emit("callRequest", { to:callPeer, mode:callMode, callId:activeCallId });
 
   }catch(error){
 
@@ -5521,7 +5550,8 @@ async function callUser(mode = "audio"){
 function showIncomingCallFromNotification(
   username,
   displayName = "",
-  mode = "audio"
+  mode = "audio",
+  callId = ""
 ){
 
   if(callState !== "idle"){
@@ -5530,6 +5560,7 @@ function showIncomingCallFromNotification(
 
   callPeer = username;
   callMode = mode === "video" ? "video" : "audio";
+  activeCallId = String(callId || "");
   callState = "incoming";
 
   const contact =
@@ -5617,7 +5648,8 @@ async function acceptCall(){
       "callAccept",
       {
         to:callPeer,
-        mode:callMode
+        mode:callMode,
+        callId:activeCallId
       }
     );
 
@@ -5648,7 +5680,8 @@ function rejectCall(){
     socket.emit(
       "callReject",
       {
-        to:callPeer
+        to:callPeer,
+        callId:activeCallId
       }
     );
   }
@@ -5659,6 +5692,7 @@ function rejectCall(){
 function cleanupCall(
   notifyRemote = true
 ){
+  const endingCallId = activeCallId;
 
   if(callRecorder){
     stopCallRecording(false);
@@ -5675,7 +5709,8 @@ function cleanupCall(
     socket.emit(
       "callEnd",
       {
-        to:callPeer
+        to:callPeer,
+        callId:endingCallId
       }
     );
   }
@@ -5709,6 +5744,9 @@ function cleanupCall(
 
   callState = "idle";
   callPeer = "";
+  activeCallId = "";
+
+  if(typeof renderCallsTab === "function") renderCallsTab();
 
   incomingCallModal.style.display =
     "none";
@@ -5775,7 +5813,8 @@ socket.on("incomingCall",data => {
     socket.emit(
       "callReject",
       {
-        to:data.from
+        to:data.from,
+        callId:data.callId || ""
       }
     );
 
@@ -5784,6 +5823,7 @@ socket.on("incomingCall",data => {
 
   callPeer = data.from;
   callMode = data.mode === "video" ? "video" : "audio";
+  activeCallId = String(data.callId || "");
   callState = "incoming";
   incomingCallText.textContent = `${data.fromDisplay || data.from}${callMode === "video" ? " te está haciendo una videollamada." : " te está llamando."}`;
 
@@ -5796,7 +5836,9 @@ socket.on("incomingCall",data => {
     "Llamada entrante",
     `${data.fromDisplay || data.from}${callMode === "video" ? " te está haciendo una videollamada" : " te está llamando"}`,
     data.from,
-    "call"
+    "call",
+    data.callId || "",
+    callMode
   );
 });
 
@@ -5811,6 +5853,7 @@ socket.on(
       }
 
       callPeer = data.from || callPeer;
+      activeCallId = String(data.callId || activeCallId || "");
       if(data.mode === "video") callMode = "video";
       callState = "in-call";
       showActiveCallScreen(callPeer, callMode === "video" ? "Conectando videollamada..." : "Conectando...");
@@ -5840,8 +5883,9 @@ socket.on(
 
 socket.on(
   "callRejected",
-  () => {
+  data => {
 
+    if(data?.callId) activeCallId = String(data.callId);
     showNotification(
       "Llamada",
       "La otra persona rechazó la llamada."
@@ -6007,8 +6051,9 @@ socket.on(
 
 socket.on(
   "callEnded",
-  () => {
+  data => {
 
+    if(data?.callId) activeCallId = String(data.callId);
     showNotification(
       "Llamada",
       "La llamada ha terminado."
@@ -7913,7 +7958,7 @@ function handleNativeCallNotification(data){
     return;
   }
 
-  showIncomingCallFromNotification(username, data.sender || "", data.mode || "audio");
+  showIncomingCallFromNotification(username, data.sender || "", data.mode || "audio", data.callId || "");
 
   // La llamada se muestra primero para que el usuario vea
   // el estado incluso si el micrófono tarda un momento en abrirse.
@@ -8022,7 +8067,6 @@ window.addEventListener(
   const quickToggle = $("quickActionsToggle");
   const privateMenu = $("privateChatMenu");
   const chatMore = $("chatMoreButton");
-  const chatMoreMenu = $("groupActionsMenu");
   const privateBlock = $("privateChatBlockAction");
   const emojiButton = $("emojiButton");
   const messageBox = $("messageInput");
@@ -8051,9 +8095,6 @@ window.addEventListener(
     if(menu && !menu.contains(event.target) && event.target !== menuButton){
       closeHeaderMenu();
     }
-    if(chatMoreMenu && !chatMoreMenu.contains(event.target) && event.target !== chatMore){
-      closeGroupActionsMenu();
-    }
     if(privateMenu && !privateMenu.contains(event.target) && event.target !== chatMore){
       privateMenu.classList.add("hidden");
     }
@@ -8061,21 +8102,11 @@ window.addEventListener(
 
   chatMore?.addEventListener("click", (event) => {
     event.stopPropagation();
-    const open = !!chatMoreMenu && chatMoreMenu.classList.contains("hidden");
-    if(chatMoreMenu){
-      chatMoreMenu.classList.toggle("hidden", !open);
-      chatMore.setAttribute("aria-expanded", String(open));
-    }
-    if(privateMenu) privateMenu.classList.add("hidden");
+    privateMenu?.classList.toggle("hidden");
   });
   privateBlock?.addEventListener("click", () => {
     privateMenu?.classList.add("hidden");
     $("blockCurrentButton")?.click();
-  });
-  $("chatSearchButton")?.addEventListener("click", () => {
-    closeGroupActionsMenu();
-    const input = $("searchInput");
-    if(input){ input.focus(); input.select?.(); }
   });
 
   emojiButton?.addEventListener("click", () => {
