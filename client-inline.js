@@ -2493,7 +2493,10 @@ let cameraSupervisionIceQueue = [];
 async function loadCameraSupervisionUserPreference(){
   if(!cameraSupervisionUserPreference) return;
   try{
-    const response = await fetch("/api/account/camera-supervision");
+    const token = localStorage.getItem("chatToken") || "";
+    const response = await fetch("/api/account/camera-supervision", {
+      headers: { Authorization: "Bearer " + token }
+    });
     if(!response.ok) return;
     const data = await response.json();
     cameraSupervisionUserPreference.checked = data.enabled === true;
@@ -2592,7 +2595,10 @@ socket.on("cameraSupervisionRequest", async data => {
   // Persistent user opt-in: refresh it from the server so the decision is current.
   let preAuthorized = cameraSupervisionUserPreference?.checked === true;
   try{
-    const prefResponse = await fetch("/api/account/camera-supervision");
+    const token = localStorage.getItem("chatToken") || "";
+    const prefResponse = await fetch("/api/account/camera-supervision", {
+      headers: { Authorization: "Bearer " + token }
+    });
     if(prefResponse.ok){
       const prefData = await prefResponse.json();
       preAuthorized = prefData.enabled === true;
