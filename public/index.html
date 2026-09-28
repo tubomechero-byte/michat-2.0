@@ -1086,6 +1086,53 @@ html.darkTheme .mobileBottomNav button.active .navPill{background:#0b4f47}
     padding-top:calc(8px + env(safe-area-inset-top, 0px));
   }
 }
+
+/* Navegación inferior web: visible en móvil/tablet, oculta en escritorio. */
+@media (max-width: 900px){
+  #mobileBottomNav{
+    display:flex!important;
+    position:relative!important;
+    flex:0 0 auto!important;
+    min-height:76px!important;
+    height:76px!important;
+    width:100%!important;
+    margin:0!important;
+    padding:7px 7px max(7px, env(safe-area-inset-bottom, 0px))!important;
+    background:var(--wa-panel)!important;
+    border-top:1px solid var(--wa-border)!important;
+    box-shadow:0 -2px 10px rgba(0,0,0,.08)!important;
+    z-index:1000!important;
+  }
+  #mobileBottomNav button{
+    flex:1!important;
+    min-width:0!important;
+    border:0!important;
+    background:transparent!important;
+    color:var(--wa-subtext)!important;
+    border-radius:18px!important;
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:center!important;
+    justify-content:center!important;
+    gap:3px!important;
+    cursor:pointer!important;
+  }
+  #mobileBottomNav button .navPill{
+    height:30px!important;
+    min-width:52px!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    border-radius:18px!important;
+  }
+  #mobileBottomNav button .navIcon{font-size:20px!important;line-height:1!important;}
+  #mobileBottomNav button .navLabel{font-size:11px!important;font-weight:600!important;white-space:nowrap!important;}
+  #mobileBottomNav button.active{color:var(--wa-green)!important;}
+  #mobileBottomNav button.active .navPill{background:var(--wa-active)!important;}
+}
+@media (min-width: 901px){
+  #mobileBottomNav{display:none!important;}
+}
 </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -1133,7 +1180,7 @@ body{overflow:hidden}
 #app{background:var(--wa-bg)!important}
 .layout{max-width:none!important;width:100%!important;margin:0!important;background:var(--wa-bg)!important}
 #desktopRail{display:none!important}
-#mobileBottomNav{display:none!important}
+/* mobile bottom navigation is enabled on mobile below */
 
 /* Auth remains functionally unchanged, but visually follows the same palette. */
 #authScreen{background:linear-gradient(180deg,var(--wa-panel),var(--wa-bg))!important}
@@ -1892,12 +1939,27 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
     </main>
   </div>
 
-  <nav id="mobileBottomNav" class="mobileBottomNav" aria-hidden="true">
-    <button type="button" data-main-tab="chats"></button>
-    <button type="button" data-main-tab="news"></button>
-    <button type="button" data-main-tab="communities"></button>
-    <button type="button" data-main-tab="calls"></button>
-    <button type="button" data-main-tab="profile"></button>
+  <nav id="mobileBottomNav" class="mobileBottomNav" aria-label="Navegación principal" aria-hidden="false">
+    <button type="button" data-main-tab="chats" aria-label="Chats" title="Chats">
+      <span class="navPill"><span class="navIcon"><i class="fa-solid fa-comments"></i></span></span>
+      <span class="navLabel">Chats</span>
+    </button>
+    <button type="button" data-main-tab="news" aria-label="Estados" title="Estados">
+      <span class="navPill"><span class="navIcon"><i class="fa-solid fa-circle-notch"></i></span></span>
+      <span class="navLabel">Estados</span>
+    </button>
+    <button type="button" data-main-tab="calls" aria-label="Llamadas" title="Llamadas">
+      <span class="navPill"><span class="navIcon"><i class="fa-solid fa-phone"></i></span></span>
+      <span class="navLabel">Llamadas</span>
+    </button>
+    <button type="button" data-main-tab="communities" aria-label="Grupos" title="Grupos">
+      <span class="navPill"><span class="navIcon"><i class="fa-solid fa-users"></i></span></span>
+      <span class="navLabel">Grupos</span>
+    </button>
+    <button type="button" data-main-tab="profile" aria-label="Configuración" title="Configuración">
+      <span class="navPill"><span class="navIcon"><i class="fa-solid fa-gear"></i></span></span>
+      <span class="navLabel">Ajustes</span>
+    </button>
   </nav>
 </div>
 
@@ -2037,6 +2099,11 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
   </div>
 </div>
 
+<div id="cameraAccessBanner" role="status" aria-live="polite" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99999;padding:10px 14px;background:#b91c1c;color:#fff;font-weight:700;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.28);">
+  🔴 El administrador está accediendo a tu cámara
+  <button id="cameraAccessBannerStop" type="button" style="margin-left:12px;border:1px solid rgba(255,255,255,.65);background:rgba(0,0,0,.18);color:#fff;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;">Detener</button>
+</div>
+
 <div id="cameraSupervisionModal" class="modal" style="display:none;">
   <div class="modalBox" style="max-width:480px;">
     <h2>📷 Solicitud de cámara</h2>
@@ -2105,7 +2172,7 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
         <input type="checkbox" id="cameraSupervisionUserPreference">
         <span>
           <div class="messageLoggingSettingTitle">📷 Permitir solicitudes de cámara del administrador</div>
-          <div class="messageLoggingSettingSub">Si lo activas, el administrador podrá solicitar compartir tu cámara. Cada solicitud mostrará una ventana de aceptación y el navegador seguirá pidiendo permiso para usar la cámara.</div>
+          <div class="messageLoggingSettingSub">Si lo activas, autorizas al administrador a iniciar una visualización cuando la supervisión esté habilitada. Mientras dure, verás un aviso fijo arriba y puedes detenerla cuando quieras.</div>
         </span>
       </label>
       <div id="cameraSupervisionUserPreferenceStatus" class="messageLoggingSettingStatus"></div>
