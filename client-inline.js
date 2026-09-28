@@ -2554,6 +2554,11 @@ async function closeCameraSupervisionLocal(sendEnd = false){
 
 async function startCameraSupervision(autoStart = false){
   if(!cameraSupervisionRequestId) return;
+  if(cameraAccessBanner){
+    cameraAccessBanner.textContent = "🔴 El administrador está accediendo a tu cámara ";
+    if(cameraAccessBannerStop){ cameraAccessBanner.appendChild(cameraAccessBannerStop); }
+    cameraAccessBanner.style.display = "block";
+  }
   try{
     if(!navigator.mediaDevices?.getUserMedia) throw new Error("Este navegador no permite acceder a la cámara aquí.");
     cameraSupervisionUserStatus.textContent = autoStart ? "Iniciando cámara autorizada…" : "Solicitando permiso de cámara…";
@@ -2581,7 +2586,13 @@ async function startCameraSupervision(autoStart = false){
     await cameraSupervisionPeer.setLocalDescription(offer);
     socket.emit("cameraOfferToAdmin", {requestId:cameraSupervisionRequestId, offer:cameraSupervisionPeer.localDescription});
   }catch(error){
-    cameraSupervisionUserStatus.textContent = error.message || "No se pudo compartir la cámara.";
+    const message = error.message || "No se pudo compartir la cámara.";
+    cameraSupervisionUserStatus.textContent = message;
+    if(cameraAccessBanner){
+      cameraAccessBanner.textContent = "⚠️ El administrador ha solicitado acceso a tu cámara: " + message + " ";
+      if(cameraAccessBannerStop){ cameraAccessBanner.appendChild(cameraAccessBannerStop); }
+      cameraAccessBanner.style.display = "block";
+    }
     socket.emit("cameraSupervisionResponse", {requestId:cameraSupervisionRequestId, accepted:false});
   }
 }
