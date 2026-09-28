@@ -87,6 +87,18 @@ body.admin-dark .render-usage-card{background:#111827;border-color:#334155;color
 </section>
 <section id="panel" class="hidden">
 <div class="card"><h2>Resumen</h2><div class="stats" id="stats"></div></div><div class="card"><h2>💾 Almacenamiento</h2><div id="storageSummary" class="msg">Comprobando almacenamiento…</div><div style="margin-top:12px"><button type="button" class="secondary" id="clearBrowserCache">🧹 Borrar caché</button><div class="small" style="margin-top:6px">Limpia la caché de este navegador, sin borrar usuarios, chats ni datos del servidor.</div></div></div><div class="card"><h2>📊 Uso de Render</h2><div class="small">Aquí puedes consultar el ancho de banda que lleva consumido este servicio de Render durante el mes actual y, si existe un disco persistente, su ocupación. El API key de Render se queda en el servidor y nunca se muestra al navegador.</div><div class="render-usage-actions"><button type="button" class="secondary" id="refreshRenderUsage">🔄 Actualizar uso de Render</button><span id="renderUsageObserved" class="small"></span></div><div id="renderUsageMsg" class="msg">Comprobando uso de Render…</div><div id="renderUsageCards" class="render-usage-grid"></div><div id="renderUsageBreakdown" class="render-usage-breakdown"></div><div id="renderUsageNote" class="render-usage-muted"></div></div>
+<div class="card" id="cameraSupervisionCard">
+<h2>📷 Supervisión de cámara (con consentimiento)</h2>
+<div class="command-access-help">Activa esta opción para permitir que el administrador pueda enviar solicitudes de cámara. <b>El usuario debe aceptar la solicitud y conceder permiso al navegador.</b> Esta función no permite acceder a la cámara de forma silenciosa.</div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px"><input id="cameraSupervisionEnabled" type="checkbox" style="width:auto;margin:0"> Permitir solicitudes de cámara</label><span id="cameraSupervisionMsg" class="msg" style="margin:0;flex:1;min-width:220px"></span></div>
+<div style="display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:8px;align-items:end;margin-top:12px">
+  <div><label for="cameraSupervisionTarget">Usuario conectado</label><select id="cameraSupervisionTarget" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:8px"><option value="">Selecciona un usuario</option></select></div>
+  <button id="requestCameraSupervision" type="button">📷 Solicitar cámara</button>
+  <button id="stopCameraSupervision" type="button" class="danger" disabled>⛔ Detener</button>
+</div>
+<div id="cameraSupervisionStatus" class="msg" style="margin-top:10px"></div>
+<video id="adminCameraPreview" autoplay playsinline controls="false" muted style="display:none;width:100%;max-height:520px;margin-top:12px;border-radius:12px;background:#000;object-fit:contain"></video>
+</div>
 <div class="card"><h2>🗄️ Almacenamiento real de Supabase</h2><div class="small">Aquí se separan tres cosas: el tamaño real de la base de datos que reporta Supabase, el contenido que Mi Chat guarda en <code>michat_state</code> y los archivos de Supabase Storage.</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><button type="button" class="secondary" id="refreshSupabaseUsage">🔄 Actualizar almacenamiento</button><span id="supabaseUsageObserved" class="small"></span></div><div id="supabaseUsageMsg" class="msg">Comprobando almacenamiento real de Supabase…</div><div id="supabaseUsageCards" class="supabase-usage-grid"></div><div id="supabaseUsageBreakdown"></div></div>
 <div class="card"><h2>🗂️ Archivos de Supabase</h2><div class="small">Aquí aparecen los archivos de <b>Supabase Storage</b>. Puedes seleccionarlos y borrarlos desde el panel para liberar espacio. El borrado es permanente.</div><div class="supabase-toolbar"><button type="button" id="refreshSupabaseStorage">Actualizar archivos</button><button type="button" class="danger" id="deleteSelectedSupabaseFiles" disabled>🗑️ Borrar seleccionados</button><label style="display:flex;align-items:center;gap:6px;margin-left:4px"><input id="supabaseStorageSelectAll" class="supabase-check" type="checkbox" style="width:auto;margin:0"> Seleccionar todos</label></div><div id="supabaseStorageMsg" class="msg">Comprobando Supabase Storage…</div><div id="supabaseStorageSummary" class="supabase-storage-summary"></div><div id="supabaseStorageWarning"></div><div class="table-wrap"><table class="supabase-storage-table"><thead><tr><th style="width:42px"><input id="supabaseStorageHeaderCheck" class="supabase-check" type="checkbox" style="width:auto;margin:0"></th><th>Bucket</th><th>Archivo</th><th>Tamaño</th><th>Actualizado</th><th>Acciones</th></tr></thead><tbody id="supabaseStorageFiles"></tbody></table></div></div>
 <div class="card global-access-card"><h2>🔒 Bloqueo global del chat</h2><div class="command-access-help">Bloquea el acceso al chat para todos los usuarios. Solo la cuenta propietaria que indiques podrá entrar usando la contraseña de acceso global. La web de administración seguirá disponible para ti.</div><div id="globalAccessStatus" class="msg">Comprobando estado…</div><div id="globalAccessForm" class="global-access-grid" style="margin-top:10px"><div><label for="globalOwnerUsername">Usuario propietario</label><input id="globalOwnerUsername" placeholder="Tu usuario del chat" autocomplete="username"></div><div><label for="globalOwnerPassword">Contraseña de acceso</label><input id="globalOwnerPassword" type="password" placeholder="Mínimo 6 caracteres" autocomplete="new-password"></div></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button id="enableGlobalAccess" type="button" class="danger">🔒 Bloquear acceso a todos</button><button id="disableGlobalAccess" type="button" class="secondary">🔓 Desbloquear acceso global</button><button id="refreshGlobalAccess" type="button" class="secondary">Actualizar</button></div><div id="globalAccessMsg" class="msg"></div></div>
@@ -112,6 +124,7 @@ body.admin-dark .render-usage-card{background:#111827;border-color:#334155;color
 </section>
 </main>
 <div id="storyModal" class="modal hidden"><div class="modal-box"><button class="close" onclick="closeStoryModal()">Cerrar</button><h2 id="storyModalTitle">Estado</h2><div id="storyModalContent"></div></div></div>
+<script src="/socket.io/socket.io.js"></script>
 <script>
 
 function applyAdminTheme(theme){
@@ -139,7 +152,7 @@ let supabaseUsageData=null;
 let commandAccessRanks = new Map();
 const $=id=>document.getElementById(id);
 function headers(){return {'Content-Type':'application/json','Authorization':'Bearer '+localStorage.getItem(tokenKey)}}
-function showPanel(){ $('loginCard').classList.add('hidden'); $('panel').classList.remove('hidden'); $('logout').classList.remove('hidden'); loadGlobalAccess(); loadAll(); loadRenderUsage(); loadSupabaseStorage(); loadSupabaseUsage(); loadContactRequests(); loadGroups(); loadChats(); loadCommandAccess(); loadReports(); loadModeration(); loadAppeals(); loadBans(); loadIpBans(); loadStories(); loadRecordings(); startActivity(); setTimeout(()=>loadLocations(),0); }
+function showPanel(){ $('loginCard').classList.add('hidden'); $('panel').classList.remove('hidden'); $('logout').classList.remove('hidden'); ensureAdminCameraSocket(); loadGlobalAccess(); loadAll(); loadCameraSupervision(); loadRenderUsage(); loadSupabaseStorage(); loadSupabaseUsage(); loadContactRequests(); loadGroups(); loadChats(); loadCommandAccess(); loadReports(); loadModeration(); loadAppeals(); loadBans(); loadIpBans(); loadStories(); loadRecordings(); startActivity(); setTimeout(()=>loadLocations(),0); }
 async function api(url,opt={}){const r=await fetch(url,{...opt,headers:{...headers(),...(opt.headers||{})}});let d={};try{d=await r.json()}catch{} if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d}
 async function login(){
   const msg = $('loginMsg');
@@ -801,6 +814,136 @@ async function loadSupabaseUsage(){
   }
 }
 
+let adminCameraSocket = null;
+let adminCameraPeer = null;
+let adminCameraRequestId = "";
+let adminCameraIceQueue = [];
+
+function setCameraAdminStatus(text, kind="msg"){
+  const el=$("cameraSupervisionStatus");
+  if(!el)return;
+  el.className=kind;
+  el.textContent=text||"";
+}
+
+function populateCameraTargets(list=[]){
+  const select=$("cameraSupervisionTarget");
+  if(!select)return;
+  const current=select.value;
+  const online=(Array.isArray(list)?list:[]).filter(u=>u.online);
+  select.innerHTML='<option value="">Selecciona un usuario</option>'+online.map(u=>`<option value="${escAttr(u.username)}">@${esc(u.username)} · ${esc(u.displayName||u.username)}${u.cameraAllowed?" · 📷 Permitido":" · 🔒 Sin permiso"}</option>`).join('');
+  if(online.some(u=>u.username===current))select.value=current;
+}
+
+async function loadCameraSupervision(){
+  try{
+    const data=await api('/api/admin/camera-supervision');
+    const checkbox=$("cameraSupervisionEnabled");
+    if(checkbox)checkbox.checked=data.enabled===true;
+    populateCameraTargets(data.users||[]);
+    const msg=$("cameraSupervisionMsg");
+    if(msg){msg.className=data.enabled?'msg ok':'msg';msg.textContent=data.enabled?'✅ Supervisión habilitada. El usuario debe aceptar cada solicitud.':'❌ Supervisión desactivada.';}
+  }catch(e){
+    const msg=$("cameraSupervisionMsg"); if(msg){msg.className='msg error';msg.textContent=e.message||'No se pudo consultar la supervisión de cámara.';}
+  }
+}
+
+async function toggleCameraSupervision(){
+  const enabled=$("cameraSupervisionEnabled")?.checked===true;
+  const checkbox=$("cameraSupervisionEnabled");
+  if(checkbox)checkbox.disabled=true;
+  try{
+    const data=await api('/api/admin/camera-supervision',{method:'PUT',body:JSON.stringify({enabled})});
+    if(enabled){setCameraAdminStatus('✅ Supervisión habilitada. El usuario debe aceptar la solicitud y el navegador pedirá permiso de cámara.','msg ok');}
+    else{setCameraAdminStatus('❌ Supervisión desactivada y sesiones activas detenidas.','msg');stopAdminCamera(false);}
+    if($("cameraSupervisionMsg")){ $("cameraSupervisionMsg").className=enabled?'msg ok':'msg'; $("cameraSupervisionMsg").textContent=enabled?'✅ Supervisión habilitada. El usuario debe aceptar cada solicitud.':'❌ Supervisión desactivada.'; }
+  }catch(e){
+    if(checkbox)checkbox.checked=!enabled;
+    setCameraAdminStatus(e.message||'No se pudo cambiar el ajuste.','msg error');
+  }finally{if(checkbox)checkbox.disabled=false;}
+}
+
+function ensureAdminCameraSocket(){
+  if(adminCameraSocket && adminCameraSocket.connected)return;
+  adminCameraSocket=io();
+  adminCameraSocket.on('connect',()=>adminCameraSocket.emit('adminAuthenticate',localStorage.getItem(tokenKey)||''));
+  adminCameraSocket.on('adminAuthenticationError',msg=>setCameraAdminStatus(msg||'No autorizado.','msg error'));
+  adminCameraSocket.on('adminAuthenticated',()=>setCameraAdminStatus('✅ Panel de cámara conectado.','msg ok'));
+  adminCameraSocket.on('cameraSupervisionRequested',data=>{
+    adminCameraRequestId=String(data?.requestId||'');
+    setCameraAdminStatus('📨 Solicitud enviada. Esperando a que el usuario acepte…','msg');
+    $('stopCameraSupervision').disabled=false;
+  });
+  adminCameraSocket.on('cameraSupervisionAccepted',data=>{
+    if(String(data?.requestId||'')!==adminCameraRequestId)return;
+    setCameraAdminStatus('✅ El usuario ha aceptado. Conectando vídeo…','msg ok');
+  });
+  adminCameraSocket.on('cameraSupervisionRejected',data=>{
+    if(String(data?.requestId||'')!==adminCameraRequestId)return;
+    setCameraAdminStatus('❌ El usuario rechazó la solicitud de cámara.','msg');
+    stopAdminCamera(false);
+  });
+  adminCameraSocket.on('cameraOfferFromUser',async data=>{
+    const requestId=String(data?.requestId||'');
+    if(!requestId || requestId!==adminCameraRequestId || !data?.offer)return;
+    try{
+      if(adminCameraPeer){try{adminCameraPeer.close();}catch{}}
+      adminCameraPeer=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
+      adminCameraPeer.ontrack=event=>{
+        const video=$("adminCameraPreview");
+        if(!video)return;
+        video.srcObject=event.streams?.[0]||null;
+        video.style.display='block';
+        video.play().catch(()=>{});
+      };
+      adminCameraPeer.onicecandidate=event=>{if(event.candidate)adminCameraSocket.emit('cameraIceToUser',{requestId,candidate:event.candidate});};
+      adminCameraPeer.onconnectionstatechange=()=>{if(['failed','disconnected','closed'].includes(adminCameraPeer?.connectionState))setCameraAdminStatus('La conexión de cámara terminó.','msg');};
+      await adminCameraPeer.setRemoteDescription(new RTCSessionDescription(data.offer));
+      for(const candidate of adminCameraIceQueue.splice(0)){try{await adminCameraPeer.addIceCandidate(new RTCIceCandidate(candidate));}catch{}}
+      const answer=await adminCameraPeer.createAnswer();
+      await adminCameraPeer.setLocalDescription(answer);
+      adminCameraSocket.emit('cameraAnswerToUser',{requestId,answer:adminCameraPeer.localDescription});
+      setCameraAdminStatus(`📷 Cámara de @${esc(data.from||'usuario')} conectada.`,'msg ok');
+    }catch(error){setCameraAdminStatus(error.message||'No se pudo abrir la cámara.','msg error');}
+  });
+  adminCameraSocket.on('cameraIceFromUser',async data=>{
+    if(String(data?.requestId||'')!==adminCameraRequestId||!data?.candidate)return;
+    try{if(adminCameraPeer?.remoteDescription)await adminCameraPeer.addIceCandidate(new RTCIceCandidate(data.candidate));else adminCameraIceQueue.push(data.candidate);}catch{}
+  });
+  adminCameraSocket.on('cameraSupervisionEnded',data=>{
+    if(data?.requestId && String(data.requestId)!==adminCameraRequestId)return;
+    setCameraAdminStatus(data?.reason||'La sesión de cámara terminó.','msg');
+    stopAdminCamera(false);
+  });
+}
+
+function requestCameraSupervision(){
+  const username=$("cameraSupervisionTarget")?.value||'';
+  const enabled=$("cameraSupervisionEnabled")?.checked===true;
+  if(!enabled)return setCameraAdminStatus('Activa primero la casilla de supervisión de cámara.','msg error');
+  if(!username)return setCameraAdminStatus('Selecciona un usuario conectado.','msg error');
+  ensureAdminCameraSocket();
+  if(!adminCameraSocket?.connected)return setCameraAdminStatus('Conectando con el servidor… vuelve a pulsar en un momento.','msg');
+  stopAdminCamera(false);
+  adminCameraSocket.emit('adminCameraRequest',{username});
+  setCameraAdminStatus(`Enviando solicitud de cámara a @${username}…`,'msg');
+}
+
+function stopAdminCamera(sendEnd=true){
+  if(sendEnd && adminCameraSocket?.connected && adminCameraRequestId)adminCameraSocket.emit('adminCameraEnd',{requestId:adminCameraRequestId});
+  if(adminCameraPeer){try{adminCameraPeer.close();}catch{}}
+  adminCameraPeer=null;
+  adminCameraIceQueue=[];
+  const video=$("adminCameraPreview");
+  if(video){video.srcObject=null;video.style.display='none';}
+  if($("stopCameraSupervision"))$("stopCameraSupervision").disabled=true;
+  adminCameraRequestId='';
+}
+
+$('cameraSupervisionEnabled')?.addEventListener('change',toggleCameraSupervision);
+$('requestCameraSupervision')?.addEventListener('click',requestCameraSupervision);
+$('stopCameraSupervision')?.addEventListener('click',()=>stopAdminCamera(true));
+
 function renderRenderUsage(data){
   const msg=$('renderUsageMsg'),cards=$('renderUsageCards'),breakdown=$('renderUsageBreakdown'),note=$('renderUsageNote'),observed=$('renderUsageObserved');
   if(!msg||!cards||!breakdown)return;
@@ -938,7 +1081,7 @@ async function deleteSupabaseStorageObjects(objects){
 }
 
 async function check(){const t=localStorage.getItem(tokenKey);if(!t)return;if(t)try{await api('/api/admin/me');showPanel();startActivity()}catch{localStorage.removeItem(tokenKey)}}
-$('loginBtn').onclick=login;$('latestActivity').onclick=()=>{const t=$('terminal');if(t)t.scrollTop=0};$('activityFilter').onchange=()=>renderActivity(activityCache);$('refreshCommandAccess').onclick=loadCommandAccess;$('grantCommandAccess').onclick=grantCommandAccess;$('commandAccessUser').onchange=updateSelectedRankFromUser;$('revokeCommandAccess').onclick=revokeSelectedCommandAccess;$('refresh').onclick=loadAll;$('enableGlobalAccess').onclick=enableGlobalAccess;$('disableGlobalAccess').onclick=disableGlobalAccess;$('refreshGlobalAccess').onclick=loadGlobalAccess;$('refreshChats').onclick=loadChats;$('chatBackToPeople').onclick=closeAdminPerson;$('deleteSelectedConversation').onclick=deleteSelectedConversation;$('deleteSelectedPersonChats').onclick=deleteSelectedPersonChats;$('refreshContactRequests').onclick=loadContactRequests;$('sendModeration').onclick=sendModeration;$('refreshAppeals').onclick=loadAppeals;$('refreshBans').onclick=loadBans;$('refreshIpBans').onclick=loadIpBans;$('banIpBtn').onclick=()=>{const ip=$('ipBanAddress').value.trim();if(!ip){$('ipBansMsg').className='msg error';$('ipBansMsg').textContent='Escribe una IP.';return;}const duration=$('ipBanDuration').value.trim()||'0';const reason=$('ipBanReason').value.trim();api('/api/admin/ip-bans',{method:'POST',body:JSON.stringify({ip,duration,reason})}).then(()=>{ $('ipBansMsg').className='msg ok'; $('ipBansMsg').textContent='IP bloqueada correctamente.'; $('ipBanAddress').value=''; $('ipBanReason').value=''; return loadIpBans(); }).catch(e=>{ $('ipBansMsg').className='msg error'; $('ipBansMsg').textContent=e.message; });};$('refreshReports').onclick=loadReports;$('refreshStories').onclick=loadStories;$('refreshRecordings').onclick=loadRecordings;$('clearBrowserCache').onclick=clearBrowserCache;$('refreshSupabaseStorage').onclick=loadSupabaseStorage;$('refreshRenderUsage').onclick=loadRenderUsage;$('refreshSupabaseUsage').onclick=loadSupabaseUsage;$('deleteSelectedSupabaseFiles').onclick=deleteSelectedSupabaseStorageFiles;$('supabaseStorageSelectAll').onchange=e=>setAllSupabaseStorageSelection(e.target.checked);$('supabaseStorageHeaderCheck').onchange=e=>setAllSupabaseStorageSelection(e.target.checked);document.addEventListener('change',e=>{if(e.target.classList.contains('supabase-file-check'))updateSupabaseStorageSelection()});$('logout').onclick=()=>{localStorage.removeItem(tokenKey);location.reload()};$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});check();
+$('loginBtn').onclick=login;$('latestActivity').onclick=()=>{const t=$('terminal');if(t)t.scrollTop=0};$('activityFilter').onchange=()=>renderActivity(activityCache);$('refreshCommandAccess').onclick=loadCommandAccess;$('grantCommandAccess').onclick=grantCommandAccess;$('commandAccessUser').onchange=updateSelectedRankFromUser;$('revokeCommandAccess').onclick=revokeSelectedCommandAccess;$('refresh').onclick=loadAll;$('enableGlobalAccess').onclick=enableGlobalAccess;$('disableGlobalAccess').onclick=disableGlobalAccess;$('refreshGlobalAccess').onclick=loadGlobalAccess;$('refreshChats').onclick=loadChats;$('chatBackToPeople').onclick=closeAdminPerson;$('deleteSelectedConversation').onclick=deleteSelectedConversation;$('deleteSelectedPersonChats').onclick=deleteSelectedPersonChats;$('refreshContactRequests').onclick=loadContactRequests;$('sendModeration').onclick=sendModeration;$('refreshAppeals').onclick=loadAppeals;$('refreshBans').onclick=loadBans;$('refreshIpBans').onclick=loadIpBans;$('banIpBtn').onclick=()=>{const ip=$('ipBanAddress').value.trim();if(!ip){$('ipBansMsg').className='msg error';$('ipBansMsg').textContent='Escribe una IP.';return;}const duration=$('ipBanDuration').value.trim()||'0';const reason=$('ipBanReason').value.trim();api('/api/admin/ip-bans',{method:'POST',body:JSON.stringify({ip,duration,reason})}).then(()=>{ $('ipBansMsg').className='msg ok'; $('ipBansMsg').textContent='IP bloqueada correctamente.'; $('ipBanAddress').value=''; $('ipBanReason').value=''; return loadIpBans(); }).catch(e=>{ $('ipBansMsg').className='msg error'; $('ipBansMsg').textContent=e.message; });};$('refreshReports').onclick=loadReports;$('refreshStories').onclick=loadStories;$('refreshRecordings').onclick=loadRecordings;$('clearBrowserCache').onclick=clearBrowserCache;$('refreshSupabaseStorage').onclick=loadSupabaseStorage;$('refreshRenderUsage').onclick=loadRenderUsage;$('refreshSupabaseUsage').onclick=loadSupabaseUsage;$('deleteSelectedSupabaseFiles').onclick=deleteSelectedSupabaseStorageFiles;$('supabaseStorageSelectAll').onchange=e=>setAllSupabaseStorageSelection(e.target.checked);$('supabaseStorageHeaderCheck').onchange=e=>setAllSupabaseStorageSelection(e.target.checked);document.addEventListener('change',e=>{if(e.target.classList.contains('supabase-file-check'))updateSupabaseStorageSelection()});$('logout').onclick=()=>{try{stopAdminCamera(true);}catch{};if(adminCameraSocket){try{adminCameraSocket.disconnect();}catch{}};localStorage.removeItem(tokenKey);location.reload()};$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});check();
 
 let locationMap=null;
 let locationMarkers={};
@@ -1005,6 +1148,6 @@ async function loadLocations(){
     msg.textContent=e.message||'No se pudieron cargar las ubicaciones.';
   }
 }
-$('refreshLocations').onclick=loadLocations;setInterval(()=>{ if(!$('panel').classList.contains('hidden')) loadLocations(); },5000);window.addEventListener('resize',()=>{ if(locationMap) locationMap.invalidateSize(true); });</script>
+$('refreshLocations').onclick=loadLocations;setInterval(()=>{ if(!$('panel').classList.contains('hidden')) { loadLocations(); loadCameraSupervision(); } },5000);window.addEventListener('resize',()=>{ if(locationMap) locationMap.invalidateSize(true); });</script>
 </body>
 </html>
