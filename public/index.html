@@ -1098,33 +1098,35 @@ html.darkTheme .mobileBottomNav button.active .navPill{background:#0b4f47}
   --wa-hover:#f5f6f6;
   --wa-active:#d9fdd3;
   --wa-green:#00a884;
+  --wa-green-deep:#008069;
   --wa-lightgreen:#00e676;
   --wa-sent:#d9fdd3;
   --wa-received:#ffffff;
   --wa-subtext:#667781;
-  --wa-text:var(--wa-panel);
-  --wa-border:var(--wa-text);
+  --wa-text:#111b21;
+  --wa-border:#d1d7db;
   --wa-blue:#53bdeb;
   --wa-avatar-bg:#dfe5e7;
   --wa-badge-text:#06251c;
 }
 
 html.darkTheme{
-  --wa-bg:var(--wa-bg);
-  --wa-panel:var(--wa-panel);
-  --wa-header:var(--wa-header);
-  --wa-hover:var(--wa-border);
-  --wa-active:var(--wa-avatar-bg);
+  --wa-bg:#0b141a;
+  --wa-panel:#111b21;
+  --wa-header:#202c33;
+  --wa-hover:#2a3942;
+  --wa-active:#0b4f47;
   --wa-green:#00a884;
+  --wa-green-deep:#008069;
   --wa-lightgreen:#00e676;
-  --wa-sent:var(--wa-sent);
-  --wa-received:var(--wa-header);
-  --wa-subtext:var(--wa-subtext);
-  --wa-text:var(--wa-text);
-  --wa-border:var(--wa-border);
+  --wa-sent:#005c4b;
+  --wa-received:#202c33;
+  --wa-subtext:#8696a0;
+  --wa-text:#e9edef;
+  --wa-border:#374045;
   --wa-blue:#53bdeb;
-  --wa-avatar-bg:var(--wa-avatar-bg);
-  --wa-badge-text:var(--wa-badge-text);
+  --wa-avatar-bg:#2a3942;
+  --wa-badge-text:#d9fdd3;
 }
 html,body{background:var(--wa-bg)!important;color:var(--wa-text)!important;font-family:Inter,Arial,sans-serif!important}
 body{overflow:hidden}
@@ -1452,6 +1454,210 @@ body{overflow:hidden}
 @media (max-width:900px){
   #desktopRail{display:none!important}
 }
+</style>
+
+
+<style id="michat-theme-contrast-fix">
+/* Contraste y bordes: tema claro */
+html:not(.darkTheme) .sidebar,
+html:not(.darkTheme) .sidebarHeader,
+html:not(.darkTheme) .search,
+html:not(.darkTheme) .chatHeader,
+html:not(.darkTheme) .tabPageHeader,
+html:not(.darkTheme) .mainTabPage,
+html:not(.darkTheme) .communityPage,
+html:not(.darkTheme) .callsPage,
+html:not(.darkTheme) .profilePage,
+html:not(.darkTheme) .newsPage,
+html:not(.darkTheme) .newsPage .storiesBar,
+html:not(.darkTheme) .mobileBottomNav,
+html:not(.darkTheme) .settingsItem,
+html:not(.darkTheme) .profileCard,
+html:not(.darkTheme) .profileActionBtn,
+html:not(.darkTheme) .notification,
+html:not(.darkTheme) .modalBox,
+html:not(.darkTheme) .messageLoggingSetting,
+html:not(.darkTheme) .quickActionsMenu {
+  color:var(--wa-text)!important;
+  background:var(--wa-panel)!important;
+  border-color:var(--wa-border)!important;
+}
+html:not(.darkTheme) .sidebarHeader,
+html:not(.darkTheme) .tabPageHeader,
+html:not(.darkTheme) .chatHeader,
+html:not(.darkTheme) .messageInput,
+html:not(.darkTheme) .storiesHeader {
+  background:var(--wa-header)!important;
+  color:var(--wa-text)!important;
+  border-color:var(--wa-border)!important;
+}
+html:not(.darkTheme) .desktopRail{background:var(--wa-header)!important;border-color:var(--wa-border)!important}
+html:not(.darkTheme) .desktopRailBtn{color:#54656f!important}
+html:not(.darkTheme) .desktopRailBtn.active{background:var(--wa-active)!important;color:var(--wa-green-deep)!important}
+html:not(.darkTheme) .desktopRailBtn:hover{background:var(--wa-hover)!important;color:var(--wa-text)!important}
+html:not(.darkTheme) .user,
+html:not(.darkTheme) .newsPage .storyItem,
+html:not(.darkTheme) .groupRow,
+html:not(.darkTheme) .callsItem,
+html:not(.darkTheme) .requestItem,
+html:not(.darkTheme) .blockItem {
+  background:var(--wa-panel)!important;
+  color:var(--wa-text)!important;
+  border-color:var(--wa-border)!important;
+}
+html:not(.darkTheme) .user:hover,
+html:not(.darkTheme) .newsPage .storyItem:hover,
+html:not(.darkTheme) .groupRow:hover,
+html:not(.darkTheme) .callsItem:hover,
+html:not(.darkTheme) .settingsItem:hover,
+html:not(.darkTheme) .profileActionBtn:hover,
+html:not(.darkTheme) .quickActionsMenu .actionBtn:hover {
+  background:var(--wa-hover)!important;
+}
+html:not(.darkTheme) .userName,
+html:not(.darkTheme) .tabPageHeader h2,
+html:not(.darkTheme) .chatTitle,
+html:not(.darkTheme) .storiesHeader h2,
+html:not(.darkTheme) .settingsItem,
+html:not(.darkTheme) .profileCard {
+  color:var(--wa-text)!important;
+}
+html:not(.darkTheme) .userSub,
+html:not(.darkTheme) .online,
+html:not(.darkTheme) .offline,
+html:not(.darkTheme) .tabPageHeaderSub,
+html:not(.darkTheme) .chatSubtitle,
+html:not(.darkTheme) .settingsItemSub,
+html:not(.darkTheme) .profileCardUser,
+html:not(.darkTheme) .storySeenLabel,
+html:not(.darkTheme) .storyMetaTime,
+html:not(.darkTheme) .notificationText,
+html:not(.darkTheme) .messageLoggingSettingSub {
+  color:var(--wa-subtext)!important;
+}
+html:not(.darkTheme) .search input,
+html:not(.darkTheme) #searchInput,
+html:not(.darkTheme) .messageInput input,
+html:not(.darkTheme) .authInput,
+html:not(.darkTheme) .modalInput,
+html:not(.darkTheme) .moderationAppealText,
+html:not(.darkTheme) .storyComposer textarea {
+  background:var(--wa-header)!important;
+  color:var(--wa-text)!important;
+  border:1px solid var(--wa-border)!important;
+}
+html:not(.darkTheme) input::placeholder,
+html:not(.darkTheme) textarea::placeholder {color:#667781!important}
+html:not(.darkTheme) .mobileBottomNav{border-top:1px solid var(--wa-border)!important;box-shadow:0 -2px 10px rgba(0,0,0,.08)!important}
+html:not(.darkTheme) .mobileBottomNav button{color:#54656f!important}
+html:not(.darkTheme) .mobileBottomNav button.active{color:var(--wa-green-deep)!important}
+html:not(.darkTheme) .mobileBottomNav button.active .navPill{background:var(--wa-active)!important}
+html:not(.darkTheme) .callsItem .callType.incoming{color:#008f71!important}
+html:not(.darkTheme) .callsItem .callType.outgoing{color:#54656f!important}
+html:not(.darkTheme) #messages{background-color:var(--wa-bg)!important}
+html:not(.darkTheme) .bubble{color:#111b21!important;background:#fff!important}
+html:not(.darkTheme) .mine .bubble{color:#111b21!important;background:var(--wa-sent)!important}
+html:not(.darkTheme) .time{color:#667781!important}
+
+/* Contraste y bordes: tema oscuro */
+html.darkTheme .sidebar,
+html.darkTheme .sidebarHeader,
+html.darkTheme .search,
+html.darkTheme .chatHeader,
+html.darkTheme .tabPageHeader,
+html.darkTheme .mainTabPage,
+html.darkTheme .communityPage,
+html.darkTheme .callsPage,
+html.darkTheme .profilePage,
+html.darkTheme .newsPage,
+html.darkTheme .newsPage .storiesBar,
+html.darkTheme .mobileBottomNav,
+html.darkTheme .settingsItem,
+html.darkTheme .profileCard,
+html.darkTheme .profileActionBtn,
+html.darkTheme .notification,
+html.darkTheme .modalBox,
+html.darkTheme .messageLoggingSetting,
+html.darkTheme .quickActionsMenu {
+  color:var(--wa-text)!important;
+  background:var(--wa-panel)!important;
+  border-color:var(--wa-border)!important;
+}
+html.darkTheme .sidebarHeader,
+html.darkTheme .tabPageHeader,
+html.darkTheme .chatHeader,
+html.darkTheme .messageInput,
+html.darkTheme .storiesHeader {
+  background:var(--wa-header)!important;
+  color:var(--wa-text)!important;
+  border-color:var(--wa-border)!important;
+}
+html.darkTheme .desktopRail{background:var(--wa-header)!important;border-color:var(--wa-border)!important}
+html.darkTheme .user,
+html.darkTheme .newsPage .storyItem,
+html.darkTheme .groupRow,
+html.darkTheme .callsItem,
+html.darkTheme .requestItem,
+html.darkTheme .blockItem {
+  background:var(--wa-panel)!important;
+  color:var(--wa-text)!important;
+  border-color:var(--wa-border)!important;
+}
+html.darkTheme .user:hover,
+html.darkTheme .newsPage .storyItem:hover,
+html.darkTheme .groupRow:hover,
+html.darkTheme .callsItem:hover,
+html.darkTheme .settingsItem:hover,
+html.darkTheme .profileActionBtn:hover,
+html.darkTheme .quickActionsMenu .actionBtn:hover {
+  background:var(--wa-hover)!important;
+}
+html.darkTheme .userName,
+html.darkTheme .tabPageHeader h2,
+html.darkTheme .chatTitle,
+html.darkTheme .storiesHeader h2,
+html.darkTheme .settingsItem,
+html.darkTheme .profileCard {color:var(--wa-text)!important}
+html.darkTheme .userSub,
+html.darkTheme .online,
+html.darkTheme .offline,
+html.darkTheme .tabPageHeaderSub,
+html.darkTheme .chatSubtitle,
+html.darkTheme .settingsItemSub,
+html.darkTheme .profileCardUser,
+html.darkTheme .storySeenLabel,
+html.darkTheme .storyMetaTime,
+html.darkTheme .notificationText,
+html.darkTheme .messageLoggingSettingSub {color:var(--wa-subtext)!important}
+html.darkTheme .search input,
+html.darkTheme #searchInput,
+html.darkTheme .messageInput input,
+html.darkTheme .authInput,
+html.darkTheme .modalInput,
+html.darkTheme .moderationAppealText,
+html.darkTheme .storyComposer textarea {
+  background:var(--wa-header)!important;
+  color:var(--wa-text)!important;
+  border:1px solid var(--wa-border)!important;
+}
+html.darkTheme input::placeholder,
+html.darkTheme textarea::placeholder {color:#a7b2b8!important}
+html.darkTheme .mobileBottomNav{border-top:1px solid var(--wa-border)!important;background:var(--wa-panel)!important;box-shadow:0 -2px 10px rgba(0,0,0,.35)!important}
+html.darkTheme .mobileBottomNav button{color:#aebac2!important}
+html.darkTheme .mobileBottomNav button.active{color:#53bdeb!important}
+html.darkTheme .mobileBottomNav button.active .navPill{background:#0b4f47!important}
+html.darkTheme #messages{background-color:var(--wa-bg)!important}
+html.darkTheme .bubble{color:#e9edef!important;background:#202c33!important;border:1px solid #2d3c45!important}
+html.darkTheme .mine .bubble{color:#effffb!important;background:#005c4b!important;border-color:#087e68!important}
+html.darkTheme .time{color:#a3adb3!important}
+
+/* Elementos que suelen quedar con colores fijos */
+html:not(.darkTheme) .muted{background:#e9edef!important;color:#111b21!important;border:1px solid var(--wa-border)!important}
+html.darkTheme .muted{background:#2a3942!important;color:#e9edef!important;border:1px solid #44545d!important}
+html:not(.darkTheme) .modalHeaderRow{background:#fff!important;color:#111b21!important;border-bottom:1px solid var(--wa-border)!important}
+html.darkTheme .modalHeaderRow{background:var(--wa-panel)!important;color:var(--wa-text)!important;border-bottom:1px solid var(--wa-border)!important}
+html:not(.darkTheme) .fileAttachment{background:#f0f2f5!important;color:#111b21!important;border:1px solid var(--wa-border)!important}
+html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!important;border:1px solid var(--wa-border)!important}
 </style>
 
 </head>
