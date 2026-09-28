@@ -2664,41 +2664,67 @@ const RENDER_API_KEY = String(process.env.RENDER_API_KEY || "").trim();
 const RENDER_SERVICE_ID = String(process.env.RENDER_SERVICE_ID || "").trim();
 const RENDER_MONTHLY_BANDWIDTH_GB = Number(process.env.RENDER_MONTHLY_BANDWIDTH_GB || 5);
 
-function renderMetricValueSeries(payload) {
-  const list = Array.isArray(payload) ? payload : [];
-  return list.flatMap(series => Array.isArray(series?.values) ? series.values.map(point => Number(point?.value)).filter(Number.isFinite) : []);
+function renderMetricSeries(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (payload && Array.isArray(payload.data)) return payload.data;
+  return [];
 }
 
 function renderMetricLabel(series, field) {
-  const labels = Array.isArray(series?.labels) ? series.labels : [];
-  const hit = labels.find(label => String(label?.field || "") === field);
-  return hit ? String(hit.value || "") : "";
+  const labels = series?.labels;
+  if (labels && !Array.isArray(labels) && typeof labels === "object") {
+    return String(labels[field] ?? "");
+  }
+  if (Array.isArray(labels)) {
+    const hit = labels.find(label => String(label?.field || "") === field);
+    return hit ? String(hit.value || "") : "";
+  }
+  return "";
 }
 
-function sumRenderMetric(payload, { labelField = null, labelValue = null } = {}) {
-  const list = Array.isArray(payload) ? payload : [];
+function renderMetricUnitToGb(unit) {
+  const normalized = String(unit || "").trim().toLowerCase();
+  if (normalized === "gb" || normalized === "gib") return 1;
+  if (normalized === "mb" || normalized === "mib") return 1 / 1024;
+  if (normalized === "kb" || normalized === "kib") return 1 / (1024 ** 2);
+  if (normalized === "b" || normalized === "bytes" || normalized === "byte") return 1 / (1024 ** 3);
+  return null;
+}
+
+function sumRenderMetricGb(payload, { labelField = null, labelValue = null } = {}) {
+  const list = renderMetricSeries(payload);
   let chosen = list;
   if (labelField && labelValue) {
     const matching = list.filter(series => renderMetricLabel(series, labelField) === labelValue);
     if (matching.length) chosen = matching;
   }
-  let total = 0;
+  let totalGb = 0;
   for (const series of chosen) {
+    const unitFactor = renderMetricUnitToGb(series?.unit);
     for (const point of Array.isArray(series?.values) ? series.values : []) {
       const value = Number(point?.value);
-      if (Number.isFinite(value)) total += value;
+      if (!Number.isFinite(value)) continue;
+      const factor = unitFactor ?? renderMetricUnitToGb(point?.unit);
+      if (factor != null) totalGb += value * factor;
     }
   }
-  return total;
+  return totalGb;
 }
 
 function latestRenderMetric(payload) {
   const points = [];
-  for (const series of Array.isArray(payload) ? payload : []) {
+  for (const series of renderMetricSeries(payload)) {
+    const unitFactor = renderMetricUnitToGb(series?.unit);
     for (const point of Array.isArray(series?.values) ? series.values : []) {
       const value = Number(point?.value);
-      const timestamp = Date.parse(String(point?.timestamp || ""));
-      if (Number.isFinite(value)) points.push({ value, timestamp: Number.isFinite(timestamp) ? timestamp : 0 });
+      const timestampRaw = point?.timestamp;
+      const timestamp = typeof timestampRaw === "number" ? timestampRaw : Date.parse(String(timestampRaw || ""));
+      if (Number.isFinite(value)) {
+        points.push({
+          value: unitFactor != null ? value * (unitFactor === 1 ? 1 : 1 / unitFactor) : value,
+          timestamp: Number.isFinite(timestamp) ? timestamp : 0
+        });
+      }
     }
   }
   points.sort((a, b) => a.timestamp - b.timestamp);
@@ -2754,20 +2780,18 @@ app.get("/api/admin/render/usage", requireAdmin, async (req, res) => {
 
     if (bandwidth.status === "rejected") throw bandwidth.reason;
 
-    const bandwidthGb = sumRenderMetric(bandwidth.value, { labelField: "resource", labelValue: RENDER_SERVICE_ID }) / (1024 ** 3);
-    const totalFallback = sumRenderMetric(bandwidth.value) / (1024 ** 3);
-    const totalGb = bandwidthGb > 0 ? bandwidthGb : totalFallback;
+    const totalGb = sumRenderMetricGb(bandwidth.value, { labelField: "service", labelValue: RENDER_SERVICE_ID }) || sumRenderMetricGb(bandwidth.value, { labelField: "resource", labelValue: RENDER_SERVICE_ID }) || sumRenderMetricGb(bandwidth.value);
 
     const breakdown = { http: 0, websocket: 0, serviceInitiated: 0, privateLink: 0 };
-    if (bandwidthSources.status === "fulfilled" && Array.isArray(bandwidthSources.value)) {
-      for (const series of bandwidthSources.value) {
+    if (bandwidthSources.status === "fulfilled") {
+      for (const series of renderMetricSeries(bandwidthSources.value)) {
         const rawSource = String(renderMetricLabel(series, "trafficSource") || renderMetricLabel(series, "source") || "").toLowerCase();
         if (!rawSource || rawSource === "total") continue;
-        const bytes = renderMetricValueSeries([series]).reduce((a, b) => a + b, 0);
-        if (rawSource.includes("websocket")) breakdown.websocket += bytes / (1024 ** 3);
-        else if (rawSource.includes("private") || rawSource.includes("privatelink")) breakdown.privateLink += bytes / (1024 ** 3);
-        else if (rawSource.includes("service") || rawSource.includes("nat")) breakdown.serviceInitiated += bytes / (1024 ** 3);
-        else if (rawSource.includes("http")) breakdown.http += bytes / (1024 ** 3);
+        const gb = sumRenderMetricGb([series]);
+        if (rawSource.includes("websocket")) breakdown.websocket += gb;
+        else if (rawSource.includes("private") || rawSource.includes("privatelink")) breakdown.privateLink += gb;
+        else if (rawSource.includes("service") || rawSource.includes("nat")) breakdown.serviceInitiated += gb;
+        else if (rawSource.includes("http")) breakdown.http += gb;
       }
     }
 
