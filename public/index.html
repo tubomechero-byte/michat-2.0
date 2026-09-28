@@ -8,7 +8,7 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
   try {
-    if (localStorage.getItem("michat_theme") !== "light") {
+    if (localStorage.getItem("michat_theme") === "dark") {
       document.documentElement.classList.add("darkTheme");
     }
   } catch {}
@@ -1087,354 +1087,6 @@ html.darkTheme .mobileBottomNav button.active .navPill{background:#0b4f47}
   }
 }
 </style>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
-<style id="michat-wa-reference-skin">
-:root{
-  --wa-bg:#0b141a;
-  --wa-panel:#111b21;
-  --wa-header:#202c33;
-  --wa-hover:#222d34;
-  --wa-active:#2a3942;
-  --wa-green:#00a884;
-  --wa-lightgreen:#00e676;
-  --wa-sent:#005c4b;
-  --wa-received:#202c33;
-  --wa-subtext:#8696a0;
-  --wa-text:#e9edef;
-  --wa-border:#222d34;
-  --wa-blue:#53bdeb;
-}
-
-html,body{background:var(--wa-bg)!important;color:var(--wa-text)!important;font-family:Inter,Arial,sans-serif!important}
-body{overflow:hidden}
-#app{background:var(--wa-bg)!important}
-.layout{max-width:none!important;width:100%!important;margin:0!important;background:var(--wa-bg)!important}
-#desktopRail{display:none!important}
-#mobileBottomNav{display:none!important}
-
-/* Auth remains functionally unchanged, but visually follows the same palette. */
-#authScreen{background:linear-gradient(180deg,#111b21,#0b141a)!important}
-.authBox{background:#111b21!important;color:#e9edef!important;border:1px solid #202c33!important;box-shadow:0 18px 50px rgba(0,0,0,.45)!important;border-radius:18px!important}
-.authInput{background:#202c33!important;color:#e9edef!important;border-color:#2a3942!important}
-.switchButton{color:#53bdeb!important}
-
-/* Sidebar */
-.sidebar{width:420px!important;min-width:420px!important;background:var(--wa-panel)!important;border-right:1px solid var(--wa-border)!important;position:relative!important}
-.sidebarHeader{height:64px!important;min-height:64px!important;padding:10px 16px!important;background:var(--wa-header)!important;color:var(--wa-text)!important;border-bottom:0!important}
-.headerTop{height:100%;align-items:center!important}
-.headerProfile{display:flex;align-items:center;gap:12px;min-width:0}
-.headerProfileAvatar{width:40px;height:40px;border-radius:50%;overflow:hidden;background:#2a3942;color:#e9edef;display:flex;align-items:center;justify-content:center;font-weight:700;cursor:pointer}
-.headerProfileAvatar img{width:100%;height:100%;object-fit:cover;display:block}
-.headerProfileName{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--wa-text)}
-.topButtons{display:flex!important;gap:4px!important;align-items:center}
-.headerIconBtn{width:40px;height:40px;border:0;border-radius:50%;background:transparent;color:var(--wa-subtext);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px}
-.headerIconBtn:hover{background:var(--wa-hover);color:var(--wa-text)}
-.sidebarHeader .smallBtn{display:none!important}
-.onlineCount{display:none!important}
-
-/* Header actions menu */
-#quickActionsToggle{display:none!important}
-#quickActionsMenu{position:absolute!important;top:58px!important;right:12px!important;bottom:auto!important;width:290px!important;padding:8px!important;background:var(--wa-header)!important;border:1px solid var(--wa-border)!important;border-radius:10px!important;box-shadow:0 12px 28px rgba(0,0,0,.45)!important;z-index:100!important;display:grid!important;gap:2px!important}
-#quickActionsMenu.hidden{display:none!important}
-#quickActionsMenu .actionBtn{background:transparent!important;color:var(--wa-text)!important;text-align:left!important;font-weight:400!important;border-radius:7px!important;padding:11px 12px!important;box-shadow:none!important}
-#quickActionsMenu .actionBtn:hover{background:var(--wa-hover)!important}
-#quickActionsMenu .requestBtn{color:var(--wa-text)!important}
-#quickActionsMenu #settingsButton,#quickActionsMenu #logoutButton{width:100%;border:0;background:transparent;color:var(--wa-text);text-align:left;padding:11px 12px;border-radius:7px;cursor:pointer}
-#quickActionsMenu #settingsButton:hover,#quickActionsMenu #logoutButton:hover{background:var(--wa-hover)}
-.waMenuDivider{height:1px;background:var(--wa-border);margin:5px 2px}
-.waMenuNavButton{width:100%;border:0;background:transparent;color:var(--wa-text);text-align:left;padding:11px 12px;border-radius:7px;cursor:pointer;display:flex;gap:10px;align-items:center}
-.waMenuNavButton:hover{background:var(--wa-hover)}
-
-/* Chats search + filters */
-#chatsPage{background:var(--wa-panel)!important}
-#chatsPage .search{padding:8px 12px 4px!important;background:var(--wa-panel)!important;border-bottom:0!important}
-#chatsPage .search:before{display:none}
-#searchInput{height:40px!important;padding:0 14px 0 40px!important;border:0!important;border-radius:8px!important;background:var(--wa-header)!important;color:var(--wa-text)!important;box-shadow:none!important}
-#searchInput::placeholder{color:var(--wa-subtext)!important}
-#waFilterBar{display:flex;gap:8px;padding:4px 12px 9px;background:var(--wa-panel)}
-.waFilterBtn{border:0;border-radius:18px;padding:7px 13px;background:var(--wa-header);color:var(--wa-subtext);font-size:12px;cursor:pointer}
-.waFilterBtn.active{background:var(--wa-active);color:#00a884}
-
-/* User list -> WhatsApp conversation list */
-#users{background:var(--wa-panel)!important;overflow:auto!important;flex:1!important}
-#users .user{display:flex!important;align-items:center!important;gap:12px!important;padding:11px 16px!important;min-height:72px!important;border-bottom:1px solid rgba(134,150,160,.08)!important;background:var(--wa-panel)!important}
-#users .user:hover{background:var(--wa-hover)!important}
-#users .avatar{width:50px!important;height:50px!important;min-width:50px!important;border-radius:50%!important;overflow:hidden!important;background:#2a3942!important;color:#e9edef!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:18px!important}
-#users .avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
-#users .userInfo{display:flex!important;flex-direction:column!important;min-width:0!important;flex:1!important}
-#users .userName{font-size:16px!important;font-weight:500!important;color:var(--wa-text)!important;line-height:1.2!important}
-#users .userSub{display:none!important}
-#users .statusRow{margin-top:4px!important;display:flex!important;align-items:center!important;gap:7px!important}
-#users .online,#users .offline{font-size:12px!important;color:var(--wa-subtext)!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
-#users .statusRow>div:last-child{margin-left:auto!important}
-#users .toolBtn{border:0!important;border-radius:18px!important;padding:6px 10px!important;background:transparent!important;color:var(--wa-green)!important;font-size:11px!important}
-#users .toolBtn:hover{background:var(--wa-active)!important}
-#users .badge{min-width:20px!important;height:20px!important;border-radius:50%!important;background:var(--wa-green)!important;color:#071c15!important;font-weight:700!important}
-
-/* Remove the old action strip from the normal chat list. */
-#commandActions{padding:0!important;border:0!important;background:transparent!important;display:contents!important}
-
-/* Other top-level pages keep their content but use the same shell. */
-.mainTabPage{background:var(--wa-panel)!important;color:var(--wa-text)!important}
-.tabPageHeader{min-height:64px!important;padding:10px 16px!important;background:var(--wa-header)!important;border-bottom:1px solid var(--wa-border)!important}
-.tabPageHeader h2{font-size:20px!important;color:var(--wa-text)!important}
-.tabPageHeaderSub{color:var(--wa-subtext)!important}
-.tabPageAction{background:var(--wa-green)!important}
-.communityPage,.callsPage,.profilePage,.newsPage{background:var(--wa-panel)!important}
-.newsPage .storiesBar{background:var(--wa-panel)!important}
-.newsPage .storyItem,.groupRow,.callsItem{background:var(--wa-panel)!important;border-color:rgba(134,150,160,.08)!important;color:var(--wa-text)!important}
-.newsPage .storyItem:hover,.groupRow:hover,.callsItem:hover{background:var(--wa-hover)!important}
-
-/* Main empty state */
-.chat{position:relative!important;display:flex!important;flex:1!important;min-width:0!important;flex-direction:column!important;background:var(--wa-bg)!important}
-#emptyState{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;background:var(--wa-panel);border-bottom:6px solid var(--wa-green)}
-#emptyState .waEmptyInner{max-width:520px;padding:40px}
-#emptyState .waEmptyLogo{width:126px;height:126px;border-radius:50%;background:var(--wa-header);display:flex;align-items:center;justify-content:center;color:var(--wa-green);font-size:52px;margin:0 auto 24px;box-shadow:inset 0 0 25px rgba(0,0,0,.18)}
-#emptyState h1{font-weight:300;font-size:30px;margin:0 0 10px;color:var(--wa-text)}
-#emptyState p{font-size:14px;line-height:1.55;color:var(--wa-subtext);margin:0 0 18px}
-#emptyState .waEncryption{display:inline-flex;gap:7px;align-items:center;color:var(--wa-subtext);font-size:12px;background:rgba(32,44,51,.6);padding:8px 13px;border-radius:999px}
-
-/* Active chat */
-#activeChatContainer{display:none;flex:1;min-height:0;flex-direction:column;height:100%}
-.layout.hasActiveChat #emptyState{display:none!important}
-.layout.hasActiveChat #activeChatContainer{display:flex!important}
-.chatHeader{height:64px!important;min-height:64px!important;padding:8px 16px!important;background:var(--wa-header)!important;border-left:1px solid var(--wa-border)!important;border-bottom:1px solid var(--wa-border)!important;display:flex!important;align-items:center!important;gap:10px!important}
-#activeChatContainer .chatHeader .back{display:none}
-#activeChatContainer .headerAvatarWa{width:40px;height:40px;border-radius:50%;background:#2a3942;color:#e9edef;display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:700}
-#activeChatContainer .headerAvatarWa img{width:100%;height:100%;object-fit:cover;display:block}
-#headerAvatar{width:40px!important;height:40px!important;min-width:40px!important;border-radius:50%!important;background:#2a3942!important;color:#e9edef!important;display:flex!important;align-items:center!important;justify-content:center!important;overflow:hidden!important;font-weight:700!important}
-#headerAvatar img{width:100%;height:100%;object-fit:cover;display:block}
-.chatInfo{flex:1;min-width:0}
-.chatTitle{font-size:16px!important;font-weight:500!important;color:var(--wa-text)!important}
-.chatSubtitle{font-size:12px!important;color:var(--wa-subtext)!important;margin-top:1px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
-.chatTools{display:flex!important;align-items:center!important;gap:2px!important;flex-shrink:0!important}
-.chatTools .toolBtn,.chatTools .groupActionsToggle{width:40px!important;height:40px!important;border:0!important;border-radius:50%!important;background:transparent!important;color:var(--wa-subtext)!important;font-size:0!important;padding:0!important;display:flex!important;align-items:center!important;justify-content:center!important}
-.chatTools .toolBtn:hover,.chatTools .groupActionsToggle:hover{background:var(--wa-hover)!important;color:var(--wa-text)!important}
-#callButton::before{content:'\f095';font-family:'Font Awesome 6 Free';font-weight:900;font-size:16px}
-#videoCallButton::before{content:'\f03d';font-family:'Font Awesome 6 Free';font-weight:900;font-size:16px}
-#hangupButton::before{content:'\f2a8';font-family:'Font Awesome 6 Free';font-weight:900;font-size:16px}
-#blockCurrentButton::before{content:'\f05e';font-family:'Font Awesome 6 Free';font-weight:900;font-size:16px}
-#blockCurrentButton{color:#d55!important}
-#chatMoreButton::before{content:'\f142';font-family:'Font Awesome 6 Free';font-weight:900;font-size:17px}
-#chatSearchButton::before{content:'\f002';font-family:'Font Awesome 6 Free';font-weight:900;font-size:16px}
-#privateChatMenu{position:absolute;right:12px;top:58px;background:var(--wa-header);border:1px solid var(--wa-border);border-radius:8px;box-shadow:0 12px 28px rgba(0,0,0,.45);padding:6px;z-index:130;min-width:180px}
-#privateChatMenu.hidden{display:none!important}
-#privateChatMenu button{display:block;width:100%;border:0;background:transparent;color:var(--wa-text);text-align:left;padding:10px 12px;border-radius:6px;cursor:pointer}
-#privateChatMenu button:hover{background:var(--wa-hover)}
-
-#messages{flex:1!important;min-height:0!important;overflow-y:auto!important;padding:24px 7vw!important;background-color:var(--wa-bg)!important;background-image:radial-gradient(rgba(255,255,255,.035) 1px,transparent 0)!important;background-size:24px 24px!important}
-#messages .empty{min-height:100%;display:flex;align-items:center;justify-content:center;color:var(--wa-subtext);text-align:center;padding:30px}
-.messageRow{margin:2px 0!important;padding:0 3px!important;display:flex!important}
-.messageRow:not(.mine){justify-content:flex-start}
-.messageRow.mine{justify-content:flex-end}
-.bubble{position:relative!important;max-width:min(70%,620px)!important;padding:7px 9px 5px!important;border-radius:7px!important;box-shadow:0 1px 1px rgba(0,0,0,.18)!important;background:var(--wa-received)!important;color:var(--wa-text)!important;font-size:14px!important;line-height:1.35!important}
-.mine .bubble{background:var(--wa-sent)!important}
-.from{color:#53bdeb!important;font-size:11px!important;margin-bottom:2px!important}
-.time{color:#8696a0!important;font-size:10px!important;margin-top:3px!important;text-align:right!important}
-.deletedText{color:#8696a0!important;font-style:italic}
-.messageContext{display:flex;justify-content:flex-end;margin-top:4px}
-.deleteBtn{border:0;background:transparent;color:#8696a0;font-size:10px;cursor:pointer}
-
-/* Input bar */
-.messageInput{background:var(--wa-header)!important;border-top:0!important;padding:8px 12px!important;display:flex!important;align-items:center!important;gap:5px!important}
-.messageInput input#messageInput{height:42px!important;background:var(--wa-panel)!important;border:0!important;border-radius:9px!important;color:var(--wa-text)!important;padding:11px 14px!important;outline:none!important}
-.messageInput input#messageInput::placeholder{color:var(--wa-subtext)!important}
-.attachBtn,.locationBtn{width:42px!important;height:42px!important;border:0!important;border-radius:50%!important;background:transparent!important;color:var(--wa-subtext)!important;font-size:19px!important;cursor:pointer!important}
-.attachBtn:hover,.locationBtn:hover{background:var(--wa-hover)!important;color:var(--wa-text)!important}
-#emojiButton{width:42px;height:42px;border:0;border-radius:50%;background:transparent;color:var(--wa-subtext);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
-#emojiButton:hover{background:var(--wa-hover);color:var(--wa-text)}
-.send{width:42px!important;height:42px!important;border:0!important;border-radius:50%!important;background:transparent!important;color:var(--wa-green)!important;font-size:0!important;display:flex!important;align-items:center!important;justify-content:center!important;cursor:pointer!important}
-#sendIconWa{font-size:19px}
-
-/* Quick menus / modals dark palette */
-.modal{background:rgba(0,0,0,.72)!important}
-.modalBox,.commandModalBox{background:var(--wa-panel)!important;color:var(--wa-text)!important;border:1px solid var(--wa-border)!important;box-shadow:0 20px 55px rgba(0,0,0,.5)!important}
-.modalBox p,.modalBox label,.settingsItemSub,.groupCreateList,.commandHint{color:var(--wa-subtext)!important}
-.modalInput,.modalBox textarea,.modalBox select{background:var(--wa-header)!important;color:var(--wa-text)!important;border-color:var(--wa-border)!important}
-.muted{background:var(--wa-header)!important;color:var(--wa-text)!important;border-color:var(--wa-border)!important}
-.primary{background:var(--wa-green)!important;color:#06251c!important}
-
-/* Desktop/menu responsiveness */
-@media (max-width:900px){
-  .sidebar{width:100%!important;min-width:0!important;border-right:0!important}
-  .chat{position:absolute!important;inset:0!important;width:100%!important;z-index:40!important}
-  .layout:not(.mobileChat) .chat{display:none!important}
-  .layout.mobileChat .sidebar{display:none!important}
-  .layout.mobileChat .chat{display:flex!important}
-  #emptyState{display:none!important}
-  #activeChatContainer{display:flex!important}
-  .sidebarHeader{height:58px!important;min-height:58px!important}
-  #chatsPage .search{padding:6px 12px 4px!important}
-  #waFilterBar{overflow-x:auto;white-space:nowrap;padding-bottom:8px}
-  #users .user{padding:10px 14px!important;min-height:72px!important}
-  #messages{padding:14px 8px!important;background-size:20px 20px!important}
-  .bubble{max-width:85%!important}
-  .messageInput{padding:7px 8px max(7px,env(safe-area-inset-bottom))!important}
-  .chatHeader{height:60px!important;min-height:60px!important;padding:8px 10px!important}
-  #activeChatContainer .chatHeader .back{display:flex!important;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;color:var(--wa-subtext);font-size:24px}
-  .chatTools .toolBtn,.chatTools .groupActionsToggle{width:38px!important;height:38px!important}
-}
-</style>
-
-<style id="michat-desktop-rail-v2">
-/* Barra lateral de opciones estilo WhatsApp Web */
-@media (min-width:901px){
-  #desktopRail{
-    display:flex!important;
-    flex:0 0 88px;
-    width:88px;
-    min-width:88px;
-    height:100%;
-    box-sizing:border-box;
-    flex-direction:column;
-    justify-content:space-between;
-    align-items:center;
-    padding:12px 0 16px;
-    background:#111b21;
-    border-right:1px solid #26323a;
-    color:#aebac1;
-    z-index:80;
-  }
-
-  .desktopRailTop,.desktopRailBottom{
-    width:100%;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    gap:8px;
-  }
-
-  .desktopRailSeparator{
-    width:58px;
-    height:1px;
-    background:#2a3942;
-    margin:10px auto;
-  }
-
-  .desktopRailBtn{
-    position:relative;
-    width:62px!important;
-    height:62px!important;
-    min-width:62px!important;
-    padding:0!important;
-    margin:0!important;
-    border:0!important;
-    border-radius:50%!important;
-    background:transparent!important;
-    color:#aebac1!important;
-    display:flex!important;
-    align-items:center!important;
-    justify-content:center!important;
-    cursor:pointer;
-    font-size:21px!important;
-    transition:background .16s ease,color .16s ease,transform .12s ease;
-  }
-
-  .desktopRailBtn:hover{
-    background:#202c33!important;
-    color:#e9edef!important;
-  }
-
-  .desktopRailBtn.active{
-    background:#202c33!important;
-    color:#25d366!important;
-  }
-
-  .desktopRailBtn:active{transform:scale(.95)}
-
-  .desktopRailBtn[data-desktop-tab="chats"]{
-    margin-bottom:2px!important;
-  }
-
-  .desktopRailBtn[data-desktop-tab="chats"]::before{
-    content:"";
-    position:absolute;
-    width:44px;
-    height:44px;
-    border-radius:50%;
-    background:#2f3438;
-    z-index:0;
-  }
-
-  .desktopRailIcon{
-    position:relative;
-    z-index:1;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    width:100%;
-    height:100%;
-  }
-
-  .desktopRailIcon i{font-size:21px}
-
-  .desktopRailBtn[data-desktop-tab="chats"] .desktopRailIcon i{
-    color:#f1f3f4;
-    font-size:20px;
-  }
-
-  .desktopRailBtn.active[data-desktop-tab="chats"] .desktopRailIcon i{color:#fff}
-
-  .desktopRailDot{
-    position:absolute;
-    top:11px;
-    right:10px;
-    width:10px;
-    height:10px;
-    border-radius:50%;
-    background:#25d366;
-    border:2px solid #111b21;
-    box-sizing:border-box;
-  }
-
-  .desktopRailAvatar{
-    width:42px;
-    height:42px;
-    border-radius:50%;
-    overflow:hidden;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    background:#2f3438;
-    color:#dbe4e8;
-    font-weight:700;
-    font-size:17px;
-    border:1px solid #3b474e;
-  }
-
-  .desktopRailAvatar img{
-    width:100%;
-    height:100%;
-    display:block;
-    object-fit:cover;
-  }
-
-  html.darkTheme #desktopRail{
-    background:#111b21;
-    border-right-color:#26323a;
-  }
-
-  html.darkTheme .desktopRailBtn:hover,
-  html.darkTheme .desktopRailBtn.active{
-    background:#202c33!important;
-  }
-
-  html.darkTheme .desktopRailDot{border-color:#111b21}
-
-  #desktopRail + .sidebar{
-    width:410px!important;
-    min-width:410px!important;
-    flex:0 0 410px;
-  }
-}
-
-@media (max-width:900px){
-  #desktopRail{display:none!important}
-}
-</style>
-
 </head>
 
 <body>
@@ -1491,188 +1143,202 @@ body{overflow:hidden}
 
 <div id="app">
   <div id="layout" class="layout">
-    <nav id="desktopRail" aria-label="Navegación principal">
+
+    <nav id="desktopRail" class="desktopRail" aria-label="Navegación de escritorio">
       <div class="desktopRailTop">
-        <button type="button" class="desktopRailBtn active" data-desktop-tab="chats" title="Chats" aria-label="Chats">
-          <span class="desktopRailIcon"><i class="fa-solid fa-message"></i></span>
-        </button>
-        <button type="button" class="desktopRailBtn" data-desktop-tab="calls" title="Llamadas" aria-label="Llamadas">
-          <span class="desktopRailIcon"><i class="fa-solid fa-phone"></i></span>
-          <span class="desktopRailDot" aria-hidden="true"></span>
-        </button>
-        <button type="button" class="desktopRailBtn" data-desktop-tab="news" title="Estados" aria-label="Estados">
-          <span class="desktopRailIcon"><i class="fa-solid fa-circle-notch"></i></span>
-          <span class="desktopRailDot" aria-hidden="true"></span>
-        </button>
-        <button type="button" class="desktopRailBtn" data-desktop-tab="communities" title="Comunidades" aria-label="Comunidades">
-          <span class="desktopRailIcon"><i class="fa-solid fa-users"></i></span>
-        </button>
+        <button type="button" data-desktop-tab="chats" class="desktopRailBtn active" aria-label="Chats" title="Chats"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5 7.3 7.3 0 0 1-3.1-.7L4 20l1.7-4.6A7.3 7.3 0 0 1 5 11.5 7.5 7.5 0 0 1 12.5 4 7.5 7.5 0 0 1 20 11.5Z"/><path d="M8.3 10.4h8.4M8.3 13.5h5.2"/></svg></button>
+        <button type="button" data-desktop-tab="news" class="desktopRailBtn" aria-label="Novedades" title="Novedades"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.2"/><path d="M4.6 8.4a8.4 8.4 0 0 1 3.8-3.2M15.6 5.2a8.4 8.4 0 0 1 3.8 3.2M19.4 15.6a8.4 8.4 0 0 1-3.8 3.2M8.4 18.8a8.4 8.4 0 0 1-3.8-3.2"/></svg></button>
+        <button type="button" data-desktop-tab="communities" class="desktopRailBtn" aria-label="Comunidades" title="Comunidades"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="16.5" cy="9" r="2.3"/><path d="M3.5 19.2c.5-3.1 2.4-4.8 5.5-4.8s5 1.7 5.5 4.8M14 14.9c2.7-.8 5 .7 5.7 3.4"/></svg></button>
+        <button type="button" data-desktop-tab="calls" class="desktopRailBtn" aria-label="Llamadas" title="Llamadas"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8c.5-.6 1.2-.8 1.9-.5l2.2 1c.7.3 1 .9.8 1.6l-.6 2a2 2 0 0 0 .5 1.9l1.4 1.4a2 2 0 0 0 1.9.5l2-.6c.7-.2 1.3.1 1.6.8l1 2.2c.3.7.1 1.4-.5 1.9l-1.4 1.1c-.6.5-1.4.7-2.2.5-2.6-.7-5.1-2.2-7.2-4.3S4.8 10.1 4.1 7.5c-.2-.8 0-1.6.5-2.2L7 4.8Z"/></svg></button>
       </div>
-
-      <div class="desktopRailSeparator" aria-hidden="true"></div>
-
       <div class="desktopRailBottom">
-        <button type="button" class="desktopRailBtn" data-desktop-tab="profile" title="Perfil" aria-label="Perfil">
-          <span class="desktopRailAvatar" id="desktopRailAvatar"><span>?</span></span>
-        </button>
-        <button id="desktopSettingsButton" type="button" class="desktopRailBtn" title="Ajustes" aria-label="Ajustes">
-          <span class="desktopRailIcon"><i class="fa-solid fa-gear"></i></span>
-        </button>
+        <button type="button" id="desktopSettingsButton" class="desktopRailBtn" aria-label="Ajustes" title="Ajustes"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.3a3.7 3.7 0 1 0 0 7.4 3.7 3.7 0 0 0 0-7.4Z"/><path d="m19.3 13.1.1 1.7-2 1.2-1.2 1.9-1.8-.5-1.4.9-.3 2.2H9.3L9 18.3l-1.4-.9-1.8.5-1.2-1.9-2-1.2.1-1.7-1.1-1.4 1.1-1.4-.1-1.7 2-1.2 1.2-1.9 1.8.5 1.4-.9.3-2.2h2.8l.3 2.2 1.4.9 1.8-.5 1.2 1.9 2 1.2-.1 1.7 1.1 1.4-1.1 1.4Z"/></svg></button>
+        <button type="button" data-desktop-tab="profile" class="desktopRailBtn" aria-label="Perfil" title="Perfil"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 19.2c.8-3.2 2.9-4.8 6.5-4.8s5.7 1.6 6.5 4.8"/></svg></button>
       </div>
     </nav>
 
     <aside class="sidebar">
-      <header class="sidebarHeader">
+
+      <div class="sidebarHeader">
         <div class="headerTop">
-          <div class="headerProfile">
-            <button id="sidebarAvatarButton" class="headerProfileAvatar" type="button" title="Mi perfil">
-              <span id="sidebarAvatarLetter">?</span>
-            </button>
-            <div class="headerProfileName" id="sidebarProfileName">Mi Chat</div>
-          </div>
+          <h2>💬 Mi Chat</h2>
 
           <div class="topButtons">
-            <button id="headerStatusButton" class="headerIconBtn" type="button" title="Estados" aria-label="Estados"><i class="fa-solid fa-circle-notch"></i></button>
-            <button id="headerNewChatButton" class="headerIconBtn" type="button" title="Nuevo chat" aria-label="Nuevo chat"><i class="fa-regular fa-message"></i></button>
-            <button id="headerMenuButton" class="headerIconBtn" type="button" title="Menú" aria-label="Menú"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+            <button class="smallBtn" id="settingsButton">⚙️</button>
+            <button class="smallBtn" id="logoutButton">Salir</button>
           </div>
         </div>
 
-        <div id="quickActionsMenu" class="quickActionsMenu hidden">
-          <button id="quickActionsToggle" type="button" hidden aria-hidden="true"></button>
-          <button class="actionBtn" id="newChatButton" type="button"><i class="fa-solid fa-user-plus" style="width:20px;margin-right:8px"></i>Enviar solicitud</button>
-          <button class="actionBtn" id="newGroupButton" type="button"><i class="fa-solid fa-users" style="width:20px;margin-right:8px"></i>Crear grupo</button>
-          <button class="actionBtn requestBtn" id="requestsButton" type="button"><i class="fa-solid fa-inbox" style="width:20px;margin-right:8px"></i>Solicitudes <span id="requestsBadge" class="requestBadge hidden">0</span><span id="requestsFabDot" class="requestFabDot hidden" aria-hidden="true"></span></button>
-          <button class="actionBtn commandBtn hidden" id="commandButton" type="button"><i class="fa-solid fa-terminal" style="width:20px;margin-right:8px"></i>Consola de comandos</button>
-          <div class="waMenuDivider"></div>
-          <button type="button" class="waMenuNavButton" data-wa-menu-tab="news"><i class="fa-solid fa-circle-notch" style="width:20px"></i>Novedades</button>
-          <button type="button" class="waMenuNavButton" data-wa-menu-tab="communities"><i class="fa-solid fa-users" style="width:20px"></i>Comunidades</button>
-          <button type="button" class="waMenuNavButton" data-wa-menu-tab="calls"><i class="fa-solid fa-phone" style="width:20px"></i>Llamadas</button>
-          <button type="button" class="waMenuNavButton" data-wa-menu-tab="profile"><i class="fa-solid fa-user" style="width:20px"></i>Perfil</button>
-          <div class="waMenuDivider"></div>
-          <button id="settingsButton" type="button"><i class="fa-solid fa-gear" style="width:20px;margin-right:8px"></i>Ajustes</button>
-          <button id="logoutButton" type="button"><i class="fa-solid fa-right-from-bracket" style="width:20px;margin-right:8px"></i>Salir</button>
+        <div class="onlineCount">
+          <span id="onlineCount">0</span> en línea
         </div>
-      </header>
+      </div>
 
-      <section id="chatsPage" class="mainTabPage">
+      <div id="chatsPage" class="mainTabPage">
+        <div class="quickActions">
+          <button id="quickActionsToggle" class="quickActionsFab" type="button" aria-label="Más acciones" aria-expanded="false">+<span id="requestsFabDot" class="requestFabDot hidden" aria-hidden="true"></span></button>
+          <div id="quickActionsMenu" class="quickActionsMenu hidden">
+            <button class="actionBtn" id="newChatButton" type="button">
+              ➕ Enviar solicitud
+            </button>
+            <button class="actionBtn" id="newGroupButton" type="button">
+              👥 Crear grupo
+            </button>
+            <button class="actionBtn requestBtn" id="requestsButton" type="button">
+              📥 Solicitudes <span id="requestsBadge" class="requestBadge hidden">0</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="actions" id="commandActions">
+          <button class="actionBtn commandBtn hidden" id="commandButton" type="button">
+            🖥️ Consola de comandos
+          </button>
+        </div>
+
         <div class="search">
-          <input id="searchInput" placeholder="Buscar un chat o iniciar uno nuevo" autocomplete="off">
+          <input id="searchInput" placeholder="Buscar usuarios..." autocomplete="off">
         </div>
-        <div id="waFilterBar" aria-label="Filtros de chats">
-          <button type="button" class="waFilterBtn active">Todos</button>
-          <button type="button" class="waFilterBtn">No leídos</button>
-          <button type="button" class="waFilterBtn">Grupos</button>
-        </div>
-        <div id="users"></div>
-      </section>
 
-      <section id="newsPage" class="mainTabPage hiddenTab newsPage">
+        <div id="users"></div>
+      </div>
+
+      <div id="newsPage" class="mainTabPage hiddenTab newsPage">
         <div class="tabPageHeader storiesHeader">
-          <div class="tabPageHeaderText"><h2>Estados</h2></div>
+          <div class="tabPageHeaderText">
+            <h2>Estados</h2>
+          </div>
           <div class="storiesHeaderActions">
             <button id="newsStoryMenuButton" class="storiesHeaderIconBtn" type="button" aria-label="Más opciones">⋮</button>
             <button id="newsCreateStoryButton" class="storiesHeaderIconBtn storiesHeaderAddBtn" type="button" aria-label="Crear estado">＋</button>
           </div>
         </div>
         <div id="storiesBar" class="storiesBar"></div>
-      </section>
+      </div>
 
-      <section id="communityPage" class="mainTabPage hiddenTab communityPage">
+      <div id="communityPage" class="mainTabPage hiddenTab communityPage">
         <div class="tabPageHeader">
-          <div class="tabPageHeaderText"><h2>Comunidades</h2><div class="tabPageHeaderSub"><span id="groupsCount">0</span> comunidades</div></div>
+          <div class="tabPageHeaderText">
+            <h2>Comunidades</h2>
+            <div class="tabPageHeaderSub"><span id="groupsCount">0</span> comunidades</div>
+          </div>
           <button id="communityCreateButton" class="tabPageAction" type="button">＋ Crear</button>
         </div>
         <div id="groupList" class="communityList"></div>
-      </section>
+      </div>
 
-      <section id="callsPage" class="mainTabPage hiddenTab callsPage">
+      <div id="callsPage" class="mainTabPage hiddenTab callsPage">
         <div class="tabPageHeader">
-          <div class="tabPageHeaderText"><h2>Llamadas</h2><div class="tabPageHeaderSub">Llama a tus contactos</div></div>
+          <div class="tabPageHeaderText">
+            <h2>Llamadas</h2>
+            <div class="tabPageHeaderSub">Llama a tus contactos</div>
+          </div>
         </div>
         <div id="callsList" class="callsList"></div>
-      </section>
+      </div>
 
-      <section id="profilePage" class="mainTabPage hiddenTab profilePage">
+      <div id="profilePage" class="mainTabPage hiddenTab profilePage">
         <div class="tabPageHeader">
-          <div class="tabPageHeaderText"><h2>Tú</h2><div class="tabPageHeaderSub">Tu cuenta y configuración</div></div>
+          <div class="tabPageHeaderText">
+            <h2>Tú</h2>
+            <div class="tabPageHeaderSub">Tu cuenta y configuración</div>
+          </div>
         </div>
         <div class="profilePageInner">
           <div id="profileTabCard" class="profileCard"></div>
           <div class="profileActions">
-            <button id="profileEditButton" class="profileActionBtn" type="button"><strong>👤 Editar perfil</strong><span>Cambia tu nombre, foto, correo o teléfono.</span></button>
-            <button id="profileSettingsButton" class="profileActionBtn" type="button"><strong>⚙️ Ajustes</strong><span>Notificaciones, privacidad y otras opciones.</span></button>
-            <button id="profileAccountButton" class="profileActionBtn" type="button"><strong>🔐 Cuenta</strong><span>Usuario y contraseña.</span></button>
-            <button id="profileBlockedButton" class="profileActionBtn" type="button"><strong>🚫 Usuarios bloqueados</strong><span>Gestiona tus bloqueos.</span></button>
-            <button id="profileLogoutButton" class="profileActionBtn" type="button"><strong>Salir</strong><span>Cerrar sesión de Mi Chat.</span></button>
+            <button id="profileEditButton" class="profileActionBtn" type="button">
+              <strong>👤 Editar perfil</strong><span>Cambia tu nombre, foto, correo o teléfono.</span>
+            </button>
+            <button id="profileSettingsButton" class="profileActionBtn" type="button">
+              <strong>⚙️ Ajustes</strong><span>Notificaciones, privacidad y otras opciones.</span>
+            </button>
+            <button id="profileAccountButton" class="profileActionBtn" type="button">
+              <strong>🔐 Cuenta</strong><span>Usuario y contraseña.</span>
+            </button>
+            <button id="profileBlockedButton" class="profileActionBtn" type="button">
+              <strong>🚫 Usuarios bloqueados</strong><span>Gestiona tus bloqueos.</span>
+            </button>
+            <button id="profileLogoutButton" class="profileActionBtn" type="button">
+              <strong>Salir</strong><span>Cerrar sesión de Mi Chat.</span>
+            </button>
           </div>
         </div>
-      </section>
+      </div>
     </aside>
 
     <main class="chat">
-      <section id="emptyState">
-        <div class="waEmptyInner">
-          <div class="waEmptyLogo"><i class="fa-brands fa-whatsapp"></i></div>
-          <h1>Mi Chat</h1>
-          <p>Envía y recibe mensajes sin necesidad de mantener esta ventana abierta todo el tiempo.<br>Selecciona una conversación para empezar a chatear.</p>
-          <div class="waEncryption"><i class="fa-solid fa-lock"></i><span>Tus conversaciones están protegidas</span></div>
-        </div>
-      </section>
 
-      <section id="activeChatContainer">
-        <header class="chatHeader">
-          <button id="backButton" class="back" type="button" aria-label="Volver">←</button>
-          <div id="headerAvatar" class="avatar">?</div>
-          <div class="chatInfo">
-            <div id="chatTitle" class="chatTitle">Selecciona una conversación</div>
-            <div id="chatSubtitle" class="chatSubtitle">Usa el botón de nuevo chat para iniciar una conversación.</div>
+      <header class="chatHeader">
+
+        <button id="backButton" class="back">←</button>
+
+        <div id="headerAvatar" class="avatar">?</div>
+
+        <div class="chatInfo">
+          <div id="chatTitle" class="chatTitle">
+            Selecciona una conversación
           </div>
-          <div class="chatTools">
-            <button id="callButton" class="toolBtn callBtn hidden" type="button" title="Llamada">📞</button>
-            <button id="videoCallButton" class="toolBtn videoBtn hidden" type="button" title="Videollamada">📹</button>
-            <button id="hangupButton" class="toolBtn hangBtn hidden" type="button" title="Colgar">📵</button>
-            <button id="chatSearchButton" class="toolBtn" type="button" title="Buscar"><i class="fa-solid fa-magnifying-glass"></i></button>
-            <div id="groupActionsWrap" class="groupActionsWrap" aria-hidden="true">
-              <button id="groupActionsToggle" class="groupActionsToggle" type="button" aria-label="Opciones">⋮</button>
-              <div id="groupActionsMenu" class="groupActionsMenu hidden">
-                <button id="groupRenameButton" class="toolBtn groupAddBtn hidden" type="button">✏️ Cambiar nombre</button>
-                <button id="groupAddMembersButton" class="toolBtn groupAddBtn hidden" type="button">👥 Añadir personas</button>
-                <button id="groupDeleteButton" class="toolBtn groupAddBtn hidden" type="button">🗑️ Borrar grupo</button>
-              </div>
+
+          <div id="chatSubtitle" class="chatSubtitle">
+            Usa «Nuevo chat» para iniciar una conversación.
+          </div>
+        </div>
+
+        <div class="chatTools">
+          <button id="callButton" class="toolBtn callBtn hidden">📞 Llamar</button>
+          <button id="videoCallButton" class="toolBtn videoBtn hidden">📹 Vídeo</button>
+          <button id="hangupButton" class="toolBtn hangBtn hidden">📵 Colgar</button>
+          <div id="groupActionsWrap" class="groupActionsWrap" aria-hidden="true">
+            <button id="groupActionsToggle" class="groupActionsToggle" type="button" aria-label="Opciones del grupo" aria-expanded="false">⋮</button>
+            <div id="groupActionsMenu" class="groupActionsMenu hidden">
+              <button id="groupRenameButton" class="toolBtn groupAddBtn hidden" type="button">✏️ Cambiar nombre</button>
+              <button id="groupAddMembersButton" class="toolBtn groupAddBtn hidden" type="button">👥 Añadir personas</button>
+              <button id="groupDeleteButton" class="toolBtn groupAddBtn hidden" type="button">🗑️ Borrar grupo</button>
             </div>
-            <button id="blockCurrentButton" class="toolBtn hidden" type="button">🚫</button>
-            <button id="chatMoreButton" class="toolBtn" type="button" title="Más opciones" aria-label="Más opciones"></button>
           </div>
-        </header>
-
-        <div id="privateChatMenu" class="hidden">
-          <button id="privateChatBlockAction" type="button">🚫 Bloquear usuario</button>
+          <button id="blockCurrentButton" class="toolBtn hidden" type="button">🚫 Bloquear</button>
         </div>
 
-        <div id="messages">
-          <div class="empty">Aquí aparecerán tus mensajes.</div>
-        </div>
+      </header>
 
-        <div class="messageInput">
-          <button id="emojiButton" type="button" title="Emoji"><i class="fa-regular fa-face-smile"></i></button>
-          <button id="attachButton" class="attachBtn" type="button" disabled title="Adjuntar"><i class="fa-solid fa-paperclip"></i></button>
-          <button id="locationButton" class="locationBtn" type="button" disabled title="Ubicación"><i class="fa-solid fa-location-dot"></i></button>
-          <input id="fileInput" type="file" hidden accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx">
-          <span id="mediaName" class="mediaName" style="display:none"></span>
-          <input id="messageInput" placeholder="Escribe un mensaje" autocomplete="off" disabled maxlength="5000">
-          <button id="sendButton" class="send" disabled title="Enviar"><i id="sendIconWa" class="fa-solid fa-microphone"></i></button>
-        </div>
-      </section>
+      <div id="messages">
+        <div class="empty">Aquí aparecerán tus mensajes.</div>
+      </div>
+
+      <div class="messageInput">
+        <button id="attachButton" class="attachBtn" type="button" disabled title="Enviar archivo">📎</button>
+        <button id="locationButton" class="locationBtn" type="button" disabled title="Compartir ubicación">📍</button>
+        <input id="fileInput" type="file" hidden accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx">
+        <span id="mediaName" class="mediaName" style="display:none"></span>
+        <input id="messageInput" placeholder="Escribe un mensaje..." autocomplete="off" disabled maxlength="5000">
+        <button id="sendButton" class="send" disabled>➤</button>
+      </div>
+
     </main>
   </div>
 
-  <nav id="mobileBottomNav" class="mobileBottomNav" aria-hidden="true">
-    <button type="button" data-main-tab="chats"></button>
-    <button type="button" data-main-tab="news"></button>
-    <button type="button" data-main-tab="communities"></button>
-    <button type="button" data-main-tab="calls"></button>
-    <button type="button" data-main-tab="profile"></button>
+  <nav id="mobileBottomNav" class="mobileBottomNav" aria-label="Navegación principal">
+    <button type="button" data-main-tab="chats" class="active">
+      <span class="navPill"><span class="navIcon"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5 7.3 7.3 0 0 1-3.1-.7L4 20l1.7-4.6A7.3 7.3 0 0 1 5 11.5 7.5 7.5 0 0 1 12.5 4 7.5 7.5 0 0 1 20 11.5Z"/><path d="M8.3 10.4h8.4M8.3 13.5h5.2"/></svg></span><span id="navRequestsBadge" class="navBadge hidden">0</span></span>
+      <span class="navLabel">Chats</span>
+    </button>
+    <button type="button" data-main-tab="news">
+      <span class="navPill"><span class="navIcon"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.2"/><path d="M4.6 8.4a8.4 8.4 0 0 1 3.8-3.2M15.6 5.2a8.4 8.4 0 0 1 3.8 3.2M19.4 15.6a8.4 8.4 0 0 1-3.8 3.2M8.4 18.8a8.4 8.4 0 0 1-3.8-3.2"/></svg></span></span>
+      <span class="navLabel">Novedades</span>
+    </button>
+    <button type="button" data-main-tab="communities">
+      <span class="navPill"><span class="navIcon"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="16.5" cy="9" r="2.3"/><path d="M3.5 19.2c.5-3.1 2.4-4.8 5.5-4.8s5 1.7 5.5 4.8M14 14.9c2.7-.8 5 .7 5.7 3.4"/></svg></span></span>
+      <span class="navLabel">Comunidades</span>
+    </button>
+    <button type="button" data-main-tab="calls">
+      <span class="navPill"><span class="navIcon"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8c.5-.6 1.2-.8 1.9-.5l2.2 1c.7.3 1 .9.8 1.6l-.6 2a2 2 0 0 0 .5 1.9l1.4 1.4a2 2 0 0 0 1.9.5l2-.6c.7-.2 1.3.1 1.6.8l1 2.2c.3.7.1 1.4-.5 1.9l-1.4 1.1c-.6.5-1.4.7-2.2.5-2.6-.7-5.1-2.2-7.2-4.3S4.8 10.1 4.1 7.5c-.2-.8 0-1.6.5-2.2L7 4.8Z"/></svg></span></span>
+      <span class="navLabel">Llamadas</span>
+    </button>
+    <button type="button" data-main-tab="profile">
+      <span class="navPill"><span id="navProfileAvatar" class="navProfileAvatar"><svg class="waIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 19.2c.8-3.2 2.9-4.8 6.5-4.8s5.7 1.6 6.5 4.8"/></svg></span></span>
+      <span class="navLabel">Tú</span>
+    </button>
   </nav>
 </div>
 
@@ -2217,9 +1883,8 @@ function switchMainTab(tab){
   if(next === "profile") renderProfileTab();
   if(next === "news") renderStories();
 
-  if(next !== "chats") {
+  if(next !== "chats" && layout.classList.contains("mobileChat")){
     layout.classList.remove("mobileChat");
-    layout.classList.remove("hasActiveChat");
   }
 }
 
@@ -2333,31 +1998,9 @@ document.querySelectorAll("#mobileBottomNav [data-main-tab]").forEach(button => 
 document.querySelectorAll("#desktopRail [data-desktop-tab]").forEach(button => {
   button.addEventListener("click", () => openTopLevelTab(button.dataset.desktopTab));
 });
-
-function syncDesktopRailAvatar(){
-  const source = $("sidebarAvatarButton");
-  const target = $("desktopRailAvatar");
-  if(!source || !target) return;
-  const image = source.querySelector("img");
-  if(image){
-    target.innerHTML = "";
-    const clone = image.cloneNode(true);
-    target.appendChild(clone);
-    return;
-  }
-  const letter = $("sidebarAvatarLetter")?.textContent?.trim() || "?";
-  target.innerHTML = `<span>${String(letter).replace(/[&<>"]/g, "")}</span>`;
-}
-
-try{
-  const avatarObserver = new MutationObserver(syncDesktopRailAvatar);
-  const avatarSource = $("sidebarAvatarButton");
-  if(avatarSource) avatarObserver.observe(avatarSource, {subtree:true, childList:true, characterData:true, attributes:true});
-}catch{}
-syncDesktopRailAvatar();
 $("desktopSettingsButton")?.addEventListener("click", () => $("settingsButton")?.click());
 
-$("backButton").addEventListener("click", () => { layout.classList.remove("mobileChat"); layout.classList.remove("hasActiveChat"); switchMainTab("chats"); });
+$("backButton").addEventListener("click", () => { layout.classList.remove("mobileChat"); switchMainTab("chats"); });
 
 $("newsCreateStoryButton").onclick = () => openStoryCreator();
 $("communityCreateButton").onclick = () => {
@@ -2377,20 +2020,10 @@ function getMyUser(){
 
 function renderProfileNavAvatar(){
   const target = $("navProfileAvatar");
+  if(!target) return;
   const me = getMyUser();
-  if(target){
-    target.innerHTML = avatarHtml(me);
-    target.title = me?.displayName ? `Cuenta de ${me.displayName}` : "Mi cuenta";
-  }
-  const headerAvatar = $("sidebarAvatarButton");
-  const headerName = $("sidebarProfileName");
-  if(headerAvatar){
-    headerAvatar.innerHTML = avatarHtml(me);
-    headerAvatar.title = me?.displayName ? `Cuenta de ${me.displayName}` : "Mi perfil";
-  }
-  if(headerName){
-    headerName.textContent = me?.displayName || myUsername || "Mi Chat";
-  }
+  target.innerHTML = avatarHtml(me);
+  target.title = me?.displayName ? `Cuenta de ${me.displayName}` : "Mi cuenta";
 }
 
 function renderProfileTab(){
@@ -4071,12 +3704,10 @@ function openChat(
     chatTitle.textContent = displayName || username;
     chatSubtitle.textContent = "🔒 Solicitud de contacto necesaria";
     layout.classList.add("mobileChat");
-    layout.classList.remove("hasActiveChat");
     return;
   }
 
   selectedUser = username;
-  layout.classList.add("hasActiveChat");
 
   unread[username] = 0;
 
@@ -8014,76 +7645,6 @@ window.addEventListener(
     }
   }
 );
-
-
-/* =====================================================
-   ESTILO WHATSAPP WEB — CONTROLES DE CABECERA
-===================================================== */
-(function setupReferenceStyleControls(){
-  const menuButton = $("headerMenuButton");
-  const statusButton = $("headerStatusButton");
-  const newChatHeader = $("headerNewChatButton");
-  const avatarButton = $("sidebarAvatarButton");
-  const menu = $("quickActionsMenu");
-  const quickToggle = $("quickActionsToggle");
-  const privateMenu = $("privateChatMenu");
-  const chatMore = $("chatMoreButton");
-  const privateBlock = $("privateChatBlockAction");
-  const emojiButton = $("emojiButton");
-  const messageBox = $("messageInput");
-  const sendIcon = $("sendIconWa");
-
-  function closeHeaderMenu(){
-    if(menu) menu.classList.add("hidden");
-    if(quickToggle) quickToggle.setAttribute("aria-expanded","false");
-  }
-  menuButton?.addEventListener("click", (event) => {
-    event.stopPropagation();
-    if(quickToggle){ quickToggle.click(); }
-    else if(menu){ menu.classList.toggle("hidden"); }
-  });
-  newChatHeader?.addEventListener("click", () => { $("newChatButton")?.click(); });
-  statusButton?.addEventListener("click", () => openTopLevelTab("news"));
-  avatarButton?.addEventListener("click", () => openTopLevelTab("profile"));
-
-  document.querySelectorAll("[data-wa-menu-tab]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      closeHeaderMenu();
-      openTopLevelTab(btn.dataset.waMenuTab);
-    });
-  });
-  document.addEventListener("click", (event) => {
-    if(menu && !menu.contains(event.target) && event.target !== menuButton){
-      closeHeaderMenu();
-    }
-    if(privateMenu && !privateMenu.contains(event.target) && event.target !== chatMore){
-      privateMenu.classList.add("hidden");
-    }
-  });
-
-  chatMore?.addEventListener("click", (event) => {
-    event.stopPropagation();
-    privateMenu?.classList.toggle("hidden");
-  });
-  privateBlock?.addEventListener("click", () => {
-    privateMenu?.classList.add("hidden");
-    $("blockCurrentButton")?.click();
-  });
-
-  emojiButton?.addEventListener("click", () => {
-    if(!messageBox || messageBox.disabled) return;
-    messageBox.value += "😊";
-    messageBox.dispatchEvent(new Event("input", {bubbles:true}));
-    messageBox.focus();
-  });
-  function syncSendIcon(){
-    if(!sendIcon) return;
-    const hasText = !!messageBox?.value.trim();
-    sendIcon.className = hasText ? "fa-solid fa-paper-plane" : "fa-solid fa-microphone";
-  }
-  messageBox?.addEventListener("input", syncSendIcon);
-  syncSendIcon();
-})();
 
 /* =====================================================
    ARRANQUE
