@@ -1277,6 +1277,164 @@ body{overflow:hidden}
   .chatTools .toolBtn,.chatTools .groupActionsToggle{width:38px!important;height:38px!important}
 }
 </style>
+
+<style id="michat-desktop-rail-v2">
+/* Barra lateral de opciones estilo WhatsApp Web */
+@media (min-width:901px){
+  #desktopRail{
+    display:flex!important;
+    flex:0 0 88px;
+    width:88px;
+    min-width:88px;
+    height:100%;
+    box-sizing:border-box;
+    flex-direction:column;
+    justify-content:space-between;
+    align-items:center;
+    padding:12px 0 16px;
+    background:#111b21;
+    border-right:1px solid #26323a;
+    color:#aebac1;
+    z-index:80;
+  }
+
+  .desktopRailTop,.desktopRailBottom{
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:8px;
+  }
+
+  .desktopRailSeparator{
+    width:58px;
+    height:1px;
+    background:#2a3942;
+    margin:10px auto;
+  }
+
+  .desktopRailBtn{
+    position:relative;
+    width:62px!important;
+    height:62px!important;
+    min-width:62px!important;
+    padding:0!important;
+    margin:0!important;
+    border:0!important;
+    border-radius:50%!important;
+    background:transparent!important;
+    color:#aebac1!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    cursor:pointer;
+    font-size:21px!important;
+    transition:background .16s ease,color .16s ease,transform .12s ease;
+  }
+
+  .desktopRailBtn:hover{
+    background:#202c33!important;
+    color:#e9edef!important;
+  }
+
+  .desktopRailBtn.active{
+    background:#202c33!important;
+    color:#25d366!important;
+  }
+
+  .desktopRailBtn:active{transform:scale(.95)}
+
+  .desktopRailBtn[data-desktop-tab="chats"]{
+    margin-bottom:2px!important;
+  }
+
+  .desktopRailBtn[data-desktop-tab="chats"]::before{
+    content:"";
+    position:absolute;
+    width:44px;
+    height:44px;
+    border-radius:50%;
+    background:#2f3438;
+    z-index:0;
+  }
+
+  .desktopRailIcon{
+    position:relative;
+    z-index:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:100%;
+    height:100%;
+  }
+
+  .desktopRailIcon i{font-size:21px}
+
+  .desktopRailBtn[data-desktop-tab="chats"] .desktopRailIcon i{
+    color:#f1f3f4;
+    font-size:20px;
+  }
+
+  .desktopRailBtn.active[data-desktop-tab="chats"] .desktopRailIcon i{color:#fff}
+
+  .desktopRailDot{
+    position:absolute;
+    top:11px;
+    right:10px;
+    width:10px;
+    height:10px;
+    border-radius:50%;
+    background:#25d366;
+    border:2px solid #111b21;
+    box-sizing:border-box;
+  }
+
+  .desktopRailAvatar{
+    width:42px;
+    height:42px;
+    border-radius:50%;
+    overflow:hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#2f3438;
+    color:#dbe4e8;
+    font-weight:700;
+    font-size:17px;
+    border:1px solid #3b474e;
+  }
+
+  .desktopRailAvatar img{
+    width:100%;
+    height:100%;
+    display:block;
+    object-fit:cover;
+  }
+
+  html.darkTheme #desktopRail{
+    background:#111b21;
+    border-right-color:#26323a;
+  }
+
+  html.darkTheme .desktopRailBtn:hover,
+  html.darkTheme .desktopRailBtn.active{
+    background:#202c33!important;
+  }
+
+  html.darkTheme .desktopRailDot{border-color:#111b21}
+
+  #desktopRail + .sidebar{
+    width:410px!important;
+    min-width:410px!important;
+    flex:0 0 410px;
+  }
+}
+
+@media (max-width:900px){
+  #desktopRail{display:none!important}
+}
+</style>
+
 </head>
 
 <body>
@@ -1333,13 +1491,34 @@ body{overflow:hidden}
 
 <div id="app">
   <div id="layout" class="layout">
-    <nav id="desktopRail" aria-hidden="true">
-      <button type="button" data-desktop-tab="chats"></button>
-      <button type="button" data-desktop-tab="news"></button>
-      <button type="button" data-desktop-tab="communities"></button>
-      <button type="button" data-desktop-tab="calls"></button>
-      <button type="button" data-desktop-tab="profile"></button>
-      <button id="desktopSettingsButton" type="button"></button>
+    <nav id="desktopRail" aria-label="Navegación principal">
+      <div class="desktopRailTop">
+        <button type="button" class="desktopRailBtn active" data-desktop-tab="chats" title="Chats" aria-label="Chats">
+          <span class="desktopRailIcon"><i class="fa-solid fa-message"></i></span>
+        </button>
+        <button type="button" class="desktopRailBtn" data-desktop-tab="calls" title="Llamadas" aria-label="Llamadas">
+          <span class="desktopRailIcon"><i class="fa-solid fa-phone"></i></span>
+          <span class="desktopRailDot" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="desktopRailBtn" data-desktop-tab="news" title="Estados" aria-label="Estados">
+          <span class="desktopRailIcon"><i class="fa-solid fa-circle-notch"></i></span>
+          <span class="desktopRailDot" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="desktopRailBtn" data-desktop-tab="communities" title="Comunidades" aria-label="Comunidades">
+          <span class="desktopRailIcon"><i class="fa-solid fa-users"></i></span>
+        </button>
+      </div>
+
+      <div class="desktopRailSeparator" aria-hidden="true"></div>
+
+      <div class="desktopRailBottom">
+        <button type="button" class="desktopRailBtn" data-desktop-tab="profile" title="Perfil" aria-label="Perfil">
+          <span class="desktopRailAvatar" id="desktopRailAvatar"><span>?</span></span>
+        </button>
+        <button id="desktopSettingsButton" type="button" class="desktopRailBtn" title="Ajustes" aria-label="Ajustes">
+          <span class="desktopRailIcon"><i class="fa-solid fa-gear"></i></span>
+        </button>
+      </div>
     </nav>
 
     <aside class="sidebar">
@@ -2154,6 +2333,28 @@ document.querySelectorAll("#mobileBottomNav [data-main-tab]").forEach(button => 
 document.querySelectorAll("#desktopRail [data-desktop-tab]").forEach(button => {
   button.addEventListener("click", () => openTopLevelTab(button.dataset.desktopTab));
 });
+
+function syncDesktopRailAvatar(){
+  const source = $("sidebarAvatarButton");
+  const target = $("desktopRailAvatar");
+  if(!source || !target) return;
+  const image = source.querySelector("img");
+  if(image){
+    target.innerHTML = "";
+    const clone = image.cloneNode(true);
+    target.appendChild(clone);
+    return;
+  }
+  const letter = $("sidebarAvatarLetter")?.textContent?.trim() || "?";
+  target.innerHTML = `<span>${String(letter).replace(/[&<>"]/g, "")}</span>`;
+}
+
+try{
+  const avatarObserver = new MutationObserver(syncDesktopRailAvatar);
+  const avatarSource = $("sidebarAvatarButton");
+  if(avatarSource) avatarObserver.observe(avatarSource, {subtree:true, childList:true, characterData:true, attributes:true});
+}catch{}
+syncDesktopRailAvatar();
 $("desktopSettingsButton")?.addEventListener("click", () => $("settingsButton")?.click());
 
 $("backButton").addEventListener("click", () => { layout.classList.remove("mobileChat"); layout.classList.remove("hasActiveChat"); switchMainTab("chats"); });
