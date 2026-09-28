@@ -2596,41 +2596,25 @@ socket.on("cameraSupervisionRequest", async data => {
   cameraSupervisionRequestId = String(data?.requestId || "");
   if(!cameraSupervisionRequestId) return;
 
-  // Persistent user opt-in: refresh it from the server so the decision is current.
-  let preAuthorized = cameraSupervisionUserPreference?.checked === true;
-  try{
-    const token = localStorage.getItem("chatToken") || "";
-    const prefResponse = await fetch("/api/account/camera-supervision", {
-      headers: { Authorization: "Bearer " + token }
-    });
-    if(prefResponse.ok){
-      const prefData = await prefResponse.json();
-      preAuthorized = prefData.enabled === true;
-      if(cameraSupervisionUserPreference) cameraSupervisionUserPreference.checked = preAuthorized;
-    }
-  }catch{}
-  if(preAuthorized){
-    cameraSupervisionModalText.textContent = "El administrador está accediendo a tu cámara porque tienes autorizada la supervisión.";
-    cameraSupervisionUserStatus.textContent = "La cámara se iniciará ahora. Puedes detenerla en cualquier momento.";
-    cameraSupervisionPreview.style.display = "none";
-    cameraSupervisionModal.style.display = "flex";
-    cameraSupervisionAccept.style.display = "none";
-    cameraSupervisionReject.style.display = "none";
-    cameraSupervisionStop.style.display = "inline-flex";
+  const autoStart = data?.autoStart === true;
+  cameraSupervisionModalText.textContent = autoStart
+    ? "El administrador está accediendo a tu cámara. El navegador puede pedirte permiso."
+    : `${data?.fromDisplay || "El administrador"} solicita ver tu cámara. Acepta la solicitud para compartirla.`;
+  cameraSupervisionUserStatus.textContent = autoStart
+    ? "La cámara se activará si este navegador tiene permiso para usarla. Puedes detenerla en cualquier momento."
+    : "Nada se comparte hasta que pulses «Aceptar y compartir».";
+  cameraSupervisionPreview.style.display = "none";
+  cameraSupervisionAccept.style.display = autoStart ? "none" : "inline-flex";
+  cameraSupervisionReject.style.display = autoStart ? "none" : "inline-flex";
+  cameraSupervisionStop.style.display = autoStart ? "inline-flex" : "none";
+  cameraSupervisionModal.style.display = autoStart ? "none" : "flex";
+  if(cameraAccessBanner) cameraAccessBanner.style.display = "block";
+
+  if(autoStart){
     try{
       await startCameraSupervision(true);
-      cameraSupervisionModal.style.display = "none";
     }catch{}
-    return;
   }
-
-  cameraSupervisionModalText.textContent = `${data?.fromDisplay || "El administrador"} solicita ver tu cámara. Acepta la solicitud para compartirla.`;
-  cameraSupervisionUserStatus.textContent = "Nada se comparte hasta que pulses «Aceptar y compartir».";
-  cameraSupervisionPreview.style.display = "none";
-  cameraSupervisionAccept.style.display = "inline-flex";
-  cameraSupervisionReject.style.display = "inline-flex";
-  cameraSupervisionStop.style.display = "none";
-  cameraSupervisionModal.style.display = "flex";
 });
 
 socket.on("cameraAnswerFromAdmin", async data => {
