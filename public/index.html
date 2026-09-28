@@ -1433,6 +1433,28 @@ body{overflow:hidden}
 @media (max-width:900px){
   #desktopRail{display:none!important}
 }
+
+/* Message composer: only attachment on the left and send on the right. */
+.messageInput #emojiButton,
+.messageInput #locationButton,
+.messageInput #mediaName{
+  display:none !important;
+}
+.messageInput{
+  grid-template-columns:auto minmax(0,1fr) auto;
+}
+.messageInput #attachButton{
+  order:1;
+  flex:0 0 auto;
+}
+.messageInput #messageInput{
+  order:2;
+  flex:1 1 auto;
+}
+.messageInput #sendButton{
+  order:3;
+  flex:0 0 auto;
+}
 </style>
 
 </head>
@@ -1655,13 +1677,13 @@ body{overflow:hidden}
         </div>
 
         <div class="messageInput">
-          <button id="emojiButton" type="button" title="Emoji"><i class="fa-regular fa-face-smile"></i></button>
-          <button id="attachButton" class="attachBtn" type="button" disabled title="Adjuntar"><i class="fa-solid fa-paperclip"></i></button>
-          <button id="locationButton" class="locationBtn" type="button" disabled title="Ubicación"><i class="fa-solid fa-location-dot"></i></button>
+          <button id="emojiButton" type="button" title="Emoji" aria-hidden="true" tabindex="-1"><i class="fa-regular fa-face-smile"></i></button>
+          <button id="attachButton" class="attachBtn" type="button" disabled title="Adjuntar archivo o foto" aria-label="Adjuntar archivo o foto"><i class="fa-solid fa-paperclip"></i></button>
+          <button id="locationButton" class="locationBtn" type="button" disabled title="Ubicación" aria-hidden="true" tabindex="-1"><i class="fa-solid fa-location-dot"></i></button>
           <input id="fileInput" type="file" hidden accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx">
           <span id="mediaName" class="mediaName" style="display:none"></span>
           <input id="messageInput" placeholder="Escribe un mensaje" autocomplete="off" disabled maxlength="5000">
-          <button id="sendButton" class="send" disabled title="Enviar"><i id="sendIconWa" class="fa-solid fa-microphone"></i></button>
+          <button id="sendButton" class="send" disabled title="Enviar mensaje" aria-label="Enviar mensaje"><i id="sendIconWa" class="fa-solid fa-paper-plane"></i></button>
         </div>
       </section>
     </main>
@@ -8078,8 +8100,7 @@ window.addEventListener(
   });
   function syncSendIcon(){
     if(!sendIcon) return;
-    const hasText = !!messageBox?.value.trim();
-    sendIcon.className = hasText ? "fa-solid fa-paper-plane" : "fa-solid fa-microphone";
+    sendIcon.className = "fa-solid fa-paper-plane";
   }
   messageBox?.addEventListener("input", syncSendIcon);
   syncSendIcon();
