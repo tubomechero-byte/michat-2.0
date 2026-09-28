@@ -1405,8 +1405,17 @@ function saveFcmTokens(v) {
 
 function cleanExpiredStories() {
   const now = Date.now();
-  const active = allStories().filter(s => Number(s.expiresAt) > now);
-  saveStories(active);
+  const current = allStories();
+  const active = current.filter(s => Number(s.expiresAt) > now);
+
+  // No reescribimos historias en Supabase si no ha caducado ninguna.
+  // Antes se llamaba saveStories() siempre, incluso cada minuto, lo que
+  // reenviaba todo el JSON de historias (incluidas imágenes base64) a
+  // Supabase y disparaba un gran consumo de Service-Initiated bandwidth.
+  if (active.length !== current.length) {
+    saveStories(active);
+  }
+
   return active;
 }
 
