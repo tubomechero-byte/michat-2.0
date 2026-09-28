@@ -1658,94 +1658,6 @@ html:not(.darkTheme) .modalHeaderRow{background:#fff!important;color:#111b21!imp
 html.darkTheme .modalHeaderRow{background:var(--wa-panel)!important;color:var(--wa-text)!important;border-bottom:1px solid var(--wa-border)!important}
 html:not(.darkTheme) .fileAttachment{background:#f0f2f5!important;color:#111b21!important;border:1px solid var(--wa-border)!important}
 html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!important;border:1px solid var(--wa-border)!important}
-
-/* =====================================================
-   BARRA INFERIOR WEB (la misma navegación que Android)
-   Chats · Estados · Llamadas · Grupos · Configuración
-===================================================== */
-#mobileBottomNav{
-  display:flex!important;
-  position:fixed!important;
-  left:0!important;
-  right:0!important;
-  bottom:0!important;
-  top:auto!important;
-  width:100%!important;
-  height:calc(76px + env(safe-area-inset-bottom))!important;
-  min-height:76px!important;
-  margin:0!important;
-  padding:7px 8px calc(7px + env(safe-area-inset-bottom))!important;
-  flex-direction:row!important;
-  align-items:center!important;
-  justify-content:space-around!important;
-  gap:2px!important;
-  background:var(--wa-panel,#fff)!important;
-  color:var(--wa-text,#111)!important;
-  border-top:1px solid var(--wa-border,#dfe3e5)!important;
-  border-right:0!important;
-  box-shadow:0 -2px 12px rgba(0,0,0,.08)!important;
-  z-index:10000!important;
-}
-#mobileBottomNav button{
-  flex:1 1 0!important;
-  width:auto!important;
-  min-width:0!important;
-  max-width:180px!important;
-  height:62px!important;
-  padding:3px 5px!important;
-  margin:0!important;
-  border:0!important;
-  border-radius:16px!important;
-  background:transparent!important;
-  color:var(--wa-subtext,#667781)!important;
-  display:flex!important;
-  flex-direction:column!important;
-  align-items:center!important;
-  justify-content:center!important;
-  gap:2px!important;
-}
-#mobileBottomNav button .navPill{
-  width:50px!important;
-  min-width:50px!important;
-  height:34px!important;
-  border-radius:17px!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  background:transparent!important;
-}
-#mobileBottomNav button .navIcon{font-size:21px!important;line-height:1!important}
-#mobileBottomNav button .navLabel{display:block!important;font-size:11px!important;font-weight:700!important;line-height:1.1!important;white-space:nowrap!important}
-#mobileBottomNav button.active{color:var(--wa-green-deep,var(--wa-green,#008069))!important}
-#mobileBottomNav button.active .navPill{background:var(--wa-active,#d9fdd3)!important}
-#bottomSettingsButton{margin-top:0!important}
-#layout{
-  width:100%!important;
-  max-width:none!important;
-  margin:0!important;
-  height:calc(100dvh - 76px - env(safe-area-inset-bottom))!important;
-}
-#desktopRail{display:none!important}
-#layout.mobileChat{
-  height:100dvh!important;
-  margin:0!important;
-}
-#layout.mobileChat + #mobileBottomNav{display:none!important}
-@media(max-width:900px){
-  #layout.mobileChat + #mobileBottomNav{display:none!important}
-}
-@media(min-width:901px){
-  #mobileBottomNav button .navLabel{font-size:12px!important}
-  #mobileBottomNav button .navIcon{font-size:22px!important}
-}
-html.darkTheme #mobileBottomNav{
-  background:var(--wa-panel,#111b21)!important;
-  border-top-color:var(--wa-border,#22313a)!important;
-  box-shadow:0 -2px 14px rgba(0,0,0,.35)!important;
-}
-html.darkTheme #mobileBottomNav button{color:var(--wa-subtext,#aebac2)!important}
-html.darkTheme #mobileBottomNav button.active{color:#53bdeb!important}
-html.darkTheme #mobileBottomNav button.active .navPill{background:#0b4f47!important}
 </style>
 
 </head>
@@ -1873,9 +1785,9 @@ html.darkTheme #mobileBottomNav button.active .navPill{background:#0b4f47!import
           <input id="searchInput" placeholder="Buscar un chat o iniciar uno nuevo" autocomplete="off">
         </div>
         <div id="waFilterBar" aria-label="Filtros de chats">
-          <button type="button" class="waFilterBtn active">Todos</button>
-          <button type="button" class="waFilterBtn">No leídos</button>
-          <button type="button" class="waFilterBtn">Grupos</button>
+          <button type="button" class="waFilterBtn active" data-filter="all">Todos</button>
+          <button type="button" class="waFilterBtn" data-filter="unread">No leídos</button>
+          <button type="button" class="waFilterBtn" data-filter="groups">Grupos</button>
         </div>
         <div id="users"></div>
       </section>
@@ -1980,27 +1892,12 @@ html.darkTheme #mobileBottomNav button.active .navPill{background:#0b4f47!import
     </main>
   </div>
 
-  <nav id="mobileBottomNav" class="mobileBottomNav" aria-label="Navegación principal">
-    <button type="button" data-main-tab="chats" aria-label="Chats">
-      <span class="navPill"><span class="navIcon"><i class="fa-solid fa-message"></i></span></span>
-      <span class="navLabel">Chats</span>
-    </button>
-    <button type="button" data-main-tab="news" aria-label="Estados">
-      <span class="navPill"><span class="navIcon"><i class="fa-solid fa-circle-notch"></i></span></span>
-      <span class="navLabel">Estados</span>
-    </button>
-    <button type="button" data-main-tab="calls" aria-label="Llamadas">
-      <span class="navPill"><span class="navIcon"><i class="fa-solid fa-phone"></i></span></span>
-      <span class="navLabel">Llamadas</span>
-    </button>
-    <button type="button" data-main-tab="communities" aria-label="Grupos">
-      <span class="navPill"><span class="navIcon"><i class="fa-solid fa-users"></i></span></span>
-      <span class="navLabel">Grupos</span>
-    </button>
-    <button type="button" id="bottomSettingsButton" aria-label="Configuración">
-      <span class="navPill"><span class="navIcon"><i class="fa-solid fa-gear"></i></span></span>
-      <span class="navLabel">Configuración</span>
-    </button>
+  <nav id="mobileBottomNav" class="mobileBottomNav" aria-hidden="true">
+    <button type="button" data-main-tab="chats"></button>
+    <button type="button" data-main-tab="news"></button>
+    <button type="button" data-main-tab="communities"></button>
+    <button type="button" data-main-tab="calls"></button>
+    <button type="button" data-main-tab="profile"></button>
   </nav>
 </div>
 
@@ -2519,6 +2416,19 @@ const mainTabPages = {
 };
 const mainBottomNav = $("mobileBottomNav");
 let activeMainTab = "chats";
+let activeChatFilter = "all";
+
+function setChatFilter(filter){
+  activeChatFilter = ["all","unread","groups"].includes(filter) ? filter : "all";
+  document.querySelectorAll("#waFilterBar .waFilterBtn").forEach(button => {
+    button.classList.toggle("active", button.dataset.filter === activeChatFilter);
+  });
+  renderUsers();
+}
+
+document.querySelectorAll("#waFilterBar .waFilterBtn").forEach(button => {
+  button.addEventListener("click", () => setChatFilter(button.dataset.filter));
+});
 
 function switchMainTab(tab){
   const next = ["chats","news","communities","calls","profile"].includes(tab) ? tab : "chats";
@@ -2536,7 +2446,6 @@ function switchMainTab(tab){
   document.querySelectorAll("#mobileBottomNav [data-main-tab]").forEach(button => {
     button.classList.toggle("active", button.dataset.mainTab === next);
   });
-  $("bottomSettingsButton")?.classList.remove("active");
   document.querySelectorAll("#desktopRail [data-desktop-tab]").forEach(button => {
     button.classList.toggle("active", button.dataset.desktopTab === next);
   });
@@ -2658,18 +2567,6 @@ const layout = $("layout");
 document.querySelectorAll("#mobileBottomNav [data-main-tab]").forEach(button => {
   button.addEventListener("click", () => openTopLevelTab(button.dataset.mainTab));
 });
-
-const bottomSettingsButton = $("bottomSettingsButton");
-if(bottomSettingsButton){
-  bottomSettingsButton.addEventListener("click", () => {
-    layout.classList.remove("mobileChat");
-    layout.classList.remove("hasActiveChat");
-    bottomSettingsButton.classList.add("active");
-    document.querySelectorAll("#mobileBottomNav [data-main-tab]").forEach(button => button.classList.remove("active"));
-    $("settingsButton")?.click();
-  });
-}
-mainBottomNav?.setAttribute("aria-hidden","false");
 
 document.querySelectorAll("#desktopRail [data-desktop-tab]").forEach(button => {
   button.addEventListener("click", () => openTopLevelTab(button.dataset.desktopTab));
@@ -4071,13 +3968,23 @@ function renderUsers(){
       .toLowerCase();
 
   usersContainer.innerHTML = "";
+  let renderedGroupCount = 0;
 
-  // Sin búsqueda mostramos una única lista combinada de chats: contactos + grupos.
-  if(!query && allGroups.length){
-    allGroups.forEach(group => {
+  // Grupos forman parte del mismo listado de chats y respetan el filtro activo.
+  if(activeChatFilter !== "all" || !query || allGroups.length){
+    const visibleGroups = allGroups.filter(group => {
+      if(!group) return false;
+      const name = String(group.name || "grupo").toLowerCase();
+      if(query && !name.includes(query)) return false;
+      if(activeChatFilter === "unread" && !(Number(groupUnread[group.id] || 0) > 0)) return false;
+      return activeChatFilter === "all" || activeChatFilter === "unread" || activeChatFilter === "groups";
+    });
+
+    visibleGroups.forEach(group => {
+      renderedGroupCount += 1;
       const row = document.createElement("div");
       row.className = "user";
-      const count = groupUnread[group.id] || 0;
+      const count = Number(groupUnread[group.id] || 0);
       const avatar = group.avatar ? `<img src="${esc(group.avatar)}" alt="">` : "👥";
       row.innerHTML = `
         <div class="avatar">${avatar}</div>
@@ -4106,20 +4013,28 @@ function renderUsers(){
     norm(user.username) !== norm(myUsername)
   );
 
-  // Sin búsqueda: solo mostramos los contactos aceptados.
-  // Con búsqueda: mostramos sugerencias de usuarios existentes.
+  // "Grupos" oculta los contactos. "No leídos" muestra solo conversaciones con actividad pendiente.
   let list = [];
   let mode = "contacts";
 
-  if(!query){
-    list = others.filter(user => isContact(user.username));
+  if(activeChatFilter === "groups"){
+    list = [];
+  }else if(!query){
+    list = others.filter(user => {
+      if(!isContact(user.username)) return false;
+      if(activeChatFilter === "unread") return Number(unread[user.username] || 0) > 0;
+      return true;
+    });
   }else{
-    mode = "search";
+    mode = activeChatFilter === "unread" ? "unread" : "search";
     list = others
       .filter(user => {
         const displayName = String(user.displayName || "").toLowerCase();
         const username = String(user.username || "").toLowerCase();
-        return displayName.startsWith(query) || username.startsWith(query);
+        const matches = displayName.startsWith(query) || username.startsWith(query);
+        if(!matches) return false;
+        if(activeChatFilter === "unread") return isContact(user.username) && Number(unread[user.username] || 0) > 0;
+        return true;
       })
       .sort((a,b) => {
         const ac = isContact(a.username) ? 0 : 1;
@@ -4129,17 +4044,24 @@ function renderUsers(){
       })
       .slice(0, 12);
 
-    const heading = document.createElement("div");
-    heading.style.cssText = "padding:10px 14px 6px;color:#777;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:.04em";
-    heading.textContent = "Sugerencias de usuarios";
-    usersContainer.appendChild(heading);
+    if(activeChatFilter !== "unread"){
+      const heading = document.createElement("div");
+      heading.style.cssText = "padding:10px 14px 6px;color:#777;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:.04em";
+      heading.textContent = "Sugerencias de usuarios";
+      usersContainer.appendChild(heading);
+    }
   }
 
   if(!list.length){
-    usersContainer.innerHTML +=
-      `<div style="padding:20px;text-align:center;color:#777">
-        ${mode === "search" ? "No se encontraron usuarios con esa búsqueda." : "No tienes contactos añadidos. Busca un usuario arriba para enviarle una solicitud."}
-      </div>`;
+    if(renderedGroupCount > 0) return;
+    const emptyMessage = activeChatFilter === "groups"
+      ? "Todavía no tienes grupos." 
+      : activeChatFilter === "unread"
+        ? "No tienes chats sin leer."
+        : mode === "search"
+          ? "No se encontraron usuarios con esa búsqueda."
+          : "No tienes contactos añadidos. Busca un usuario arriba para enviarle una solicitud.";
+    usersContainer.innerHTML += `<div style="padding:20px;text-align:center;color:#777">${emptyMessage}</div>`;
     return;
   }
 
@@ -4207,7 +4129,6 @@ function renderUsers(){
     usersContainer.appendChild(row);
   });
 }
-
 searchInput.oninput = renderUsers;
 
 /* =====================================================
