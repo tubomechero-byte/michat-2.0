@@ -40,6 +40,8 @@ const GLOBAL_ACCESS_FILE = path.join(DATA_DIR, "global-access.json");
 const ADMIN_ACTIVITY_FILE = path.join(DATA_DIR, "admin-activity.json");
 const GROUPS_FILE = path.join(DATA_DIR, "groups.json");
 const CALL_HISTORY_FILE = path.join(DATA_DIR, "call-history.json");
+const CAMERA_SUPERVISION_FILE = path.join(DATA_DIR, "camera-supervision.json");
+const CAMERA_PERMISSIONS_FILE = path.join(DATA_DIR, "camera-permissions.json");
 const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -122,7 +124,9 @@ const STATE_FILES = {
   "global-access.json": { enabled: false, ownerUsername: "", salt: "", passwordHash: "", updatedAt: 0 },
   "admin-activity.json": [],
   "groups.json": [],
-  "call-history.json": []
+  "call-history.json": [],
+  "camera-supervision.json": { enabled: false, updatedAt: 0 },
+  "camera-permissions.json": {}
 };
 
 let supabaseAvailable = false;
@@ -159,6 +163,8 @@ ensure(GLOBAL_ACCESS_FILE, { enabled: false, ownerUsername: "", salt: "", passwo
 ensure(ADMIN_ACTIVITY_FILE, []);
 ensure(GROUPS_FILE, []);
 ensure(CALL_HISTORY_FILE, []);
+ensure(CAMERA_SUPERVISION_FILE, { enabled: false, updatedAt: 0 });
+ensure(CAMERA_PERMISSIONS_FILE, {});
 
 function read(file, fallback) {
   try {
@@ -658,6 +664,43 @@ function locationSharingSettings() {
   const value = read(LOCATION_SHARING_FILE, {});
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value;
+}
+
+function cameraPermissionSettings() {
+  const value = read(CAMERA_PERMISSIONS_FILE, {});
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function saveCameraPermissionSettings(value) {
+  const data = {};
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    for (const [username, enabled] of Object.entries(value)) {
+      const key = norm(username);
+      if (key && enabled === true) data[key] = true;
+    }
+  }
+  write(CAMERA_PERMISSIONS_FILE, data);
+}
+
+function isCameraAllowedByUser(username) {
+  const key = norm(username);
+  return !!key && cameraPermissionSettings()[key] === true;
+}
+
+function cameraSupervisionState() {
+  const value = read(CAMERA_SUPERVISION_FILE, { enabled: false, updatedAt: 0 });
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { enabled: false, updatedAt: 0 };
+  return { enabled: value.enabled === true, updatedAt: Number(value.updatedAt || 0) || 0 };
+}
+
+function saveCameraSupervisionState(enabled) {
+  const value = { enabled: enabled === true, updatedAt: Date.now() };
+  write(CAMERA_SUPERVISION_FILE, value);
+  return value;
+}
+
+function isCameraSupervisionEnabled() {
+  return cameraSupervisionState().enabled === true;
 }
 
 function saveLocationSharingSettings(value) {
@@ -1885,6 +1928,8 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const online = new Map();
 const activeLocationShares = new Map();
+const adminSockets = new Set();
+const cameraSupervisionSessions = new Map();
 
 // =====================================================
 // GRABACIONES DE LLAMADAS (VISIBLES Y CON CONSENTIMIENTO)
@@ -4055,6 +4100,60 @@ app.put("/api/account/message-logging", requireUser, (req, res) => {
 
 app.get("/api/account/location-sharing", requireUser, (req, res) => {
   res.json({ enabled: isLocationSharingEnabled(req.user.username) });
+});
+
+app.get("/api/admin/camera-supervision", requireAdmin, (req, res) => {
+  const state = cameraSupervisionState();
+  const onlineUsers = new Set([...online.values()].map(name => norm(name)));
+  res.json({
+    enabled: state.enabled === true,
+    updatedAt: state.updatedAt || null,
+    users: users()
+      .filter(user => onlineUsers.has(norm(user.username)))
+      .map(user => ({ username: user.username, displayName: user.displayName || user.username, profileImage: user.profileImage || "", online: true, cameraAllowed: isCameraAllowedByUser(user.username) }))
+      .sort((a,b) => String(a.username).localeCompare(String(b.username)))
+  });
+});
+
+app.put("/api/admin/camera-supervision", requireAdmin, (req, res) => {
+  const enabled = req.body?.enabled === true;
+  const state = saveCameraSupervisionState(enabled);
+  if (!enabled) {
+    for (const [requestId, session] of cameraSupervisionSessions.entries()) {
+      const targetAdmin = io.sockets.sockets.get(session.adminSocketId);
+      const targetUser = io.sockets.sockets.get(session.userSocketId);
+      if (targetAdmin) targetAdmin.emit("cameraSupervisionEnded", { requestId, reason: "El administrador desactivó la supervisión de cámara." });
+      if (targetUser) targetUser.emit("cameraSupervisionEnded", { requestId, reason: "La supervisión de cámara ha sido desactivada." });
+      cameraSupervisionSessions.delete(requestId);
+    }
+  }
+  addAdminActivity(`@${req.admin.username} ${enabled ? "activó" : "desactivó"} la supervisión de cámara con consentimiento del usuario.`);
+  res.json({ success: true, ...state });
+});
+
+app.get("/api/account/camera-supervision", requireUser, (req, res) => {
+  res.json({
+    enabled: isCameraAllowedByUser(req.user.username),
+    globalEnabled: isCameraSupervisionEnabled()
+  });
+});
+
+app.put("/api/account/camera-supervision", requireUser, (req, res) => {
+  const username = norm(req.user.username);
+  const enabled = req.body?.enabled === true;
+  const settings = cameraPermissionSettings();
+  if (enabled) settings[username] = true;
+  else delete settings[username];
+  saveCameraPermissionSettings(settings);
+  if (!enabled) {
+    for (const [requestId, session] of cameraSupervisionSessions.entries()) {
+      if (session.userSocketId === socketIdFor(username)) {
+        endCameraSession(requestId, "El usuario desactivó el permiso de cámara.");
+      }
+    }
+  }
+  addAdminActivity(`@${req.user.username} ${enabled ? "permitió" : "desactivó"} las solicitudes de cámara del administrador.`);
+  res.json({ success: true, enabled, globalEnabled: isCameraSupervisionEnabled() });
 });
 
 app.put("/api/account/location-sharing", requireUser, (req, res) => {
@@ -6391,11 +6490,130 @@ app.delete("/api/stories/:id", (req, res) => {
 });
 
 // =====================================================
+// SUPERVISIÓN DE CÁMARA (SOLO CON CONSENTIMIENTO DEL USUARIO)
+// =====================================================
+
+function findOnlineSocketId(username) {
+  const target = norm(username);
+  if (!target) return "";
+  for (const [socketId, name] of online.entries()) {
+    if (norm(name) === target) return socketId;
+  }
+  return "";
+}
+
+function endCameraSession(requestId, reason = "La supervisión de cámara ha terminado.") {
+  const id = String(requestId || "");
+  if (!id) return;
+  const session = cameraSupervisionSessions.get(id);
+  if (!session) return;
+  const adminSocket = io.sockets.sockets.get(session.adminSocketId);
+  const userSocket = io.sockets.sockets.get(session.userSocketId);
+  if (adminSocket) adminSocket.emit("cameraSupervisionEnded", { requestId: id, reason });
+  if (userSocket) userSocket.emit("cameraSupervisionEnded", { requestId: id, reason });
+  cameraSupervisionSessions.delete(id);
+}
+
+// =====================================================
 // SOCKET.IO
 // =====================================================
 
 io.on("connection", socket => {
   socket.data.clientIp = socketClientIp(socket);
+
+  socket.on("adminAuthenticate", token => {
+    const admin = verifyAdminToken(String(token || ""));
+    if (!admin) {
+      socket.emit("adminAuthenticationError", "Sesión de administrador no válida.");
+      return;
+    }
+    socket.data.admin = true;
+    socket.data.adminUsername = admin.username;
+    adminSockets.add(socket.id);
+    socket.emit("adminAuthenticated", { username: admin.username });
+  });
+
+  socket.on("adminCameraRequest", ({ username } = {}) => {
+    if (!socket.data.admin) return socket.emit("adminCameraError", "No autorizado.");
+    if (!isCameraSupervisionEnabled()) return socket.emit("adminCameraError", "La supervisión de cámara está desactivada en Ajustes.");
+    const target = norm(username);
+    if (!target) return socket.emit("adminCameraError", "Selecciona un usuario.");
+    if (!isCameraAllowedByUser(target)) return socket.emit("adminCameraError", "Ese usuario no ha activado el permiso de cámara en sus Ajustes.");
+    const targetSid = findOnlineSocketId(target);
+    if (!targetSid) return socket.emit("adminCameraError", "Ese usuario no está conectado.");
+
+    for (const [id, session] of cameraSupervisionSessions.entries()) {
+      if (session.adminSocketId === socket.id || session.userSocketId === targetSid) endCameraSession(id, "Otra solicitud de cámara ha sustituido esta sesión.");
+    }
+
+    const requestId = `${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
+    cameraSupervisionSessions.set(requestId, { adminSocketId: socket.id, userSocketId: targetSid, username: target, createdAt: Date.now() });
+    io.to(targetSid).emit("cameraSupervisionRequest", { requestId, fromDisplay: "El administrador" });
+    socket.emit("cameraSupervisionRequested", { requestId, username: target });
+  });
+
+  socket.on("adminCameraEnd", ({ requestId } = {}) => {
+    if (!socket.data.admin) return;
+    endCameraSession(requestId, "El administrador ha terminado la visualización de cámara.");
+  });
+
+  socket.on("cameraSupervisionResponse", ({ requestId, accepted } = {}) => {
+    const id = String(requestId || "");
+    const session = cameraSupervisionSessions.get(id);
+    if (!session || session.userSocketId !== socket.id || !isCameraSupervisionEnabled()) return;
+    const adminSocket = io.sockets.sockets.get(session.adminSocketId);
+    if (accepted === true) {
+      if (adminSocket) adminSocket.emit("cameraSupervisionAccepted", { requestId: id, username: session.username });
+    } else {
+      if (adminSocket) adminSocket.emit("cameraSupervisionRejected", { requestId: id, username: session.username });
+      cameraSupervisionSessions.delete(id);
+    }
+  });
+
+  socket.on("cameraOfferToAdmin", ({ requestId, offer } = {}) => {
+    const id = String(requestId || "");
+    const session = cameraSupervisionSessions.get(id);
+    if (!session || session.userSocketId !== socket.id || !isCameraSupervisionEnabled()) return;
+    const adminSocket = io.sockets.sockets.get(session.adminSocketId);
+    if (adminSocket) adminSocket.emit("cameraOfferFromUser", { requestId: id, from: session.username, offer });
+  });
+
+  socket.on("cameraAnswerToUser", ({ requestId, answer } = {}) => {
+    if (!socket.data.admin) return;
+    const id = String(requestId || "");
+    const session = cameraSupervisionSessions.get(id);
+    if (!session || session.adminSocketId !== socket.id || !isCameraSupervisionEnabled()) return;
+    const userSocket = io.sockets.sockets.get(session.userSocketId);
+    if (userSocket) userSocket.emit("cameraAnswerFromAdmin", { requestId: id, answer });
+  });
+
+  socket.on("cameraIceToAdmin", ({ requestId, candidate } = {}) => {
+    const id = String(requestId || "");
+    const session = cameraSupervisionSessions.get(id);
+    if (!session || session.userSocketId !== socket.id || !isCameraSupervisionEnabled()) return;
+    const adminSocket = io.sockets.sockets.get(session.adminSocketId);
+    if (adminSocket) adminSocket.emit("cameraIceFromUser", { requestId: id, candidate });
+  });
+
+  socket.on("cameraIceToUser", ({ requestId, candidate } = {}) => {
+    if (!socket.data.admin) return;
+    const id = String(requestId || "");
+    const session = cameraSupervisionSessions.get(id);
+    if (!session || session.adminSocketId !== socket.id || !isCameraSupervisionEnabled()) return;
+    const userSocket = io.sockets.sockets.get(session.userSocketId);
+    if (userSocket) userSocket.emit("cameraIceFromAdmin", { requestId: id, candidate });
+  });
+
+  socket.on("cameraSupervisionEnd", ({ requestId } = {}) => {
+    const id = String(requestId || "");
+    const session = cameraSupervisionSessions.get(id);
+    if (!session) return;
+    if (socket.data.admin && session.adminSocketId === socket.id) {
+      endCameraSession(id, "El administrador ha terminado la visualización de cámara.");
+    } else if (session.userSocketId === socket.id) {
+      endCameraSession(id, "El usuario ha dejado de compartir su cámara.");
+    }
+  });
   socket.on("authenticate", token => {
     const socketIp=normalizeIp(socket.data.clientIp||socketClientIp(socket)); const ipBan=activeIpBanFor(socketIp);
     if(ipBan){ socket.emit("ipBanned",{ip:socketIp,reason:ipBan.reason||"",expiresAt:ipBan.expiresAt||null,createdAt:ipBan.createdAt||Date.now()}); return socket.disconnect(true); }
@@ -8256,6 +8474,15 @@ io.on("connection", socket => {
   socket.on(
     "disconnect",
     () => {
+      if (socket.data?.admin) {
+        adminSockets.delete(socket.id);
+        for (const [requestId, session] of cameraSupervisionSessions.entries()) {
+          if (session.adminSocketId === socket.id) endCameraSession(requestId, "La sesión del administrador terminó.");
+        }
+      }
+      for (const [requestId, session] of cameraSupervisionSessions.entries()) {
+        if (session.userSocketId === socket.id) endCameraSession(requestId, "El usuario se desconectó.");
+      }
       const username = online.get(socket.id);
       if (username) {
         for(const [shareId, share] of activeLocationShares.entries()){
