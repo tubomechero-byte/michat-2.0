@@ -39,6 +39,7 @@ const ACCESS_BLOCKS_FILE = path.join(DATA_DIR, "access-blocks.json");
 const GLOBAL_ACCESS_FILE = path.join(DATA_DIR, "global-access.json");
 const ADMIN_ACTIVITY_FILE = path.join(DATA_DIR, "admin-activity.json");
 const GROUPS_FILE = path.join(DATA_DIR, "groups.json");
+const CALL_HISTORY_FILE = path.join(DATA_DIR, "call-history.json");
 const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -120,7 +121,8 @@ const STATE_FILES = {
   "access-blocks.json": {},
   "global-access.json": { enabled: false, ownerUsername: "", salt: "", passwordHash: "", updatedAt: 0 },
   "admin-activity.json": [],
-  "groups.json": []
+  "groups.json": [],
+  "call-history.json": []
 };
 
 let supabaseAvailable = false;
@@ -156,6 +158,7 @@ ensure(ACCESS_BLOCKS_FILE, {});
 ensure(GLOBAL_ACCESS_FILE, { enabled: false, ownerUsername: "", salt: "", passwordHash: "", updatedAt: 0 });
 ensure(ADMIN_ACTIVITY_FILE, []);
 ensure(GROUPS_FILE, []);
+ensure(CALL_HISTORY_FILE, []);
 
 function read(file, fallback) {
   try {
@@ -1405,17 +1408,8 @@ function saveFcmTokens(v) {
 
 function cleanExpiredStories() {
   const now = Date.now();
-  const current = allStories();
-  const active = current.filter(s => Number(s.expiresAt) > now);
-
-  // No reescribimos historias en Supabase si no ha caducado ninguna.
-  // Antes se llamaba saveStories() siempre, incluso cada minuto, lo que
-  // reenviaba todo el JSON de historias (incluidas imágenes base64) a
-  // Supabase y disparaba un gran consumo de Service-Initiated bandwidth.
-  if (active.length !== current.length) {
-    saveStories(active);
-  }
-
+  const active = allStories().filter(s => Number(s.expiresAt) > now);
+  saveStories(active);
   return active;
 }
 
@@ -1867,6 +1861,30 @@ function loadAdminActivity() {
 
 function groups() { return read(GROUPS_FILE, []); }
 function saveGroups(v) { write(GROUPS_FILE, v); }
+
+function callHistory() { return read(CALL_HISTORY_FILE, []); }
+function saveCallHistory(v) { write(CALL_HISTORY_FILE, v); }
+
+function upsertCallHistory(record) {
+  const list = callHistory();
+  const id = String(record?.id || "").trim();
+  if (!id) return;
+  const index = list.findIndex(item => String(item?.id || "") === id);
+  if (index >= 0) list[index] = { ...list[index], ...record, updatedAt: Date.now() };
+  else list.push({ ...record, createdAt: Date.now(), updatedAt: Date.now() });
+  list.sort((a,b) => Number(a?.startedAt || 0) - Number(b?.startedAt || 0));
+  saveCallHistory(list.slice(-1000));
+}
+
+function updateCallHistory(id, patch) {
+  const key = String(id || "").trim();
+  if (!key) return;
+  const list = callHistory();
+  const index = list.findIndex(item => String(item?.id || "") === key);
+  if (index < 0) return;
+  list[index] = { ...list[index], ...patch, updatedAt: Date.now() };
+  saveCallHistory(list);
+}
 function getGroup(groupId) {
   const id = String(groupId || "").trim();
   return groups().find(group => String(group.id) === id) || null;
@@ -4321,7 +4339,9 @@ async function sendFcmToUser(username, payload) {
       username: String(payload?.username || ""),
       sender: String(payload?.sender || payload?.from || ""),
       body,
-      message: body
+      message: body,
+      mode: String(payload?.mode || "audio"),
+      callId: String(payload?.callId || "")
     },
     android: {
       priority: "high"
@@ -5034,6 +5054,16 @@ app.get("/api/session", (req, res) => {
     profileImage:
       u.profileImage || ""
   });
+});
+
+app.get("/api/call-history", requireUser, (req, res) => {
+  const me = norm(req.user?.username || "");
+  const list = callHistory()
+    .filter(item => norm(item?.caller) === me || norm(item?.callee) === me)
+    .sort((a,b) => Number(b?.startedAt || 0) - Number(a?.startedAt || 0))
+    .slice(0, 200);
+  res.setHeader("Cache-Control", "no-store");
+  res.json(list);
 });
 
 app.post("/api/logout", (req, res) => {
@@ -7418,8 +7448,9 @@ io.on("connection", socket => {
 
   socket.on(
     "callRequest",
-    ({ to, mode = "audio" }) => {
+    ({ to, mode = "audio", callId = "" }) => {
       const callMode = mode === "video" ? "video" : "audio";
+      const activeCallId = String(callId || crypto.randomUUID()).slice(0, 120);
       const caller =
         online.get(socket.id);
 
@@ -7468,6 +7499,20 @@ io.on("connection", socket => {
         );
       }
 
+      upsertCallHistory({
+        id: activeCallId,
+        caller: norm(caller),
+        callerDisplay: getUser(caller)?.displayName || caller,
+        callee: target,
+        calleeDisplay: targetUser.displayName || target,
+        mode: callMode,
+        status: "calling",
+        startedAt: Date.now(),
+        answeredAt: 0,
+        endedAt: 0,
+        durationMs: 0
+      });
+
       const callerName =
         getUser(caller)?.displayName ||
         caller;
@@ -7483,7 +7528,8 @@ io.on("connection", socket => {
           {
             from: norm(caller),
             fromDisplay: callerName,
-            mode: callMode
+            mode: callMode,
+            callId: activeCallId
           }
         );
       }
@@ -7505,7 +7551,8 @@ io.on("connection", socket => {
           username:
             norm(caller),
           message: "Llamada entrante",
-          mode: callMode
+          mode: callMode,
+          callId: activeCallId
         }
       );
 
@@ -7516,7 +7563,8 @@ io.on("connection", socket => {
         {
           to: target,
           online:
-            !!targetSid
+            !!targetSid,
+          callId: activeCallId
         }
       );
     }
@@ -7524,7 +7572,7 @@ io.on("connection", socket => {
 
   socket.on(
     "callAccept",
-    ({ to, mode = "audio" }) => {
+    ({ to, mode = "audio", callId = "" }) => {
       const callMode = mode === "video" ? "video" : "audio";
       const callee =
         online.get(socket.id);
@@ -7550,12 +7598,25 @@ io.on("connection", socket => {
         );
       }
 
+      const activeCallId = String(callId || "").slice(0, 120);
+      if (activeCallId) {
+        const record = callHistory().find(item => String(item?.id || "") === activeCallId);
+        if (record) {
+          updateCallHistory(activeCallId, {
+            status: "answered",
+            answeredAt: Date.now(),
+            mode: callMode
+          });
+        }
+      }
+
       io.to(targetSid).emit(
         "callAccepted",
         {
           from: norm(callee),
           fromDisplay: getUser(callee)?.displayName || callee,
-          mode: callMode
+          mode: callMode,
+          callId: activeCallId
         }
       );
     }
@@ -7563,7 +7624,7 @@ io.on("connection", socket => {
 
   socket.on(
     "callReject",
-    ({ to }) => {
+    ({ to, callId = "" }) => {
       const rejecter =
         online.get(socket.id);
 
@@ -7577,6 +7638,15 @@ io.on("connection", socket => {
         return;
       }
 
+      const activeCallId = String(callId || "").slice(0, 120);
+      if (activeCallId) {
+        updateCallHistory(activeCallId, {
+          status: "rejected",
+          endedAt: Date.now(),
+          durationMs: 0
+        });
+      }
+
       const targetSid =
         socketIdFor(target);
 
@@ -7585,7 +7655,8 @@ io.on("connection", socket => {
           "callRejected",
           {
             from:
-              norm(rejecter)
+              norm(rejecter),
+            callId: activeCallId
           }
         );
       }
@@ -7805,7 +7876,7 @@ io.on("connection", socket => {
 
   socket.on(
     "callEnd",
-    ({ to }) => {
+    ({ to, callId = "" }) => {
       const sender =
         online.get(socket.id);
 
@@ -7819,6 +7890,20 @@ io.on("connection", socket => {
         return;
       }
 
+      const activeCallId = String(callId || "").slice(0, 120);
+      if (activeCallId) {
+        const record = callHistory().find(item => String(item?.id || "") === activeCallId);
+        if (record) {
+          const endedAt = Date.now();
+          const durationMs = record.answeredAt ? Math.max(0, endedAt - Number(record.answeredAt)) : 0;
+          updateCallHistory(activeCallId, {
+            status: record.answeredAt ? "completed" : "cancelled",
+            endedAt,
+            durationMs
+          });
+        }
+      }
+
       const targetSid =
         socketIdFor(target);
 
@@ -7827,7 +7912,8 @@ io.on("connection", socket => {
           "callEnded",
           {
             from:
-              norm(sender)
+              norm(sender),
+            callId: activeCallId
           }
         );
       }
