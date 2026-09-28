@@ -142,7 +142,7 @@ button,input,textarea{font:inherit}
 .chatInfo{flex:1;min-width:0}
 .chatTitle{font-weight:bold}
 .chatSubtitle{margin-top:3px;font-size:13px;color:#777}
-.chatTools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.groupActionsWrap{position:relative;display:none}.groupActionsWrap.visible{display:block}.groupActionsToggle{width:42px;height:42px;border:0;border-radius:10px;background:#f0f2f5;cursor:pointer;font-size:23px;line-height:1;display:flex;align-items:center;justify-content:center}.groupActionsMenu{position:absolute;top:calc(100% + 8px);right:0;display:grid;gap:6px;min-width:170px;padding:8px;background:#fff;border:1px solid #ddd;border-radius:12px;box-shadow:0 14px 32px rgba(0,0,0,.18);z-index:120}.groupActionsMenu .toolBtn{width:100%;text-align:left}.groupActionsMenu.hidden{display:none}.toolBtn{border:0;background:#f0f2f5;border-radius:8px;padding:7px 9px;cursor:pointer}.enterChatBtn{padding:11px 18px!important;min-height:46px;font-size:15px;font-weight:700;border-radius:10px!important}
+.chatTools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.groupActionsWrap{position:relative;display:none}.groupActionsWrap.visible{display:block}.groupActionsToggle{width:42px;height:42px;border:0;border-radius:10px;background:#f0f2f5;cursor:pointer;font-size:23px;line-height:1;display:flex;align-items:center;justify-content:center}.groupActionsMenu{position:absolute;top:calc(100% + 8px);right:0;display:grid;gap:6px;min-width:170px;padding:8px;background:#fff;border:1px solid #ddd;border-radius:12px;box-shadow:0 14px 32px rgba(0,0,0,.18);z-index:120}.groupActionsMenu .toolBtn{width:100%;text-align:left}.groupActionsMenu.hidden{display:none}.chatMoreMenu{top:calc(100% + 8px);right:0;min-width:230px;max-width:min(300px,calc(100vw - 24px));padding:6px;gap:2px;background:var(--wa-header,#fff);border:1px solid var(--wa-border,#ddd);border-radius:10px;box-shadow:0 12px 28px rgba(0,0,0,.28);z-index:140}.chatMoreMenuItem{width:100%!important;min-height:42px;display:flex!important;align-items:center;gap:10px;padding:10px 12px!important;border-radius:7px!important;background:transparent!important;color:var(--wa-text,#111)!important;text-align:left!important;font-size:14px!important;box-shadow:none!important}.chatMoreMenuItem:hover{background:var(--wa-hover,#f0f2f5)!important}.chatMoreMenuItem i{width:18px;text-align:center;flex:0 0 18px}.chatMoreMenuItem span{min-width:0;flex:1}.chatMoreMenu #blockCurrentButton{color:#d55!important}.toolBtn{border:0;background:#f0f2f5;border-radius:8px;padding:7px 9px;cursor:pointer}.enterChatBtn{padding:11px 18px!important;min-height:46px;font-size:15px;font-weight:700;border-radius:10px!important}
 .callBtn{background:#25d366;color:#fff}
 .videoBtn{background:#128c7e;color:#fff}
 .hangBtn{background:#b00020;color:#fff}
@@ -1433,28 +1433,6 @@ body{overflow:hidden}
 @media (max-width:900px){
   #desktopRail{display:none!important}
 }
-
-/* Message composer: only attachment on the left and send on the right. */
-.messageInput #emojiButton,
-.messageInput #locationButton,
-.messageInput #mediaName{
-  display:none !important;
-}
-.messageInput{
-  grid-template-columns:auto minmax(0,1fr) auto;
-}
-.messageInput #attachButton{
-  order:1;
-  flex:0 0 auto;
-}
-.messageInput #messageInput{
-  order:2;
-  flex:1 1 auto;
-}
-.messageInput #sendButton{
-  order:3;
-  flex:0 0 auto;
-}
 </style>
 
 </head>
@@ -1654,17 +1632,16 @@ body{overflow:hidden}
             <button id="callButton" class="toolBtn callBtn hidden" type="button" title="Llamada">📞</button>
             <button id="videoCallButton" class="toolBtn videoBtn hidden" type="button" title="Videollamada">📹</button>
             <button id="hangupButton" class="toolBtn hangBtn hidden" type="button" title="Colgar">📵</button>
-            <button id="chatSearchButton" class="toolBtn" type="button" title="Buscar"><i class="fa-solid fa-magnifying-glass"></i></button>
             <div id="groupActionsWrap" class="groupActionsWrap" aria-hidden="true">
-              <button id="groupActionsToggle" class="groupActionsToggle" type="button" aria-label="Opciones">⋮</button>
-              <div id="groupActionsMenu" class="groupActionsMenu hidden">
-                <button id="groupRenameButton" class="toolBtn groupAddBtn hidden" type="button">✏️ Cambiar nombre</button>
-                <button id="groupAddMembersButton" class="toolBtn groupAddBtn hidden" type="button">👥 Añadir personas</button>
-                <button id="groupDeleteButton" class="toolBtn groupAddBtn hidden" type="button">🗑️ Borrar grupo</button>
+              <button id="chatMoreButton" class="groupActionsToggle" type="button" title="Más opciones" aria-label="Más opciones" aria-expanded="false">⋮</button>
+              <div id="groupActionsMenu" class="groupActionsMenu chatMoreMenu hidden">
+                <button id="chatSearchButton" class="toolBtn chatMoreMenuItem" type="button" title="Buscar"><i class="fa-solid fa-magnifying-glass"></i><span>Buscar en el chat</span></button>
+                <button id="groupRenameButton" class="toolBtn groupAddBtn chatMoreMenuItem hidden" type="button">✏️ <span>Cambiar nombre</span></button>
+                <button id="groupAddMembersButton" class="toolBtn groupAddBtn chatMoreMenuItem hidden" type="button">👥 <span>Añadir personas</span></button>
+                <button id="groupDeleteButton" class="toolBtn groupAddBtn chatMoreMenuItem hidden" type="button">🗑️ <span>Borrar grupo</span></button>
+                <button id="blockCurrentButton" class="toolBtn chatMoreMenuItem hidden" type="button">🚫 <span>Bloquear</span></button>
               </div>
             </div>
-            <button id="blockCurrentButton" class="toolBtn hidden" type="button">🚫</button>
-            <button id="chatMoreButton" class="toolBtn" type="button" title="Más opciones" aria-label="Más opciones"></button>
           </div>
         </header>
 
@@ -1677,13 +1654,13 @@ body{overflow:hidden}
         </div>
 
         <div class="messageInput">
-          <button id="emojiButton" type="button" title="Emoji" aria-hidden="true" tabindex="-1"><i class="fa-regular fa-face-smile"></i></button>
-          <button id="attachButton" class="attachBtn" type="button" disabled title="Adjuntar archivo o foto" aria-label="Adjuntar archivo o foto"><i class="fa-solid fa-paperclip"></i></button>
-          <button id="locationButton" class="locationBtn" type="button" disabled title="Ubicación" aria-hidden="true" tabindex="-1"><i class="fa-solid fa-location-dot"></i></button>
+          <button id="emojiButton" type="button" title="Emoji"><i class="fa-regular fa-face-smile"></i></button>
+          <button id="attachButton" class="attachBtn" type="button" disabled title="Adjuntar"><i class="fa-solid fa-paperclip"></i></button>
+          <button id="locationButton" class="locationBtn" type="button" disabled title="Ubicación"><i class="fa-solid fa-location-dot"></i></button>
           <input id="fileInput" type="file" hidden accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx">
           <span id="mediaName" class="mediaName" style="display:none"></span>
           <input id="messageInput" placeholder="Escribe un mensaje" autocomplete="off" disabled maxlength="5000">
-          <button id="sendButton" class="send" disabled title="Enviar mensaje" aria-label="Enviar mensaje"><i id="sendIconWa" class="fa-solid fa-paper-plane"></i></button>
+          <button id="sendButton" class="send" disabled title="Enviar"><i id="sendIconWa" class="fa-solid fa-microphone"></i></button>
         </div>
       </section>
     </main>
@@ -3689,7 +3666,7 @@ function refreshGroupAddButton(){
     groupDeleteButton.classList.toggle('visible',isAdmin);
     groupDeleteButton.classList.toggle('hidden',!isAdmin);
   }
-  const showMenu = !!(isAdmin && groupActionsWrap);
+  const showMenu = !!(selectedUser || selectedGroupId) && !!groupActionsWrap;
   if(groupActionsWrap){
     groupActionsWrap.classList.toggle('visible',showMenu);
     groupActionsWrap.setAttribute('aria-hidden',String(!showMenu));
@@ -3898,13 +3875,7 @@ if(groupAvatarInput){
   };
 }
 
-if(groupActionsToggle){
-  groupActionsToggle.onclick=(event)=>{
-    event.stopPropagation();
-    if(groupActionsMenu) groupActionsMenu.classList.toggle('hidden');
-    groupActionsToggle.setAttribute('aria-expanded', String(groupActionsMenu ? !groupActionsMenu.classList.contains('hidden') : false));
-  };
-}
+/* El botón de tres puntos y su menú se gestionan en setupReferenceStyleControls. */
 document.addEventListener('click',(event)=>{
   if(groupActionsWrap && !groupActionsWrap.contains(event.target)) closeGroupActionsMenu();
 });
@@ -4122,6 +4093,7 @@ function openChat(
         );
 
   refreshBlockButton();
+  refreshGroupAddButton();
 
   callButton.classList.remove("hidden");
   videoCallButton.classList.remove("hidden");
@@ -8050,6 +8022,7 @@ window.addEventListener(
   const quickToggle = $("quickActionsToggle");
   const privateMenu = $("privateChatMenu");
   const chatMore = $("chatMoreButton");
+  const chatMoreMenu = $("groupActionsMenu");
   const privateBlock = $("privateChatBlockAction");
   const emojiButton = $("emojiButton");
   const messageBox = $("messageInput");
@@ -8078,6 +8051,9 @@ window.addEventListener(
     if(menu && !menu.contains(event.target) && event.target !== menuButton){
       closeHeaderMenu();
     }
+    if(chatMoreMenu && !chatMoreMenu.contains(event.target) && event.target !== chatMore){
+      closeGroupActionsMenu();
+    }
     if(privateMenu && !privateMenu.contains(event.target) && event.target !== chatMore){
       privateMenu.classList.add("hidden");
     }
@@ -8085,11 +8061,21 @@ window.addEventListener(
 
   chatMore?.addEventListener("click", (event) => {
     event.stopPropagation();
-    privateMenu?.classList.toggle("hidden");
+    const open = !!chatMoreMenu && chatMoreMenu.classList.contains("hidden");
+    if(chatMoreMenu){
+      chatMoreMenu.classList.toggle("hidden", !open);
+      chatMore.setAttribute("aria-expanded", String(open));
+    }
+    if(privateMenu) privateMenu.classList.add("hidden");
   });
   privateBlock?.addEventListener("click", () => {
     privateMenu?.classList.add("hidden");
     $("blockCurrentButton")?.click();
+  });
+  $("chatSearchButton")?.addEventListener("click", () => {
+    closeGroupActionsMenu();
+    const input = $("searchInput");
+    if(input){ input.focus(); input.select?.(); }
   });
 
   emojiButton?.addEventListener("click", () => {
@@ -8100,7 +8086,8 @@ window.addEventListener(
   });
   function syncSendIcon(){
     if(!sendIcon) return;
-    sendIcon.className = "fa-solid fa-paper-plane";
+    const hasText = !!messageBox?.value.trim();
+    sendIcon.className = hasText ? "fa-solid fa-paper-plane" : "fa-solid fa-microphone";
   }
   messageBox?.addEventListener("input", syncSendIcon);
   syncSendIcon();
