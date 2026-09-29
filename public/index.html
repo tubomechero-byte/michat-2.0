@@ -140,7 +140,7 @@ button,input,textarea{font:inherit}
 .chat{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .chatHeader{height:70px;padding:12px 18px;border-bottom:1px solid #ddd;display:flex;align-items:center;gap:12px}
 .chatInfo{flex:1;min-width:0}
-.verifiedBadge{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;margin-left:5px;border-radius:50%;background:#1d9bf0;color:#fff;font-size:11px;font-weight:800;line-height:1;vertical-align:middle;flex:0 0 auto}.verifiedBadge[title]{cursor:default} .chatTitle{font-weight:bold}
+.chatTitle{font-weight:bold}
 .chatSubtitle{margin-top:3px;font-size:13px;color:#777}
 .chatTools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.groupActionsWrap{position:relative;display:none}.groupActionsWrap.visible{display:block}.groupActionsToggle{width:42px;height:42px;border:0;border-radius:10px;background:#f0f2f5;cursor:pointer;font-size:23px;line-height:1;display:flex;align-items:center;justify-content:center}.groupActionsMenu{position:absolute;top:calc(100% + 8px);right:0;display:grid;gap:6px;min-width:170px;padding:8px;background:#fff;border:1px solid #ddd;border-radius:12px;box-shadow:0 14px 32px rgba(0,0,0,.18);z-index:120}.groupActionsMenu .toolBtn{width:100%;text-align:left}.groupActionsMenu.hidden{display:none}.toolBtn{border:0;background:#f0f2f5;border-radius:8px;padding:7px 9px;cursor:pointer}.enterChatBtn{padding:11px 18px!important;min-height:46px;font-size:15px;font-weight:700;border-radius:10px!important}
 .callBtn{background:#25d366;color:#fff}
@@ -4178,7 +4178,7 @@ function renderUsers(){
     row.innerHTML = `
       <div class="avatar">${avatarHtml(user)}</div>
       <div class="userInfo">
-        <div class="userName">${esc(user.displayName || user.username)}${user.verified ? '<span class="verifiedBadge" title="Usuario verificado" aria-label="Usuario verificado">✓</span>' : ''}</div>
+        <div class="userName">${esc(user.displayName || user.username)}</div>
         <div class="userSub">@${esc(user.username)}</div>
         <div class="statusRow">
           ${contact
@@ -4440,10 +4440,7 @@ function openChat(
     attachButton.disabled = true;
     locationButton.disabled = true;
     messagesContainer.innerHTML = `<div class="empty">Para poder hablar con ${esc(displayName || username)}, primero debes enviar una solicitud y esperar a que la acepte.</div>`;
-    const pendingUserData = allUsers.find(
-      user => norm(user.username) === norm(username)
-    );
-    chatTitle.innerHTML = `${esc(displayName || username)}${pendingUserData?.verified ? '<span class="verifiedBadge" title="Usuario verificado" aria-label="Usuario verificado">✓</span>' : ''}`;
+    chatTitle.textContent = displayName || username;
     chatSubtitle.textContent = "🔒 Solicitud de contacto necesaria";
     layout.classList.add("mobileChat");
     layout.classList.remove("hasActiveChat");
@@ -4457,11 +4454,8 @@ function openChat(
 
   renderUsers();
 
-  const selectedUserData = allUsers.find(
-    user => norm(user.username) === norm(username)
-  );
-  chatTitle.innerHTML =
-    `${esc(displayName || username)}${selectedUserData?.verified ? '<span class="verifiedBadge" title="Usuario verificado" aria-label="Usuario verificado">✓</span>' : ''}`;
+  chatTitle.textContent =
+    displayName || username;
 
   chatSubtitle.textContent =
     online
