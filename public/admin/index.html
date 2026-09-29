@@ -877,7 +877,7 @@ function ensureAdminCameraSocket(){
   });
   adminCameraSocket.on('cameraSupervisionRequested',data=>{
     adminCameraRequestId=String(data?.requestId||'');
-    setCameraAdminStatus('📨 Acceso de cámara iniciado. El usuario verá el aviso y el navegador puede solicitar permiso de cámara.','msg');
+    setCameraAdminStatus('📨 Solicitud enviada. Esperando la cámara del usuario…','msg');
     $('stopCameraSupervision').disabled=false;
   });
   adminCameraSocket.on('cameraSupervisionAccepted',data=>{
