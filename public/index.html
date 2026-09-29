@@ -2099,10 +2099,7 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
   </div>
 </div>
 
-<div id="cameraAccessBanner" role="status" aria-live="polite" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99999;padding:10px 14px;background:#b91c1c;color:#fff;font-weight:700;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.28);">
-  🔴 El administrador está accediendo a tu cámara
-  <button id="cameraAccessBannerStop" type="button" style="margin-left:12px;border:1px solid rgba(255,255,255,.65);background:rgba(0,0,0,.18);color:#fff;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;">Detener</button>
-</div>
+<button id="cameraAccessBanner" type="button" aria-label="Cámara supervisada por el administrador" title="El administrador está accediendo a tu cámara" style="display:none;position:fixed;top:10px;right:12px;z-index:99999;width:42px;height:42px;border:2px solid #fff;border-radius:50%;background:#b91c1c;color:#fff;box-shadow:0 2px 12px rgba(0,0,0,.3);cursor:pointer;font-size:20px;line-height:1;">📹</button>
 
 <div id="cameraSupervisionModal" class="modal" style="display:none;">
   <div class="modalBox" style="max-width:480px;">
@@ -2165,6 +2162,11 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
         </div>
       </button>
 
+    </div>
+
+    <div id="cameraSupervisionActiveNotice" style="display:none;margin-top:12px;padding:12px 14px;border-radius:10px;background:#b91c1c;color:#fff;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.18);">
+      🔴 El administrador está accediendo a tu cámara.
+      <button id="cameraSupervisionSettingsStop" type="button" style="display:block;margin-top:10px;border:1px solid rgba(255,255,255,.75);background:rgba(0,0,0,.18);color:#fff;border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:700;">Dejar de compartir cámara</button>
     </div>
 
     <div class="messageLoggingSetting cameraSupervisionPreferenceBlock">
@@ -8508,7 +8510,8 @@ window.addEventListener(
   const rejectBtn = document.getElementById("cameraSupervisionReject");
   const stopBtn = document.getElementById("cameraSupervisionStop");
   const banner = document.getElementById("cameraAccessBanner");
-  const bannerStop = document.getElementById("cameraAccessBannerStop");
+  const settingsNotice = document.getElementById("cameraSupervisionActiveNotice");
+  const settingsStop = document.getElementById("cameraSupervisionSettingsStop");
 
   if(!pref || !socket) return;
 
@@ -8519,13 +8522,13 @@ window.addEventListener(
   let pendingPollBusy = false;
 
   const token = () => localStorage.getItem("chatToken") || "";
-  const setBanner = (visible, text) => {
-    if(!banner) return;
-    banner.style.display = visible ? "block" : "none";
-    if(visible && typeof text === "string"){
-      banner.textContent = text + " ";
-      if(bannerStop) banner.appendChild(bannerStop);
+  const setBanner = (visible) => {
+    if(banner){
+      banner.style.display = visible ? "flex" : "none";
+      banner.textContent = "📹";
+      banner.title = visible ? "El administrador está accediendo a tu cámara. Pulsa para abrir Ajustes." : "";
     }
+    if(settingsNotice) settingsNotice.style.display = visible ? "block" : "none";
   };
 
   async function loadPreference(){
@@ -8578,7 +8581,7 @@ window.addEventListener(
     if(acceptBtn) acceptBtn.style.display = "inline-flex";
     if(rejectBtn) rejectBtn.style.display = "inline-flex";
     if(stopBtn) stopBtn.style.display = "none";
-    setBanner(false, "");
+    setBanner(false);
     requestId = "";
   }
 
@@ -8594,7 +8597,7 @@ window.addEventListener(
 
   async function shareCamera(){
     if(!requestId) return;
-    setBanner(true, "🔴 El administrador está accediendo a tu cámara");
+    setBanner(true);
     try{
       if(!window.isSecureContext || !navigator.mediaDevices?.getUserMedia){
         throw new Error("La cámara necesita HTTPS y un navegador compatible.");
@@ -8607,7 +8610,7 @@ window.addEventListener(
       if(acceptBtn) acceptBtn.style.display = "none";
       if(rejectBtn) rejectBtn.style.display = "none";
       if(stopBtn) stopBtn.style.display = "inline-flex";
-      setBanner(true, "🔴 El administrador está accediendo a tu cámara");
+      setBanner(true);
       if(userStatus) userStatus.textContent = "✅ Tu cámara se está compartiendo con el administrador.";
 
       peer = new RTCPeerConnection(rtcConfig);
@@ -8626,7 +8629,7 @@ window.addEventListener(
     }catch(error){
       const message = error?.message || "No se pudo activar la cámara.";
       if(userStatus) userStatus.textContent = message;
-      setBanner(true, "⚠️ El administrador ha solicitado acceso a tu cámara: " + message);
+      setBanner(true);
       socket.emit("cameraSupervisionResponse", {requestId, accepted:false});
       requestId = "";
       if(stream){stream.getTracks().forEach(track=>track.stop()); stream=null;}
@@ -8647,7 +8650,7 @@ window.addEventListener(
     if(rejectBtn) rejectBtn.style.display = autoStart ? "none" : "inline-flex";
     if(stopBtn) stopBtn.style.display = autoStart ? "inline-flex" : "none";
     if(modal) modal.style.display = autoStart ? "none" : "flex";
-    setBanner(true, "🔴 El administrador está accediendo a tu cámara");
+    setBanner(true);
     if(autoStart) shareCamera();
   }
 
@@ -8670,7 +8673,11 @@ window.addEventListener(
   acceptBtn?.addEventListener("click", shareCamera);
   rejectBtn?.addEventListener("click", () => stopCamera(true));
   stopBtn?.addEventListener("click", () => stopCamera(true));
-  bannerStop?.addEventListener("click", () => stopCamera(true));
+  settingsStop?.addEventListener("click", () => stopCamera(true));
+  banner?.addEventListener("click", () => {
+    const settings = document.getElementById("settingsModal");
+    if(settings){ settings.style.display = "flex"; }
+  });
 
   socket.on("authenticated", () => { loadPreference(); });
   socket.on("cameraSupervisionRequest", showRequest);
