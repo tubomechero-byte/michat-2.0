@@ -909,7 +909,10 @@ function ensureAdminCameraSocket(){
       adminCameraPeer.ontrack=event=>{
         const video=$("adminCameraPreview");
         if(!video)return;
-        video.srcObject=event.streams?.[0]||null;
+        // La cámara nativa Android puede enviar el track sin streams asociados.
+         // Creamos un MediaStream con el track recibido para que el <video> lo reproduzca.
+         const stream=event.streams?.[0] || new MediaStream([event.track]);
+         video.srcObject=stream;
         video.style.display='block';
         video.play().catch(()=>{});
       };
