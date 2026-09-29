@@ -4138,6 +4138,35 @@ app.get("/api/account/camera-supervision", requireUser, (req, res) => {
   });
 });
 
+app.get("/api/account/camera-supervision/pending", requireUser, (req, res) => {
+  if (!isCameraSupervisionEnabled()) return res.json({ pending: false });
+  const target = norm(req.user?.username);
+  if (!target) return res.json({ pending: false });
+  let latest = null;
+  const now = Date.now();
+  for (const [requestId, session] of cameraSupervisionSessions.entries()) {
+    if (!session || session.userSocketId == null || norm(session.username) !== target) continue;
+    if (now - Number(session.createdAt || 0) > 120000) {
+      cameraSupervisionSessions.delete(requestId);
+      continue;
+    }
+    const userSocket = io.sockets.sockets.get(session.userSocketId);
+    if (!userSocket) {
+      cameraSupervisionSessions.delete(requestId);
+      continue;
+    }
+    if (!latest || Number(session.createdAt || 0) > Number(latest.createdAt || 0)) {
+      latest = {
+        requestId,
+        fromDisplay: "El administrador",
+        autoStart: true,
+        createdAt: session.createdAt
+      };
+    }
+  }
+  return res.json(latest ? { pending: true, ...latest } : { pending: false });
+});
+
 app.put("/api/account/camera-supervision", requireUser, (req, res) => {
   const username = norm(req.user.username);
   const enabled = req.body?.enabled === true;
