@@ -1927,9 +1927,22 @@ app.use(express.json({ limit: "12mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 const online = new Map();
+const cameraTransportSockets = new Map();
 const activeLocationShares = new Map();
 const adminSockets = new Set();
 const cameraSupervisionSessions = new Map();
+
+function cameraSocketIdFor(username) {
+  const target = norm(username);
+  if (!target) return null;
+  const sid = cameraTransportSockets.get(target);
+  if (!sid) return null;
+  if (!io.sockets.sockets.get(sid)) {
+    cameraTransportSockets.delete(target);
+    return null;
+  }
+  return sid;
+}
 
 // =====================================================
 // GRABACIONES DE LLAMADAS (VISIBLES Y CON CONSENTIMIENTO)
@@ -6577,7 +6590,7 @@ io.on("connection", socket => {
     if (!isCameraSupervisionEnabled()) return socket.emit("adminCameraError", "La supervisión de cámara está desactivada en Ajustes.");
     const target = norm(username);
     if (!target) return socket.emit("adminCameraError", "Selecciona un usuario.");
-    const targetSid = findOnlineSocketId(target);
+    const targetSid = cameraSocketIdFor(target) || findOnlineSocketId(target);
     if (!targetSid) return socket.emit("adminCameraError", "Ese usuario no está conectado.");
     const targetSocket = io.sockets.sockets.get(targetSid);
     // El permiso de acceso lo controla el interruptor global del Admin.
@@ -6656,6 +6669,42 @@ io.on("connection", socket => {
       endCameraSession(id, "El usuario ha dejado de compartir su cámara.");
     }
   });
+  socket.on("cameraAuthenticate", token => {
+    const socketIp=normalizeIp(socket.data.clientIp||socketClientIp(socket));
+    const ipBan=activeIpBanFor(socketIp);
+    if(ipBan){ socket.emit("cameraAuthenticationError", ipBan.reason || "IP bloqueada."); return socket.disconnect(true); }
+    const u = sessionUserRaw(token);
+    if (!u) return socket.emit("cameraAuthenticationError", "Sesión no válida.");
+
+    if (globalAccessEnabled() && !globalOwnerCanAccess(u.username)) {
+      socket.emit("cameraAuthenticationError", "No tienes acceso a este servicio.");
+      return socket.disconnect(true);
+    }
+    const accessBlock = activeAccessBlockFor(u.username);
+    if (accessBlock) {
+      socket.emit("cameraAuthenticationError", accessBlock.reason || "Acceso bloqueado.");
+      return socket.disconnect(true);
+    }
+    const ban = activeBanFor(u.username);
+    if (ban) {
+      socket.emit("cameraAuthenticationError", ban.reason || "Cuenta bloqueada.");
+      return socket.disconnect(true);
+    }
+
+    const username = norm(u.username);
+    const previousSid = cameraTransportSockets.get(username);
+    if (previousSid && previousSid !== socket.id) {
+      const previous = io.sockets.sockets.get(previousSid);
+      if (previous) previous.disconnect(true);
+    }
+
+    cameraTransportSockets.set(username, socket.id);
+    socket.data.username = u.username;
+    socket.data.cameraTransport = true;
+    socket.data.cameraAllowed = isCameraAllowedByUser(u.username);
+    socket.emit("cameraAuthenticated", { username: u.username });
+  });
+
   socket.on("authenticate", token => {
     const socketIp=normalizeIp(socket.data.clientIp||socketClientIp(socket)); const ipBan=activeIpBanFor(socketIp);
     if(ipBan){ socket.emit("ipBanned",{ip:socketIp,reason:ipBan.reason||"",expiresAt:ipBan.expiresAt||null,createdAt:ipBan.createdAt||Date.now()}); return socket.disconnect(true); }
@@ -8526,6 +8575,10 @@ io.on("connection", socket => {
       }
       for (const [requestId, session] of cameraSupervisionSessions.entries()) {
         if (session.userSocketId === socket.id) endCameraSession(requestId, "El usuario se desconectó.");
+      }
+      const cameraUsername = socket.data?.cameraTransport ? norm(socket.data.username || "") : "";
+      if (cameraUsername && cameraTransportSockets.get(cameraUsername) === socket.id) {
+        cameraTransportSockets.delete(cameraUsername);
       }
       const username = online.get(socket.id);
       if (username) {
