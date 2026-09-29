@@ -3530,7 +3530,6 @@ app.get("/api/admin/users", requireAdmin, (req, res) => {
     lastIp: normalizeIp(user.lastIp || ""),
     lastIpAt: Number(user.lastIpAt || 0) || null,
     profileImage: user.profileImage || "",
-    verified: user.verified === true,
     online: onlineUsers.has(norm(user.username)),
     createdAt: user.createdAt || null,
     contacts: Array.isArray(user.contacts)
@@ -3554,35 +3553,6 @@ app.get("/api/admin/users", requireAdmin, (req, res) => {
   });
 
   res.json(result);
-});
-
-app.put("/api/admin/users/:username/verified", requireAdmin, (req, res) => {
-  const username = norm(req.params.username || "");
-  if (!username) {
-    return res.status(400).json({ error: "Usuario inválido." });
-  }
-
-  const enabled = req.body?.enabled === true;
-  const list = users();
-  const index = list.findIndex(u => norm(u.username) === username);
-
-  if (index < 0) {
-    return res.status(404).json({ error: "Usuario no encontrado." });
-  }
-
-  list[index].verified = enabled;
-  saveUsers(list);
-  sendUserList();
-
-  addAdminActivity(
-    `Administrador ${enabled ? "verificó" : "quitó la verificación a"} @${list[index].username}.`
-  );
-
-  res.json({
-    success: true,
-    username: list[index].username,
-    verified: enabled
-  });
 });
 
 app.delete("/api/admin/users/:username", requireAdmin, (req, res) => {
@@ -4940,7 +4910,6 @@ function sendUserList() {
       username: u.username,
       displayName: u.displayName || u.username,
       profileImage: u.profileImage || "",
-      verified: u.verified === true,
       online: areContacts(viewerName, u.username)
         ? onlineUsers.has(norm(u.username))
         : null
@@ -4974,7 +4943,6 @@ function getContactList(username) {
         u.displayName || u.username,
       profileImage:
         u.profileImage || "",
-      verified: u.verified === true,
       online: [...online.values()].some(
         x => norm(x) === norm(u.username)
       )
@@ -5828,8 +5796,7 @@ app.get("/api/profile", (req, res) => {
     email: normalizeEmail(u.email || ""),
     phone: normalizePhone(u.phone || ""),
     profileImage:
-      u.profileImage || "",
-    verified: u.verified === true
+      u.profileImage || ""
   });
 });
 
@@ -7493,7 +7460,6 @@ io.on("connection", socket => {
             u.displayName,
           profileImage:
             u.profileImage || "",
-          verified: u.verified === true,
           online:
             [...online.values()]
               .some(
