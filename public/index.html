@@ -8490,6 +8490,218 @@ window.addEventListener(
   }catch{}
   checkSession();
 })();
+
+
+/* =====================================================
+   SUPERVISIÓN DE CÁMARA — CLIENTE REAL DE MI CHAT
+   Este bloque vive en public/index.html porque esta es
+   la página que Render sirve al navegador/WebView.
+===================================================== */
+(function setupCameraSupervisionForMainClient(){
+  const pref = document.getElementById("cameraSupervisionUserPreference");
+  const prefStatus = document.getElementById("cameraSupervisionUserPreferenceStatus");
+  const modal = document.getElementById("cameraSupervisionModal");
+  const modalText = document.getElementById("cameraSupervisionModalText");
+  const userStatus = document.getElementById("cameraSupervisionUserStatus");
+  const preview = document.getElementById("cameraSupervisionPreview");
+  const acceptBtn = document.getElementById("cameraSupervisionAccept");
+  const rejectBtn = document.getElementById("cameraSupervisionReject");
+  const stopBtn = document.getElementById("cameraSupervisionStop");
+  const banner = document.getElementById("cameraAccessBanner");
+  const bannerStop = document.getElementById("cameraAccessBannerStop");
+
+  if(!pref || !socket) return;
+
+  let requestId = "";
+  let peer = null;
+  let stream = null;
+  let iceQueue = [];
+  let pendingPollBusy = false;
+
+  const token = () => localStorage.getItem("chatToken") || "";
+  const setBanner = (visible, text) => {
+    if(!banner) return;
+    banner.style.display = visible ? "block" : "none";
+    if(visible && typeof text === "string"){
+      banner.textContent = text + " ";
+      if(bannerStop) banner.appendChild(bannerStop);
+    }
+  };
+
+  async function loadPreference(){
+    try{
+      const response = await fetch("/api/account/camera-supervision", {
+        headers:{Authorization:"Bearer " + token()}
+      });
+      if(!response.ok) return;
+      const data = await response.json();
+      pref.checked = data.enabled === true;
+      if(prefStatus) prefStatus.textContent = data.enabled ? "✅ Permitido." : "❌ No permitido.";
+    }catch{}
+  }
+
+  async function savePreference(){
+    const enabled = !!pref.checked;
+    pref.disabled = true;
+    try{
+      const response = await fetch("/api/account/camera-supervision", {
+        method:"PUT",
+        headers:{
+          "Content-Type":"application/json",
+          "Authorization":"Bearer " + token()
+        },
+        body:JSON.stringify({enabled})
+      });
+      const data = await response.json().catch(()=>({}));
+      if(!response.ok) throw new Error(data.error || "No se pudo guardar el permiso de cámara.");
+      if(prefStatus) prefStatus.textContent = enabled ? "✅ Permitido." : "❌ No permitido.";
+      if(!enabled && requestId) stopCamera(true);
+    }catch(error){
+      pref.checked = !enabled;
+      if(prefStatus) prefStatus.textContent = error.message || "No se pudo guardar el permiso de cámara.";
+    }finally{
+      pref.disabled = false;
+    }
+  }
+
+  async function stopCamera(sendEnd){
+    if(sendEnd && requestId){
+      socket.emit("cameraSupervisionEnd", {requestId});
+    }
+    if(peer){try{peer.close();}catch{}}
+    peer = null;
+    iceQueue = [];
+    if(stream){stream.getTracks().forEach(track=>track.stop());}
+    stream = null;
+    if(preview){preview.srcObject = null; preview.style.display = "none";}
+    if(modal) modal.style.display = "none";
+    if(acceptBtn) acceptBtn.style.display = "inline-flex";
+    if(rejectBtn) rejectBtn.style.display = "inline-flex";
+    if(stopBtn) stopBtn.style.display = "none";
+    setBanner(false, "");
+    requestId = "";
+  }
+
+  async function ensureUserSocketReady(){
+    if(!socket.connected){ try{ socket.connect(); }catch{} }
+    const started = Date.now();
+    while(Date.now()-started < 5000){
+      if(socket.connected && myUsername) return true;
+      await new Promise(r=>setTimeout(r,100));
+    }
+    return !!(socket.connected && myUsername);
+  }
+
+  async function shareCamera(){
+    if(!requestId) return;
+    setBanner(true, "🔴 El administrador está accediendo a tu cámara");
+    try{
+      if(!window.isSecureContext || !navigator.mediaDevices?.getUserMedia){
+        throw new Error("La cámara necesita HTTPS y un navegador compatible.");
+      }
+      if(userStatus) userStatus.textContent = "Solicitando permiso de cámara…";
+      const socketReady = await ensureUserSocketReady();
+      if(!socketReady) throw new Error("La conexión con Mi Chat no está autenticada. Vuelve a abrir la app y prueba de nuevo.");
+      stream = await navigator.mediaDevices.getUserMedia({video:true, audio:false});
+      if(preview){preview.srcObject = stream; preview.style.display = "block";}
+      if(acceptBtn) acceptBtn.style.display = "none";
+      if(rejectBtn) rejectBtn.style.display = "none";
+      if(stopBtn) stopBtn.style.display = "inline-flex";
+      setBanner(true, "🔴 El administrador está accediendo a tu cámara");
+      if(userStatus) userStatus.textContent = "✅ Tu cámara se está compartiendo con el administrador.";
+
+      peer = new RTCPeerConnection(rtcConfig);
+      stream.getTracks().forEach(track => peer.addTrack(track, stream));
+      peer.onicecandidate = event => {
+        if(event.candidate) socket.emit("cameraIceToAdmin", {requestId, candidate:event.candidate});
+      };
+      peer.onconnectionstatechange = () => {
+        if(["failed","disconnected","closed"].includes(peer?.connectionState)) stopCamera(false);
+      };
+
+      socket.emit("cameraSupervisionResponse", {requestId, accepted:true});
+      const offer = await peer.createOffer({offerToReceiveAudio:false, offerToReceiveVideo:false});
+      await peer.setLocalDescription(offer);
+      socket.emit("cameraOfferToAdmin", {requestId, offer:peer.localDescription});
+    }catch(error){
+      const message = error?.message || "No se pudo activar la cámara.";
+      if(userStatus) userStatus.textContent = message;
+      setBanner(true, "⚠️ El administrador ha solicitado acceso a tu cámara: " + message);
+      socket.emit("cameraSupervisionResponse", {requestId, accepted:false});
+      requestId = "";
+      if(stream){stream.getTracks().forEach(track=>track.stop()); stream=null;}
+      if(peer){try{peer.close();}catch{} peer=null;}
+    }
+  }
+
+  function showRequest(data){
+    const incomingId = String(data?.requestId || "");
+    if(!incomingId) return;
+    if(requestId === incomingId && (peer || stream || banner?.style.display === "block")) return;
+    requestId = incomingId;
+    const autoStart = data?.autoStart === true;
+    if(modalText) modalText.textContent = "El administrador quiere ver tu cámara.";
+    if(userStatus) userStatus.textContent = autoStart ? "Preparando acceso de cámara…" : "Elige si quieres compartir tu cámara.";
+    if(preview) preview.style.display = "none";
+    if(acceptBtn) acceptBtn.style.display = autoStart ? "none" : "inline-flex";
+    if(rejectBtn) rejectBtn.style.display = autoStart ? "none" : "inline-flex";
+    if(stopBtn) stopBtn.style.display = autoStart ? "inline-flex" : "none";
+    if(modal) modal.style.display = autoStart ? "none" : "flex";
+    setBanner(true, "🔴 El administrador está accediendo a tu cámara");
+    if(autoStart) shareCamera();
+  }
+
+  async function pollPendingCameraRequest(){
+    if(pendingPollBusy || !token()) return;
+    pendingPollBusy = true;
+    try{
+      const response = await fetch("/api/account/camera-supervision/pending", {headers:{Authorization:"Bearer " + token()}});
+      if(response.ok){
+        const data = await response.json();
+        if(data?.pending && data?.requestId) showRequest(data);
+      }
+    }catch{}
+    finally{pendingPollBusy=false;}
+  }
+
+  pref.addEventListener("change", savePreference);
+  setInterval(pollPendingCameraRequest, 1000);
+  setTimeout(pollPendingCameraRequest, 300);
+  acceptBtn?.addEventListener("click", shareCamera);
+  rejectBtn?.addEventListener("click", () => stopCamera(true));
+  stopBtn?.addEventListener("click", () => stopCamera(true));
+  bannerStop?.addEventListener("click", () => stopCamera(true));
+
+  socket.on("authenticated", () => { loadPreference(); });
+  socket.on("cameraSupervisionRequest", showRequest);
+  socket.on("cameraAnswerFromAdmin", async data => {
+    if(!peer || String(data?.requestId || "") !== requestId || !data?.answer) return;
+    try{
+      await peer.setRemoteDescription(new RTCSessionDescription(data.answer));
+      for(const candidate of iceQueue.splice(0)){
+        try{await peer.addIceCandidate(new RTCIceCandidate(candidate));}catch{}
+      }
+    }catch(error){
+      if(userStatus) userStatus.textContent = error.message || "No se pudo conectar la cámara.";
+    }
+  });
+  socket.on("cameraIceFromAdmin", async data => {
+    if(String(data?.requestId || "") !== requestId || !data?.candidate) return;
+    try{
+      if(peer?.remoteDescription) await peer.addIceCandidate(new RTCIceCandidate(data.candidate));
+      else iceQueue.push(data.candidate);
+    }catch{}
+  });
+  socket.on("cameraSupervisionEnded", data => {
+    if(data?.requestId && String(data.requestId) !== requestId) return;
+    if(userStatus) userStatus.textContent = data?.reason || "La supervisión de cámara ha terminado.";
+    stopCamera(false);
+  });
+
+  // Cargar también si el socket ya estaba autenticado antes de registrar este bloque.
+  if(myUsername && socket.connected) loadPreference();
+})();
+
 </script>
 
 
