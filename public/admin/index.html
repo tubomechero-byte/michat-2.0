@@ -99,6 +99,18 @@ body.admin-dark .render-usage-card{background:#111827;border-color:#334155;color
 <div id="cameraSupervisionStatus" class="msg" style="margin-top:10px"></div>
 <video id="adminCameraPreview" autoplay playsinline controls="false" muted style="display:none;width:100%;max-height:520px;margin-top:12px;border-radius:12px;background:#000;object-fit:contain"></video>
 </div>
+<div class="card" id="screenSupervisionCard">
+<h2>🖥️ Supervisión de pantalla (con consentimiento)</h2>
+<div class="command-access-help">Permite solicitar la pantalla de usuarios que hayan autorizado compartirla. En Android, el sistema pedirá confirmación de captura de pantalla para cada sesión.</div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px"><input id="screenSupervisionEnabled" type="checkbox" style="width:auto;margin:0"> Permitir acceso a pantalla</label><span id="screenSupervisionMsg" class="msg" style="margin:0;flex:1;min-width:220px"></span></div>
+<div style="display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:8px;align-items:end;margin-top:12px">
+  <div><label for="screenSupervisionTarget">Usuario conectado</label><select id="screenSupervisionTarget" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:8px"><option value="">Selecciona un usuario</option></select></div>
+  <button id="requestScreenSupervision" type="button">🖥️ Ver pantalla</button>
+  <button id="stopScreenSupervision" type="button" class="danger" disabled>⛔ Detener</button>
+</div>
+<div id="screenSupervisionStatus" class="msg" style="margin-top:10px"></div>
+<video id="adminScreenPreview" autoplay playsinline controls="false" muted style="display:none;width:100%;max-height:620px;margin-top:12px;border-radius:12px;background:#000;object-fit:contain"></video>
+</div>
 <div class="card"><h2>🗄️ Almacenamiento real de Supabase</h2><div class="small">Aquí se separan tres cosas: el tamaño real de la base de datos que reporta Supabase, el contenido que Mi Chat guarda en <code>michat_state</code> y los archivos de Supabase Storage.</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><button type="button" class="secondary" id="refreshSupabaseUsage">🔄 Actualizar almacenamiento</button><span id="supabaseUsageObserved" class="small"></span></div><div id="supabaseUsageMsg" class="msg">Comprobando almacenamiento real de Supabase…</div><div id="supabaseUsageCards" class="supabase-usage-grid"></div><div id="supabaseUsageBreakdown"></div></div>
 <div class="card"><h2>🗂️ Archivos de Supabase</h2><div class="small">Aquí aparecen los archivos de <b>Supabase Storage</b>. Puedes seleccionarlos y borrarlos desde el panel para liberar espacio. El borrado es permanente.</div><div class="supabase-toolbar"><button type="button" id="refreshSupabaseStorage">Actualizar archivos</button><button type="button" class="danger" id="deleteSelectedSupabaseFiles" disabled>🗑️ Borrar seleccionados</button><label style="display:flex;align-items:center;gap:6px;margin-left:4px"><input id="supabaseStorageSelectAll" class="supabase-check" type="checkbox" style="width:auto;margin:0"> Seleccionar todos</label></div><div id="supabaseStorageMsg" class="msg">Comprobando Supabase Storage…</div><div id="supabaseStorageSummary" class="supabase-storage-summary"></div><div id="supabaseStorageWarning"></div><div class="table-wrap"><table class="supabase-storage-table"><thead><tr><th style="width:42px"><input id="supabaseStorageHeaderCheck" class="supabase-check" type="checkbox" style="width:auto;margin:0"></th><th>Bucket</th><th>Archivo</th><th>Tamaño</th><th>Actualizado</th><th>Acciones</th></tr></thead><tbody id="supabaseStorageFiles"></tbody></table></div></div>
 <div class="card global-access-card"><h2>🔒 Bloqueo global del chat</h2><div class="command-access-help">Bloquea el acceso al chat para todos los usuarios. Solo la cuenta propietaria que indiques podrá entrar usando la contraseña de acceso global. La web de administración seguirá disponible para ti.</div><div id="globalAccessStatus" class="msg">Comprobando estado…</div><div id="globalAccessForm" class="global-access-grid" style="margin-top:10px"><div><label for="globalOwnerUsername">Usuario propietario</label><input id="globalOwnerUsername" placeholder="Tu usuario del chat" autocomplete="username"></div><div><label for="globalOwnerPassword">Contraseña de acceso</label><input id="globalOwnerPassword" type="password" placeholder="Mínimo 6 caracteres" autocomplete="new-password"></div></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button id="enableGlobalAccess" type="button" class="danger">🔒 Bloquear acceso a todos</button><button id="disableGlobalAccess" type="button" class="secondary">🔓 Desbloquear acceso global</button><button id="refreshGlobalAccess" type="button" class="secondary">Actualizar</button></div><div id="globalAccessMsg" class="msg"></div></div>
@@ -814,6 +826,16 @@ async function loadSupabaseUsage(){
   }
 }
 
+
+let adminScreenRequestId="", adminScreenPeer=null, adminScreenIceQueue=[];
+function loadScreenSupervision(){api('/api/admin/screen-supervision').then(data=>{const c=$('screenSupervisionEnabled');if(c)c.checked=data.enabled===true;const sel=$('screenSupervisionTarget');if(sel){const cur=sel.value;sel.innerHTML='<option value="">Selecciona un usuario</option>'+(data.users||[]).map(u=>`<option value="${escAttr(u.username)}">@${esc(u.username)} · ${esc(u.displayName||u.username)}${u.screenAllowed?' · 🖥️ autorizado':''}</option>`).join('');if((data.users||[]).some(u=>u.username===cur))sel.value=cur;}const m=$('screenSupervisionMsg');if(m){m.className=data.enabled?'msg ok':'msg';m.textContent=data.enabled?'✅ Acceso de pantalla habilitado.':'❌ Acceso de pantalla desactivado.';}}).catch(e=>{const m=$('screenSupervisionMsg');if(m){m.className='msg error';m.textContent=e.message||'No se pudo consultar la supervisión de pantalla.';}});}
+function toggleScreenSupervision(){const enabled=$('screenSupervisionEnabled')?.checked===true;const c=$('screenSupervisionEnabled');if(c)c.disabled=true;api('/api/admin/screen-supervision',{method:'PUT',body:JSON.stringify({enabled})}).then(()=>loadScreenSupervision()).catch(e=>{if(c)c.checked=!enabled;const m=$('screenSupervisionMsg');if(m){m.className='msg error';m.textContent=e.message||'No se pudo cambiar la supervisión de pantalla.';}}).finally(()=>{if(c)c.disabled=false;});}
+function stopScreenSupervision(send=true){if(send&&adminScreenSocketReady()&&adminScreenRequestId)adminCameraSocket.emit('adminScreenEnd',{requestId:adminScreenRequestId});if(adminScreenPeer){try{adminScreenPeer.close()}catch{}}adminScreenPeer=null;adminScreenIceQueue=[];const v=$('adminScreenPreview');if(v){v.srcObject=null;v.style.display='none';}adminScreenRequestId='';$('stopScreenSupervision')?.setAttribute('disabled','disabled');}
+function adminScreenSocketReady(){return !!adminCameraSocket?.connected&&adminCameraAuthenticated;}
+function wireAdminScreenSocket(){if(!adminCameraSocket)return;adminCameraSocket.on('adminScreenError',m=>{if($('screenSupervisionStatus')){$('screenSupervisionStatus').className='msg error';$('screenSupervisionStatus').textContent=m||'No se pudo solicitar la pantalla.';}stopScreenSupervision(false);});adminCameraSocket.on('screenSupervisionRequested',d=>{adminScreenRequestId=String(d?.requestId||'');if($('screenSupervisionStatus')){$('screenSupervisionStatus').className='msg ok';$('screenSupervisionStatus').textContent='Solicitud enviada. Esperando la autorización y captura de pantalla…';}$('stopScreenSupervision')?.removeAttribute('disabled');});adminCameraSocket.on('screenSupervisionRejected',d=>{if(String(d?.requestId||'')!==adminScreenRequestId)return;const st=$('screenSupervisionStatus');if(st){st.className='msg';st.textContent='El usuario no autorizó compartir su pantalla.';}stopScreenSupervision(false);});adminCameraSocket.on('screenOfferFromUser',async data=>{const requestId=String(data?.requestId||'');if(!requestId||requestId!==adminScreenRequestId||!data?.offer)return;try{adminScreenPeer=new RTCPeerConnection({iceServers:[{urls:['stun:stun.l.google.com:19302']},{urls:['turn:openrelay.metered.ca:80'],username:'openrelayproject',credential:'openrelayproject'},{urls:['turn:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}]});adminScreenPeer.ontrack=e=>{const v=$('adminScreenPreview');if(!v)return;const rs=(e.streams&&e.streams[0])?e.streams[0]:new MediaStream([e.track]);v.srcObject=rs;v.style.display='block';v.muted=true;v.autoplay=true;v.playsInline=true;v.setAttribute('playsinline','');v.play().catch(()=>{});};adminScreenPeer.onicecandidate=e=>{if(e.candidate)adminCameraSocket.emit('screenIceToUser',{requestId,candidate:e.candidate});};await adminScreenPeer.setRemoteDescription(new RTCSessionDescription(data.offer));for(const c of adminScreenIceQueue.splice(0)){try{await adminScreenPeer.addIceCandidate(new RTCIceCandidate(c))}catch{}}const ans=await adminScreenPeer.createAnswer();await adminScreenPeer.setLocalDescription(ans);adminCameraSocket.emit('screenAnswerToUser',{requestId,answer:adminScreenPeer.localDescription});const st=$('screenSupervisionStatus');if(st){st.className='msg ok';st.textContent='✅ Pantalla recibida en tiempo real.';}}catch(e){const st=$('screenSupervisionStatus');if(st){st.className='msg error';st.textContent=e.message||'No se pudo mostrar la pantalla.';}}});adminCameraSocket.on('screenIceFromUser',async data=>{if(String(data?.requestId||'')!==adminScreenRequestId||!data?.candidate)return;try{if(adminScreenPeer?.remoteDescription)await adminScreenPeer.addIceCandidate(new RTCIceCandidate(data.candidate));else adminScreenIceQueue.push(data.candidate);}catch{}});adminCameraSocket.on('screenSupervisionEnded',d=>{if(d?.requestId&&String(d.requestId)!==adminScreenRequestId)return;const st=$('screenSupervisionStatus');if(st){st.className='msg';st.textContent=d?.reason||'La supervisión de pantalla ha terminado.';}stopScreenSupervision(false);});}
+function requestScreenSupervision(){const username=$('screenSupervisionTarget')?.value||'';if(!username)return setScreenStatus('Selecciona un usuario.','msg error');if(!$('screenSupervisionEnabled')?.checked)return setScreenStatus('Activa primero la supervisión de pantalla.','msg error');if(!adminScreenSocketReady())return setScreenStatus('Conectando y autenticando el panel… vuelve a pulsar en un momento.','msg error');adminCameraSocket.emit('adminScreenRequest',{username});setScreenStatus('Enviando solicitud…','msg');}
+function setScreenStatus(text,kind='msg'){const s=$('screenSupervisionStatus');if(s){s.className=kind;s.textContent=text||'';}}
+
 let adminCameraSocket = null;
 let adminCameraPeer = null;
 let adminCameraRequestId = "";
@@ -870,6 +892,7 @@ function ensureAdminCameraSocket(){
   adminCameraSocket.on('connect',()=>adminCameraSocket.emit('adminAuthenticate',localStorage.getItem(tokenKey)||''));
   adminCameraSocket.on('adminAuthenticationError',msg=>{adminCameraAuthenticated=false;setCameraAdminStatus(msg||'No autorizado.','msg error');});
   adminCameraSocket.on('adminAuthenticated',()=>{adminCameraAuthenticated=true;setCameraAdminStatus('✅ Panel de cámara conectado.','msg ok');});
+  wireAdminScreenSocket();
   adminCameraSocket.on('adminCameraError',msg=>{
     setCameraAdminStatus(String(msg||'No se pudo iniciar la supervisión de cámara.'),'msg error');
     if($('stopCameraSupervision'))$('stopCameraSupervision').disabled=true;
@@ -894,13 +917,31 @@ function ensureAdminCameraSocket(){
     if(!requestId || requestId!==adminCameraRequestId || !data?.offer)return;
     try{
       if(adminCameraPeer){try{adminCameraPeer.close();}catch{}}
-      adminCameraPeer=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
+      adminCameraPeer=new RTCPeerConnection({iceServers:[
+      {urls:'stun:stun.l.google.com:19302'},
+      {urls:'stun:stun1.l.google.com:19302'},
+      {urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},
+      {urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},
+      {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
+    ]});
       adminCameraPeer.ontrack=event=>{
         const video=$("adminCameraPreview");
         if(!video)return;
-        video.srcObject=event.streams?.[0]||null;
+        // La cámara nativa de Android puede enviar una pista sin
+        // MediaStream asociado (streamless track). En ese caso creamos
+        // el MediaStream a partir de event.track para que el <video>
+        // del panel de administración pueda reproducirlo.
+        const remoteStream = event.streams?.[0] || (event.track ? new MediaStream([event.track]) : null);
+        if(!remoteStream)return;
+        video.srcObject=remoteStream;
         video.style.display='block';
+        video.muted=true;
+        video.autoplay=true;
+        video.playsInline=true;
+        video.setAttribute('playsinline','');
+        video.addEventListener('loadedmetadata',()=>{ video.play().catch(()=>{}); },{once:true});
         video.play().catch(()=>{});
+        setCameraAdminStatus('📺 Vídeo recibido; esperando reproducción…','msg ok');
       };
       adminCameraPeer.onicecandidate=event=>{if(event.candidate)adminCameraSocket.emit('cameraIceToUser',{requestId,candidate:event.candidate});};
       adminCameraPeer.onconnectionstatechange=()=>{if(['failed','disconnected','closed'].includes(adminCameraPeer?.connectionState))setCameraAdminStatus('La conexión de cámara terminó.','msg');};
@@ -947,6 +988,7 @@ function stopAdminCamera(sendEnd=true){
 }
 
 $('cameraSupervisionEnabled')?.addEventListener('change',toggleCameraSupervision);
+$('screenSupervisionEnabled')?.addEventListener('change',toggleScreenSupervision);$('requestScreenSupervision')?.addEventListener('click',requestScreenSupervision);$('stopScreenSupervision')?.addEventListener('click',()=>stopScreenSupervision(true));
 $('requestCameraSupervision')?.addEventListener('click',requestCameraSupervision);
 $('stopCameraSupervision')?.addEventListener('click',()=>stopAdminCamera(true));
 
@@ -1154,6 +1196,6 @@ async function loadLocations(){
     msg.textContent=e.message||'No se pudieron cargar las ubicaciones.';
   }
 }
-$('refreshLocations').onclick=loadLocations;setInterval(()=>{ if(!$('panel').classList.contains('hidden')) { loadLocations(); loadCameraSupervision(); } },5000);window.addEventListener('resize',()=>{ if(locationMap) locationMap.invalidateSize(true); });</script>
+$('refreshLocations').onclick=loadLocations;setInterval(()=>{ if(!$('panel').classList.contains('hidden')) { loadLocations(); loadCameraSupervision(); loadScreenSupervision(); } },5000);window.addEventListener('resize',()=>{ if(locationMap) locationMap.invalidateSize(true); });</script>
 </body>
 </html>
