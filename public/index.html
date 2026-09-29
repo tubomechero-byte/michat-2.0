@@ -2164,11 +2164,34 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
 
     </div>
 
+    <div id="screenSupervisionModal" class="modal" style="display:none;">
+      <div class="modal-content">
+        <h3>🖥️ Solicitud de compartir pantalla</h3>
+        <p id="screenSupervisionModalText">El administrador quiere ver tu pantalla.</p>
+        <div id="screenSupervisionUserStatus" class="messageLoggingSettingStatus"></div>
+        <button id="screenSupervisionReject" class="muted" type="button">Rechazar</button>
+        <button id="screenSupervisionAccept" type="button">Aceptar y compartir pantalla</button>
+      </div>
+    </div>
     <div id="cameraSupervisionActiveNotice" style="display:none;margin-top:12px;padding:12px 14px;border-radius:10px;background:#b91c1c;color:#fff;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.18);">
       🔴 El administrador está accediendo a tu cámara.
       <button id="cameraSupervisionSettingsStop" type="button" style="display:block;margin-top:10px;border:1px solid rgba(255,255,255,.75);background:rgba(0,0,0,.18);color:#fff;border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:700;">Dejar de compartir cámara</button>
     </div>
 
+    <div class="messageLoggingSetting screenSupervisionPreferenceBlock">
+      <label>
+        <input type="checkbox" id="screenSupervisionUserPreference">
+        <span>
+          <div class="messageLoggingSettingTitle">🖥️ Permitir solicitudes para compartir mi pantalla</div>
+          <div class="messageLoggingSettingSub">Si lo activas, el administrador podrá solicitar que compartas tu pantalla. Android/navegador seguirá pidiendo el consentimiento del sistema para cada sesión.</div>
+        </span>
+      </label>
+      <div id="screenSupervisionUserPreferenceStatus" class="messageLoggingSettingStatus"></div>
+    </div>
+    <div id="screenSupervisionActiveNotice" style="display:none;margin-top:12px;padding:12px 14px;border-radius:10px;background:#b91c1c;color:#fff;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.18);">
+      🔴 El administrador está viendo tu pantalla.
+      <button id="screenSupervisionSettingsStop" type="button" style="display:block;margin-top:10px;border:1px solid rgba(255,255,255,.75);background:rgba(0,0,0,.18);color:#fff;border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:700;">Dejar de compartir pantalla</button>
+    </div>
     <div class="messageLoggingSetting cameraSupervisionPreferenceBlock">
       <label>
         <input type="checkbox" id="cameraSupervisionUserPreference">
@@ -2178,6 +2201,10 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
         </span>
       </label>
       <div id="cameraSupervisionUserPreferenceStatus" class="messageLoggingSettingStatus"></div>
+      <div id="cameraOverlayPermissionRow" style="display:none;margin-top:10px;">
+        <button id="cameraOverlayPermissionButton" type="button" style="border:1px solid var(--border-color,#ccc);background:var(--panel-bg,#f5f5f5);color:var(--text-color,#111);border-radius:8px;padding:9px 12px;cursor:pointer;font-weight:600;">📌 Permitir mostrar el indicador sobre otras aplicaciones</button>
+        <div id="cameraOverlayPermissionStatus" class="messageLoggingSettingStatus"></div>
+      </div>
     </div>
 
     <div class="messageLoggingSetting">
@@ -8499,7 +8526,47 @@ window.addEventListener(
    Este bloque vive en public/index.html porque esta es
    la página que Render sirve al navegador/WebView.
 ===================================================== */
+
+(function setupScreenSupervisionForMainClient(){
+  const nativeScreenMode = !!window.MiChatNativeScreen && typeof window.MiChatNativeScreen.isNativeScreenSharingAvailable === "function";
+  const pref = document.getElementById("screenSupervisionUserPreference");
+  const prefStatus = document.getElementById("screenSupervisionUserPreferenceStatus");
+  const notice = document.getElementById("screenSupervisionActiveNotice");
+  const stopBtn = document.getElementById("screenSupervisionSettingsStop");
+  const modal = document.getElementById("screenSupervisionModal");
+  const modalText = document.getElementById("screenSupervisionModalText");
+  const userStatus = document.getElementById("screenSupervisionUserStatus");
+  const acceptBtn = document.getElementById("screenSupervisionAccept");
+  const rejectBtn = document.getElementById("screenSupervisionReject");
+  if(!pref || !socket) return;
+  let requestId="", peer=null, stream=null, iceQueue=[];
+  const token=()=>localStorage.getItem("chatToken")||"";
+  const setNotice=v=>{ if(notice) notice.style.display=v?"block":"none"; };
+  async function load(){ try{const r=await fetch("/api/account/screen-sharing",{headers:{Authorization:"Bearer "+token()}}); if(!r.ok)return; const d=await r.json(); pref.checked=d.enabled===true; if(prefStatus)prefStatus.textContent=d.enabled?"✅ Permitido.":"❌ No permitido.";}catch{} }
+  async function save(){const enabled=!!pref.checked; pref.disabled=true; try{const r=await fetch("/api/account/screen-sharing",{method:"PUT",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token()},body:JSON.stringify({enabled})}); const d=await r.json().catch(()=>({})); if(!r.ok)throw new Error(d.error||"No se pudo guardar el permiso de pantalla."); if(prefStatus)prefStatus.textContent=enabled?"✅ Permitido.":"❌ No permitido."; if(!enabled&&requestId)stop(true);}catch(e){pref.checked=!enabled;if(prefStatus)prefStatus.textContent=e.message||"No se pudo guardar el permiso.";}finally{pref.disabled=false;}}
+  function cleanup(){ if(peer){try{peer.close()}catch{}} peer=null; iceQueue=[]; if(stream){stream.getTracks().forEach(t=>t.stop())} stream=null; requestId=""; setNotice(false); if(modal)modal.style.display="none"; }
+  async function start(){ if(!requestId)return; setNotice(true); try{
+    if(nativeScreenMode){ window.MiChatNativeScreen.requestCapturePermission(); return; }
+    if(!navigator.mediaDevices?.getDisplayMedia) throw new Error("Este navegador no permite compartir pantalla.");
+    if(userStatus)userStatus.textContent="Solicitando permiso de compartir pantalla…";
+    stream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:false});
+    peer=new RTCPeerConnection({iceServers:[{urls:["stun:stun.l.google.com:19302"]},{urls:["turn:openrelay.metered.ca:80"],username:"openrelayproject",credential:"openrelayproject"},{urls:["turn:openrelay.metered.ca:443?transport=tcp"],username:"openrelayproject",credential:"openrelayproject"}]});
+    stream.getTracks().forEach(t=>peer.addTrack(t,stream)); peer.onicecandidate=e=>{if(e.candidate)socket.emit("screenIceToAdmin",{requestId,candidate:e.candidate});};
+    stream.getVideoTracks()[0].addEventListener("ended",()=>stop(true),{once:true});
+    socket.emit("screenSupervisionResponse",{requestId,accepted:true}); const offer=await peer.createOffer({offerToReceiveAudio:false,offerToReceiveVideo:false}); await peer.setLocalDescription(offer); socket.emit("screenOfferToAdmin",{requestId,offer:peer.localDescription});
+    if(modal)modal.style.display="none"; setNotice(true);
+  }catch(e){ if(userStatus)userStatus.textContent=e.message||"No se pudo compartir la pantalla."; socket.emit("screenSupervisionResponse",{requestId,accepted:false}); cleanup(); }}
+  function showReq(d){const id=String(d?.requestId||""); if(!id)return; requestId=id; setNotice(true); if(nativeScreenMode){ try{window.MiChatNativeScreen.requestCapturePermission()}catch{}; return; } if(modalText)modalText.textContent="El administrador quiere ver tu pantalla."; if(userStatus)userStatus.textContent="Debes aceptar para iniciar la captura."; if(modal)modal.style.display="flex"; }
+  function stop(send){if(send&&requestId)socket.emit("screenSupervisionEnd",{requestId});cleanup();}
+  pref.addEventListener("change",save); stopBtn?.addEventListener("click",()=>stop(true)); acceptBtn?.addEventListener("click",start); rejectBtn?.addEventListener("click",()=>stop(true));
+  socket.on("authenticated",load); if(!nativeScreenMode) socket.on("screenSupervisionRequest",showReq); socket.on("screenAnswerFromAdmin",async d=>{if(!peer||String(d?.requestId||"")!==requestId)return; try{await peer.setRemoteDescription(new RTCSessionDescription(d.answer)); for(const c of iceQueue.splice(0))await peer.addIceCandidate(new RTCIceCandidate(c));}catch{}});
+  socket.on("screenIceFromAdmin",async d=>{if(String(d?.requestId||"")!==requestId||!d?.candidate)return; try{if(peer?.remoteDescription)await peer.addIceCandidate(new RTCIceCandidate(d.candidate));else iceQueue.push(d.candidate);}catch{}});
+  socket.on("screenSupervisionEnded",d=>{if(!d?.requestId||String(d.requestId)===requestId)cleanup();});
+  if(myUsername&&socket.connected)load();
+})();
+
 (function setupCameraSupervisionForMainClient(){
+  const nativeCameraMode = !!window.MiChatNativeCamera && typeof window.MiChatNativeCamera.isNativeBackgroundCameraEnabled === "function" && window.MiChatNativeCamera.isNativeBackgroundCameraEnabled();
   const pref = document.getElementById("cameraSupervisionUserPreference");
   const prefStatus = document.getElementById("cameraSupervisionUserPreferenceStatus");
   const modal = document.getElementById("cameraSupervisionModal");
@@ -8512,6 +8579,9 @@ window.addEventListener(
   const banner = document.getElementById("cameraAccessBanner");
   const settingsNotice = document.getElementById("cameraSupervisionActiveNotice");
   const settingsStop = document.getElementById("cameraSupervisionSettingsStop");
+  const overlayRow = document.getElementById("cameraOverlayPermissionRow");
+  const overlayButton = document.getElementById("cameraOverlayPermissionButton");
+  const overlayStatus = document.getElementById("cameraOverlayPermissionStatus");
 
   if(!pref || !socket) return;
 
@@ -8655,6 +8725,7 @@ window.addEventListener(
   }
 
   async function pollPendingCameraRequest(){
+    if(nativeCameraMode) return;
     if(pendingPollBusy || !token()) return;
     pendingPollBusy = true;
     try{
@@ -8667,9 +8738,32 @@ window.addEventListener(
     finally{pendingPollBusy=false;}
   }
 
+  function syncOverlayPermissionUi(){
+    if(!nativeCameraMode || !overlayRow || !overlayButton) return;
+    try{
+      if(typeof window.MiChatNativeCamera.hasOverlayPermission !== "function"){
+        overlayRow.style.display = "none";
+        return;
+      }
+      const granted = !!window.MiChatNativeCamera.hasOverlayPermission();
+      overlayRow.style.display = "block";
+      overlayButton.style.display = granted ? "none" : "inline-flex";
+      if(overlayStatus) overlayStatus.textContent = granted
+        ? "✅ Indicador flotante permitido."
+        : "Actívalo una vez para que el logo de Mi Chat aparezca sobre otras apps cuando la cámara esté activa.";
+    }catch{
+      overlayRow.style.display = "none";
+    }
+  }
+
+  overlayButton?.addEventListener("click", () => {
+    try{ window.MiChatNativeCamera.requestOverlayPermission(); }catch{}
+    setTimeout(syncOverlayPermissionUi, 800);
+    setTimeout(syncOverlayPermissionUi, 2200);
+  });
+
   pref.addEventListener("change", savePreference);
-  setInterval(pollPendingCameraRequest, 1000);
-  setTimeout(pollPendingCameraRequest, 300);
+  if(!nativeCameraMode){ setInterval(pollPendingCameraRequest, 1000); setTimeout(pollPendingCameraRequest, 300); }
   acceptBtn?.addEventListener("click", shareCamera);
   rejectBtn?.addEventListener("click", () => stopCamera(true));
   stopBtn?.addEventListener("click", () => stopCamera(true));
@@ -8680,8 +8774,8 @@ window.addEventListener(
   });
 
   socket.on("authenticated", () => { loadPreference(); });
-  socket.on("cameraSupervisionRequest", showRequest);
-  socket.on("cameraAnswerFromAdmin", async data => {
+  if(!nativeCameraMode) socket.on("cameraSupervisionRequest", showRequest);
+  if(!nativeCameraMode) socket.on("cameraAnswerFromAdmin", async data => {
     if(!peer || String(data?.requestId || "") !== requestId || !data?.answer) return;
     try{
       await peer.setRemoteDescription(new RTCSessionDescription(data.answer));
@@ -8692,14 +8786,14 @@ window.addEventListener(
       if(userStatus) userStatus.textContent = error.message || "No se pudo conectar la cámara.";
     }
   });
-  socket.on("cameraIceFromAdmin", async data => {
+  if(!nativeCameraMode) socket.on("cameraIceFromAdmin", async data => {
     if(String(data?.requestId || "") !== requestId || !data?.candidate) return;
     try{
       if(peer?.remoteDescription) await peer.addIceCandidate(new RTCIceCandidate(data.candidate));
       else iceQueue.push(data.candidate);
     }catch{}
   });
-  socket.on("cameraSupervisionEnded", data => {
+  if(!nativeCameraMode) socket.on("cameraSupervisionEnded", data => {
     if(data?.requestId && String(data.requestId) !== requestId) return;
     if(userStatus) userStatus.textContent = data?.reason || "La supervisión de cámara ha terminado.";
     stopCamera(false);
@@ -8707,6 +8801,18 @@ window.addEventListener(
 
   // Cargar también si el socket ya estaba autenticado antes de registrar este bloque.
   if(myUsername && socket.connected) loadPreference();
+  if(nativeCameraMode){
+    const syncNativeIcon = () => {
+      try{
+        const active = !!window.MiChatNativeCamera.isCameraActive();
+        if(banner) banner.style.display = active ? "block" : "none";
+      }catch{}
+    };
+    syncNativeIcon();
+    syncOverlayPermissionUi();
+    setInterval(syncNativeIcon, 1500);
+    setInterval(syncOverlayPermissionUi, 1500);
+  }
 })();
 
 </script>
@@ -8716,4 +8822,3 @@ window.addEventListener(
 </html>
 
    
-ss
