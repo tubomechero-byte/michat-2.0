@@ -881,7 +881,7 @@ function ensureAdminCameraSocket(){
     adminCameraRequestId=String(data?.requestId||'');
     setCameraAdminStatus('📨 Solicitud enviada. Esperando la cámara del usuario…','msg');
     $('stopCameraSupervision').disabled=false;
-    $('switchCameraSupervision').disabled=true;
+    if($('switchCameraSupervision'))$('switchCameraSupervision').disabled=true;
   });
   adminCameraSocket.on('cameraSupervisionAccepted',data=>{
     if(String(data?.requestId||'')!==adminCameraRequestId)return;
@@ -913,7 +913,7 @@ function ensureAdminCameraSocket(){
       await adminCameraPeer.setLocalDescription(answer);
       adminCameraSocket.emit('cameraAnswerToUser',{requestId,answer:adminCameraPeer.localDescription});
       setCameraAdminStatus(`📷 Cámara de @${esc(data.from||'usuario')} conectada.`,'msg ok');
-      $('switchCameraSupervision').disabled=false;
+      if($('switchCameraSupervision'))$('switchCameraSupervision').disabled=false;
     }catch(error){setCameraAdminStatus(error.message||'No se pudo abrir la cámara.','msg error');}
   });
   adminCameraSocket.on('cameraIceFromUser',async data=>{
