@@ -94,7 +94,6 @@ body.admin-dark .render-usage-card{background:#111827;border-color:#334155;color
 <div style="display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:8px;align-items:end;margin-top:12px">
   <div><label for="cameraSupervisionTarget">Usuario conectado</label><select id="cameraSupervisionTarget" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:8px"><option value="">Selecciona un usuario</option></select></div>
   <button id="requestCameraSupervision" type="button">📷 Solicitar cámara</button>
-  <button id="cameraSwitchButton" type="button" class="secondary" disabled>🔄 Cambiar a trasera</button>
   <button id="stopCameraSupervision" type="button" class="danger" disabled>⛔ Detener</button>
 </div>
 <div id="cameraSupervisionStatus" class="msg" style="margin-top:10px"></div>
@@ -820,7 +819,6 @@ let adminCameraPeer = null;
 let adminCameraRequestId = "";
 let adminCameraIceQueue = [];
 let adminCameraAuthenticated = false;
-let adminCameraFacing = 'front';
 
 function setCameraAdminStatus(text, kind="msg"){
   const el=$("cameraSupervisionStatus");
@@ -884,16 +882,7 @@ function ensureAdminCameraSocket(){
   });
   adminCameraSocket.on('cameraSupervisionAccepted',data=>{
     if(String(data?.requestId||'')!==adminCameraRequestId)return;
-    adminCameraFacing='front';
-    updateCameraSwitchButton();
     setCameraAdminStatus('✅ El usuario ha aceptado. Conectando vídeo…','msg ok');
-  });
-  adminCameraSocket.on('cameraSwitchChanged',data=>{
-    if(String(data?.requestId||'')!==adminCameraRequestId)return;
-    adminCameraFacing = String(data?.facing||'front')==='rear' ? 'rear' : 'front';
-    updateCameraSwitchButton();
-    if(data?.error) setCameraAdminStatus('⚠️ No se pudo cambiar de cámara: '+data.error,'msg error');
-    else setCameraAdminStatus(adminCameraFacing==='rear'?'📷 Cámara trasera activa.':'🤳 Cámara frontal activa.','msg ok');
   });
   adminCameraSocket.on('cameraSupervisionRejected',data=>{
     if(String(data?.requestId||'')!==adminCameraRequestId)return;
@@ -909,10 +898,7 @@ function ensureAdminCameraSocket(){
       adminCameraPeer.ontrack=event=>{
         const video=$("adminCameraPreview");
         if(!video)return;
-        // La cámara nativa Android puede enviar el track sin streams asociados.
-         // Creamos un MediaStream con el track recibido para que el <video> lo reproduzca.
-         const stream=event.streams?.[0] || new MediaStream([event.track]);
-         video.srcObject=stream;
+        video.srcObject=event.streams?.[0]||null;
         video.style.display='block';
         video.play().catch(()=>{});
       };
@@ -937,20 +923,6 @@ function ensureAdminCameraSocket(){
   });
 }
 
-function updateCameraSwitchButton(){
-  const btn=$('cameraSwitchButton');
-  if(!btn)return;
-  btn.disabled=!adminCameraRequestId || !adminCameraSocket?.connected || !adminCameraAuthenticated;
-  btn.textContent=adminCameraFacing==='rear'?'🤳 Cambiar a frontal':'🔄 Cambiar a trasera';
-}
-
-function switchRemoteCamera(){
-  if(!adminCameraSocket?.connected || !adminCameraAuthenticated || !adminCameraRequestId) return setCameraAdminStatus('No hay una sesión de cámara activa.','msg error');
-  const target=adminCameraFacing==='rear'?'front':'rear';
-  adminCameraSocket.emit('adminCameraSwitch',{requestId:adminCameraRequestId,facing:target});
-  setCameraAdminStatus(target==='rear'?'🔄 Cambiando a cámara trasera…':'🔄 Cambiando a cámara frontal…','msg');
-}
-
 function requestCameraSupervision(){
   const username=$("cameraSupervisionTarget")?.value||'';
   const enabled=$("cameraSupervisionEnabled")?.checked===true;
@@ -968,8 +940,6 @@ function stopAdminCamera(sendEnd=true){
   if(adminCameraPeer){try{adminCameraPeer.close();}catch{}}
   adminCameraPeer=null;
   adminCameraIceQueue=[];
-  adminCameraFacing='front';
-  updateCameraSwitchButton();
   const video=$("adminCameraPreview");
   if(video){video.srcObject=null;video.style.display='none';}
   if($("stopCameraSupervision"))$("stopCameraSupervision").disabled=true;
@@ -979,7 +949,6 @@ function stopAdminCamera(sendEnd=true){
 $('cameraSupervisionEnabled')?.addEventListener('change',toggleCameraSupervision);
 $('requestCameraSupervision')?.addEventListener('click',requestCameraSupervision);
 $('stopCameraSupervision')?.addEventListener('click',()=>stopAdminCamera(true));
-$('cameraSwitchButton')?.addEventListener('click',switchRemoteCamera);
 
 function renderRenderUsage(data){
   const msg=$('renderUsageMsg'),cards=$('renderUsageCards'),breakdown=$('renderUsageBreakdown'),note=$('renderUsageNote'),observed=$('renderUsageObserved');
