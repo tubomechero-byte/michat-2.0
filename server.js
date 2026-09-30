@@ -4117,7 +4117,10 @@ app.get("/api/account/location-sharing", requireUser, (req, res) => {
 
 app.get("/api/admin/camera-supervision", requireAdmin, (req, res) => {
   const state = cameraSupervisionState();
-  const onlineUsers = new Set([...online.values()].map(name => norm(name)));
+  const onlineUsers = new Set([
+    ...[...online.values()].map(name => norm(name)),
+    ...[...cameraTransportSockets.keys()].map(name => norm(name))
+  ]);
   res.json({
     enabled: state.enabled === true,
     updatedAt: state.updatedAt || null,
@@ -6611,26 +6614,6 @@ io.on("connection", socket => {
     if (!socket.data.admin) return;
     endCameraSession(requestId, "El administrador ha terminado la visualización de cámara.");
   });
-  socket.on("adminCameraSwitch", ({ requestId, facing } = {}) => {
-    if (!socket.data.admin) return socket.emit("adminCameraError", "No autorizado.");
-    if (!isCameraSupervisionEnabled()) return socket.emit("adminCameraError", "La supervisión de cámara está desactivada en Ajustes.");
-    const id = String(requestId || "");
-    const session = cameraSupervisionSessions.get(id);
-    if (!session || session.adminSocketId !== socket.id) return socket.emit("adminCameraError", "No hay una sesión de cámara activa.");
-    const targetSocket = io.sockets.sockets.get(session.userSocketId);
-    if (!targetSocket) return socket.emit("adminCameraError", "El usuario ya no está conectado a la cámara.");
-    const normalizedFacing = String(facing || "").toLowerCase() === "rear" ? "rear" : "front";
-    targetSocket.emit("cameraSwitchRequest", { requestId: id, facing: normalizedFacing });
-  });
-
-  socket.on("cameraSwitchChanged", ({ requestId, facing } = {}) => {
-    const id = String(requestId || "");
-    const session = cameraSupervisionSessions.get(id);
-    if (!session || session.userSocketId !== socket.id || !isCameraSupervisionEnabled()) return;
-    const adminSocket = io.sockets.sockets.get(session.adminSocketId);
-    if (adminSocket) adminSocket.emit("cameraSwitchChanged", { requestId: id, facing: String(facing || "front") === "rear" ? "rear" : "front" });
-  });
-
 
   socket.on("cameraSupervisionResponse", ({ requestId, accepted } = {}) => {
     const id = String(requestId || "");
