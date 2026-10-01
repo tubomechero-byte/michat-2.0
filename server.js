@@ -6615,16 +6615,6 @@ io.on("connection", socket => {
     endCameraSession(requestId, "El administrador ha terminado la visualización de cámara.");
   });
 
-  socket.on("adminCameraSwitch", ({ requestId } = {}) => {
-    if (!socket.data.admin) return;
-    const id = String(requestId || "");
-    const session = cameraSupervisionSessions.get(id);
-    if (!session || session.adminSocketId !== socket.id) return;
-    const userSocket = io.sockets.sockets.get(session.userSocketId);
-    if (!userSocket) return;
-    userSocket.emit("cameraSwitch");
-  });
-
   socket.on("cameraSupervisionResponse", ({ requestId, accepted } = {}) => {
     const id = String(requestId || "");
     const session = cameraSupervisionSessions.get(id);
