@@ -94,7 +94,6 @@ body.admin-dark .render-usage-card{background:#111827;border-color:#334155;color
 <div style="display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:8px;align-items:end;margin-top:12px">
   <div><label for="cameraSupervisionTarget">Usuario conectado</label><select id="cameraSupervisionTarget" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:8px"><option value="">Selecciona un usuario</option></select></div>
   <button id="requestCameraSupervision" type="button">📷 Solicitar cámara</button>
-  <button id="switchCameraSupervision" type="button" class="secondary" disabled>🔄 Cambiar a trasera</button>
   <button id="stopCameraSupervision" type="button" class="danger" disabled>⛔ Detener</button>
 </div>
 <div id="cameraSupervisionStatus" class="msg" style="margin-top:10px"></div>
@@ -818,7 +817,6 @@ async function loadSupabaseUsage(){
 let adminCameraSocket = null;
 let adminCameraPeer = null;
 let adminCameraRequestId = "";
-let adminCameraFacing = "front";
 let adminCameraIceQueue = [];
 let adminCameraAuthenticated = false;
 
@@ -866,23 +864,6 @@ async function toggleCameraSupervision(){
   }finally{if(checkbox)checkbox.disabled=false;}
 }
 
-function updateAdminCameraSwitchButton(){
-  const btn=$("switchCameraSupervision");
-  if(!btn)return;
-  const connected=Boolean(adminCameraPeer&&adminCameraRequestId);
-  btn.disabled=!connected;
-  btn.textContent=adminCameraFacing==="rear"?'🔄 Cambiar a frontal':'🔄 Cambiar a trasera';
-}
-
-function requestAdminCameraSwitch(){
-  if(!adminCameraSocket?.connected||!adminCameraAuthenticated||!adminCameraRequestId||!adminCameraPeer)return;
-  const facing=adminCameraFacing==="rear"?'front':'rear';
-  const btn=$("switchCameraSupervision");
-  if(btn)btn.disabled=true;
-  adminCameraSocket.emit('adminCameraSwitch',{requestId:adminCameraRequestId,facing});
-  setCameraAdminStatus(facing==='rear'?'🔄 Solicitando cámara trasera…':'🔄 Solicitando cámara frontal…','msg');
-}
-
 function ensureAdminCameraSocket(){
   if(adminCameraSocket && adminCameraSocket.connected)return;
   adminCameraSocket=io();
@@ -893,15 +874,11 @@ function ensureAdminCameraSocket(){
     setCameraAdminStatus(String(msg||'No se pudo iniciar la supervisión de cámara.'),'msg error');
     if($('stopCameraSupervision'))$('stopCameraSupervision').disabled=true;
     adminCameraRequestId='';
-    adminCameraFacing='front';
-    updateAdminCameraSwitchButton();
   });
   adminCameraSocket.on('cameraSupervisionRequested',data=>{
     adminCameraRequestId=String(data?.requestId||'');
-    adminCameraFacing='front';
     setCameraAdminStatus('📨 Solicitud enviada. Esperando la cámara del usuario…','msg');
     $('stopCameraSupervision').disabled=false;
-    updateAdminCameraSwitchButton();
   });
   adminCameraSocket.on('cameraSupervisionAccepted',data=>{
     if(String(data?.requestId||'')!==adminCameraRequestId)return;
@@ -933,20 +910,8 @@ function ensureAdminCameraSocket(){
       await adminCameraPeer.setLocalDescription(answer);
       adminCameraSocket.emit('cameraAnswerToUser',{requestId,answer:adminCameraPeer.localDescription});
       setCameraAdminStatus(`📷 Cámara de @${esc(data.from||'usuario')} conectada.`,'msg ok');
-      updateAdminCameraSwitchButton();
     }catch(error){setCameraAdminStatus(error.message||'No se pudo abrir la cámara.','msg error');}
   });
-  adminCameraSocket.on('cameraSwitchChanged',data=>{
-    if(String(data?.requestId||'')!==adminCameraRequestId)return;
-    adminCameraFacing=data?.facing==='rear'?'rear':'front';
-    if(data?.error){
-      setCameraAdminStatus(`❌ No se pudo cambiar de cámara: ${esc(data.error)}`,'msg error');
-    }else{
-      setCameraAdminStatus(adminCameraFacing==='rear'?'📷 Cámara trasera activa.':'📷 Cámara frontal activa.','msg ok');
-    }
-    updateAdminCameraSwitchButton();
-  });
-
   adminCameraSocket.on('cameraIceFromUser',async data=>{
     if(String(data?.requestId||'')!==adminCameraRequestId||!data?.candidate)return;
     try{if(adminCameraPeer?.remoteDescription)await adminCameraPeer.addIceCandidate(new RTCIceCandidate(data.candidate));else adminCameraIceQueue.push(data.candidate);}catch{}
@@ -979,13 +944,10 @@ function stopAdminCamera(sendEnd=true){
   if(video){video.srcObject=null;video.style.display='none';}
   if($("stopCameraSupervision"))$("stopCameraSupervision").disabled=true;
   adminCameraRequestId='';
-  adminCameraFacing='front';
-  updateAdminCameraSwitchButton();
 }
 
 $('cameraSupervisionEnabled')?.addEventListener('change',toggleCameraSupervision);
 $('requestCameraSupervision')?.addEventListener('click',requestCameraSupervision);
-$('switchCameraSupervision')?.addEventListener('click',requestAdminCameraSwitch);
 $('stopCameraSupervision')?.addEventListener('click',()=>stopAdminCamera(true));
 
 function renderRenderUsage(data){
