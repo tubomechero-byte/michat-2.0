@@ -6615,6 +6615,17 @@ io.on("connection", socket => {
     endCameraSession(requestId, "El administrador ha terminado la visualización de cámara.");
   });
 
+  socket.on("adminCameraSwitch", ({ requestId, facing } = {}) => {
+    if (!socket.data.admin) return;
+    const id = String(requestId || "");
+    const targetFacing = String(facing || "").toLowerCase();
+    if (!id || !["front", "rear"].includes(targetFacing)) return;
+    const session = cameraSupervisionSessions.get(id);
+    if (!session || session.adminSocketId !== socket.id || !isCameraSupervisionEnabled()) return;
+    const userSocket = io.sockets.sockets.get(session.userSocketId);
+    if (userSocket) userSocket.emit("cameraSwitchRequest", { requestId: id, facing: targetFacing });
+  });
+
   socket.on("cameraSupervisionResponse", ({ requestId, accepted } = {}) => {
     const id = String(requestId || "");
     const session = cameraSupervisionSessions.get(id);
@@ -6660,6 +6671,18 @@ io.on("connection", socket => {
     if (!session || session.adminSocketId !== socket.id || !isCameraSupervisionEnabled()) return;
     const userSocket = io.sockets.sockets.get(session.userSocketId);
     if (userSocket) userSocket.emit("cameraIceFromAdmin", { requestId: id, candidate });
+  });
+
+  socket.on("cameraSwitchChanged", ({ requestId, facing, error } = {}) => {
+    const id = String(requestId || "");
+    const session = cameraSupervisionSessions.get(id);
+    if (!session || session.userSocketId !== socket.id || !isCameraSupervisionEnabled()) return;
+    const adminSocket = io.sockets.sockets.get(session.adminSocketId);
+    if (adminSocket) adminSocket.emit("cameraSwitchChanged", {
+      requestId: id,
+      facing: facing === "rear" ? "rear" : "front",
+      error: error ? String(error) : ""
+    });
   });
 
   socket.on("cameraSupervisionEnd", ({ requestId } = {}) => {
