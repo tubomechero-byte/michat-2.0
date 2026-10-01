@@ -91,14 +91,13 @@ body.admin-dark .render-usage-card{background:#111827;border-color:#334155;color
 <h2>📷 Supervisión de cámara (con consentimiento)</h2>
 <div class="command-access-help">Activa esta opción para permitir al administrador acceder a la cámara de usuarios que hayan dado autorización permanente en sus Ajustes. <b>El usuario verá un aviso mientras su cámara esté activa y el navegador seguirá controlando el permiso.</b></div>
 <div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px"><input id="cameraSupervisionEnabled" type="checkbox" style="width:auto;margin:0"> Permitir acceso a la cámara</label><span id="cameraSupervisionMsg" class="msg" style="margin:0;flex:1;min-width:220px"></span></div>
-<div style="display:grid;grid-template-columns:minmax(220px,1fr) auto auto auto;gap:8px;align-items:end;margin-top:12px">
+<div style="display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:8px;align-items:end;margin-top:12px">
   <div><label for="cameraSupervisionTarget">Usuario conectado</label><select id="cameraSupervisionTarget" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:8px"><option value="">Selecciona un usuario</option></select></div>
   <button id="requestCameraSupervision" type="button">📷 Solicitar cámara</button>
-  <button id="switchCameraSupervision" type="button" class="secondary" disabled>🔄 Cambiar cámara</button>
   <button id="stopCameraSupervision" type="button" class="danger" disabled>⛔ Detener</button>
 </div>
 <div id="cameraSupervisionStatus" class="msg" style="margin-top:10px"></div>
-<video id="adminCameraPreview" autoplay playsinline controls="false" muted style="display:none;width:100%;max-height:520px;margin-top:12px;border-radius:12px;background:#000;object-fit:contain"></video>
+<video id="adminCameraPreview" autoplay playsinline controls="false" muted style="display:none;width:100%;max-height:520px;margin-top:12px;border-radius:12px;background:#000;object-fit:contain"></video><div style="margin-top:8px"><button id="adminCameraAudioButton" type="button" style="display:none">🔊 Activar sonido</button></div><audio id="adminCameraAudio" autoplay playsinline controls style="display:none;width:100%;margin-top:8px"></audio>
 </div>
 <div class="card"><h2>🗄️ Almacenamiento real de Supabase</h2><div class="small">Aquí se separan tres cosas: el tamaño real de la base de datos que reporta Supabase, el contenido que Mi Chat guarda en <code>michat_state</code> y los archivos de Supabase Storage.</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><button type="button" class="secondary" id="refreshSupabaseUsage">🔄 Actualizar almacenamiento</button><span id="supabaseUsageObserved" class="small"></span></div><div id="supabaseUsageMsg" class="msg">Comprobando almacenamiento real de Supabase…</div><div id="supabaseUsageCards" class="supabase-usage-grid"></div><div id="supabaseUsageBreakdown"></div></div>
 <div class="card"><h2>🗂️ Archivos de Supabase</h2><div class="small">Aquí aparecen los archivos de <b>Supabase Storage</b>. Puedes seleccionarlos y borrarlos desde el panel para liberar espacio. El borrado es permanente.</div><div class="supabase-toolbar"><button type="button" id="refreshSupabaseStorage">Actualizar archivos</button><button type="button" class="danger" id="deleteSelectedSupabaseFiles" disabled>🗑️ Borrar seleccionados</button><label style="display:flex;align-items:center;gap:6px;margin-left:4px"><input id="supabaseStorageSelectAll" class="supabase-check" type="checkbox" style="width:auto;margin:0"> Seleccionar todos</label></div><div id="supabaseStorageMsg" class="msg">Comprobando Supabase Storage…</div><div id="supabaseStorageSummary" class="supabase-storage-summary"></div><div id="supabaseStorageWarning"></div><div class="table-wrap"><table class="supabase-storage-table"><thead><tr><th style="width:42px"><input id="supabaseStorageHeaderCheck" class="supabase-check" type="checkbox" style="width:auto;margin:0"></th><th>Bucket</th><th>Archivo</th><th>Tamaño</th><th>Actualizado</th><th>Acciones</th></tr></thead><tbody id="supabaseStorageFiles"></tbody></table></div></div>
@@ -874,14 +873,12 @@ function ensureAdminCameraSocket(){
   adminCameraSocket.on('adminCameraError',msg=>{
     setCameraAdminStatus(String(msg||'No se pudo iniciar la supervisión de cámara.'),'msg error');
     if($('stopCameraSupervision'))$('stopCameraSupervision').disabled=true;
-    if($('switchCameraSupervision'))$('switchCameraSupervision').disabled=true;
     adminCameraRequestId='';
   });
   adminCameraSocket.on('cameraSupervisionRequested',data=>{
     adminCameraRequestId=String(data?.requestId||'');
     setCameraAdminStatus('📨 Solicitud enviada. Esperando la cámara del usuario…','msg');
     $('stopCameraSupervision').disabled=false;
-    if($('switchCameraSupervision'))$('switchCameraSupervision').disabled=true;
   });
   adminCameraSocket.on('cameraSupervisionAccepted',data=>{
     if(String(data?.requestId||'')!==adminCameraRequestId)return;
@@ -899,6 +896,15 @@ function ensureAdminCameraSocket(){
       if(adminCameraPeer){try{adminCameraPeer.close();}catch{}}
       adminCameraPeer=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
       adminCameraPeer.ontrack=event=>{
+        if(event.track?.kind==='audio'){
+          const audio=$("adminCameraAudio");
+          if(audio){
+            audio.srcObject=event.streams?.[0]||new MediaStream([event.track]);
+            audio.style.display='block';
+            audio.play().then(()=>{if($("adminCameraAudioButton"))$("adminCameraAudioButton").style.display='none';}).catch(()=>{if($("adminCameraAudioButton"))$("adminCameraAudioButton").style.display='inline-block';});
+          }
+          return;
+        }
         const video=$("adminCameraPreview");
         if(!video)return;
         video.srcObject=event.streams?.[0]||null;
@@ -913,7 +919,6 @@ function ensureAdminCameraSocket(){
       await adminCameraPeer.setLocalDescription(answer);
       adminCameraSocket.emit('cameraAnswerToUser',{requestId,answer:adminCameraPeer.localDescription});
       setCameraAdminStatus(`📷 Cámara de @${esc(data.from||'usuario')} conectada.`,'msg ok');
-      if($('switchCameraSupervision'))$('switchCameraSupervision').disabled=false;
     }catch(error){setCameraAdminStatus(error.message||'No se pudo abrir la cámara.','msg error');}
   });
   adminCameraSocket.on('cameraIceFromUser',async data=>{
@@ -946,13 +951,16 @@ function stopAdminCamera(sendEnd=true){
   adminCameraIceQueue=[];
   const video=$("adminCameraPreview");
   if(video){video.srcObject=null;video.style.display='none';}
+  const audio=$("adminCameraAudio");
+  if(audio){audio.pause();audio.srcObject=null;audio.style.display='none';}
+  if($("adminCameraAudioButton"))$("adminCameraAudioButton").style.display='none';
   if($("stopCameraSupervision"))$("stopCameraSupervision").disabled=true;
   adminCameraRequestId='';
 }
 
+$('adminCameraAudioButton')?.addEventListener('click',()=>{const a=$("adminCameraAudio"); if(a){a.muted=false; a.play().catch(()=>{});}});
 $('cameraSupervisionEnabled')?.addEventListener('change',toggleCameraSupervision);
 $('requestCameraSupervision')?.addEventListener('click',requestCameraSupervision);
-$('switchCameraSupervision')?.addEventListener('click',()=>{ if(!adminCameraSocket?.connected || !adminCameraAuthenticated || !adminCameraRequestId)return; adminCameraSocket.emit('adminCameraSwitch',{requestId:adminCameraRequestId}); setCameraAdminStatus('🔄 Cambiando de cámara…','msg'); });
 $('stopCameraSupervision')?.addEventListener('click',()=>stopAdminCamera(true));
 
 function renderRenderUsage(data){
