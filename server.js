@@ -6615,8 +6615,6 @@ io.on("connection", socket => {
     endCameraSession(requestId, "El administrador ha terminado la visualización de cámara.");
   });
 
-  // Cambio frontal/trasera solicitado desde el panel de administración.
-  // El móvil que lleva la cámara ejecuta la orden; el servidor solo la enruta.
   socket.on("adminCameraSwitch", ({ requestId, facing } = {}) => {
     if (!socket.data.admin) return;
     const id = String(requestId || "");
@@ -6680,7 +6678,11 @@ io.on("connection", socket => {
     const session = cameraSupervisionSessions.get(id);
     if (!session || session.userSocketId !== socket.id || !isCameraSupervisionEnabled()) return;
     const adminSocket = io.sockets.sockets.get(session.adminSocketId);
-    if (adminSocket) adminSocket.emit("cameraSwitchChanged", { requestId: id, facing: facing === "rear" ? "rear" : "front", error: error ? String(error) : "" });
+    if (adminSocket) adminSocket.emit("cameraSwitchChanged", {
+      requestId: id,
+      facing: facing === "rear" ? "rear" : "front",
+      error: error ? String(error) : ""
+    });
   });
 
   socket.on("cameraSupervisionEnd", ({ requestId } = {}) => {
