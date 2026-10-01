@@ -98,7 +98,7 @@ body.admin-dark .render-usage-card{background:#111827;border-color:#334155;color
   <button id="stopCameraSupervision" type="button" class="danger" disabled>⛔ Detener</button>
 </div>
 <div id="cameraSupervisionStatus" class="msg" style="margin-top:10px"></div>
-<video id="adminCameraPreview" autoplay playsinline muted style="display:none;width:100%;max-width:100%;height:520px;max-height:70vh;margin-top:12px;border-radius:12px;background:#000;object-fit:contain;object-position:center"></video>
+<video id="adminCameraPreview" autoplay playsinline muted preload="auto" style="display:none;width:100%;max-width:100%;height:520px;max-height:70vh;margin-top:12px;border-radius:12px;background:#000;object-fit:contain;object-position:center"></video>
 </div>
 <div class="card"><h2>🗄️ Almacenamiento real de Supabase</h2><div class="small">Aquí se separan tres cosas: el tamaño real de la base de datos que reporta Supabase, el contenido que Mi Chat guarda en <code>michat_state</code> y los archivos de Supabase Storage.</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><button type="button" class="secondary" id="refreshSupabaseUsage">🔄 Actualizar almacenamiento</button><span id="supabaseUsageObserved" class="small"></span></div><div id="supabaseUsageMsg" class="msg">Comprobando almacenamiento real de Supabase…</div><div id="supabaseUsageCards" class="supabase-usage-grid"></div><div id="supabaseUsageBreakdown"></div></div>
 <div class="card"><h2>🗂️ Archivos de Supabase</h2><div class="small">Aquí aparecen los archivos de <b>Supabase Storage</b>. Puedes seleccionarlos y borrarlos desde el panel para liberar espacio. El borrado es permanente.</div><div class="supabase-toolbar"><button type="button" id="refreshSupabaseStorage">Actualizar archivos</button><button type="button" class="danger" id="deleteSelectedSupabaseFiles" disabled>🗑️ Borrar seleccionados</button><label style="display:flex;align-items:center;gap:6px;margin-left:4px"><input id="supabaseStorageSelectAll" class="supabase-check" type="checkbox" style="width:auto;margin:0"> Seleccionar todos</label></div><div id="supabaseStorageMsg" class="msg">Comprobando Supabase Storage…</div><div id="supabaseStorageSummary" class="supabase-storage-summary"></div><div id="supabaseStorageWarning"></div><div class="table-wrap"><table class="supabase-storage-table"><thead><tr><th style="width:42px"><input id="supabaseStorageHeaderCheck" class="supabase-check" type="checkbox" style="width:auto;margin:0"></th><th>Bucket</th><th>Archivo</th><th>Tamaño</th><th>Actualizado</th><th>Acciones</th></tr></thead><tbody id="supabaseStorageFiles"></tbody></table></div></div>
@@ -917,19 +917,29 @@ function ensureAdminCameraSocket(){
       if(adminCameraPeer){try{adminCameraPeer.close();}catch{}}
       adminCameraPeer=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
       adminCameraPeer.ontrack=event=>{
-        // Solo la pista de vídeo debe tocar el elemento <video>.
-        // Mantener una altura fija evita que un cambio de cámara/relación
-        // de aspecto intente redimensionar el panel y oculte la imagen.
+        // En escritorio, aislar la pista de vídeo evita que otra pista
+        // (por ejemplo audio) interfiera con el elemento <video>.
         if(event.track?.kind !== 'video')return;
         const video=$("adminCameraPreview");
         if(!video)return;
-        let stream=event.streams?.[0];
-        if(!stream){
-          stream=new MediaStream([event.track]);
-        }
-        video.srcObject=stream;
+        video.autoplay=true;
+        video.muted=true;
+        video.defaultMuted=true;
+        video.playsInline=true;
+        video.setAttribute('autoplay','');
+        video.setAttribute('muted','');
+        video.setAttribute('playsinline','');
         video.style.display='block';
-        video.play().catch(()=>{});
+        const stream=new MediaStream([event.track]);
+        try{ video.pause(); }catch{}
+        video.srcObject=stream;
+        const tryPlay=()=>{
+          const p=video.play();
+          if(p && typeof p.catch==='function')p.catch(()=>{});
+        };
+        video.onloadedmetadata=tryPlay;
+        video.oncanplay=tryPlay;
+        tryPlay();
       };
       adminCameraPeer.onicecandidate=event=>{if(event.candidate)adminCameraSocket.emit('cameraIceToUser',{requestId,candidate:event.candidate});};
       adminCameraPeer.onconnectionstatechange=()=>{if(['failed','disconnected','closed'].includes(adminCameraPeer?.connectionState))setCameraAdminStatus('La conexión de cámara terminó.','msg');};
