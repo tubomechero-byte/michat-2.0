@@ -2190,6 +2190,17 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
       <div id="screenSharingControls" style="display:none;margin-top:10px;gap:8px;flex-wrap:wrap"><button id="screenSharingStartButton" type="button" style="border:1px solid var(--border-color,#ccc);background:var(--panel-bg,#f5f5f5);color:var(--text-color,#111);border-radius:8px;padding:9px 12px;cursor:pointer;font-weight:600">🖥️ Iniciar compartir pantalla</button><button id="screenSharingStopButton" type="button" style="display:none;border:1px solid rgba(185,28,28,.35);background:#fee2e2;color:#991b1b;border-radius:8px;padding:9px 12px;cursor:pointer;font-weight:600">⛔ Dejar de compartir pantalla</button></div>
     </div>
 
+    <div class="messageLoggingSetting remoteControlPreferenceBlock">
+      <div style="display:flex;align-items:flex-start;gap:12px;justify-content:space-between;flex-wrap:wrap">
+        <div>
+          <div class="messageLoggingSettingTitle">🖱️ Permitir control remoto de mi pantalla</div>
+          <div class="messageLoggingSettingSub">Solo funciona mientras la pantalla está compartida y requiere que actives manualmente el servicio de accesibilidad de Mi Chat en Android.</div>
+        </div>
+        <button id="remoteControlAccessibilityButton" type="button" style="border:1px solid var(--border-color,#ccc);background:var(--panel-bg,#f5f5f5);color:var(--text-color,#111);border-radius:8px;padding:9px 12px;cursor:pointer;font-weight:600">🖱️ Configurar control</button>
+      </div>
+      <div id="remoteControlAccessibilityStatus" class="messageLoggingSettingStatus"></div>
+    </div>
+
     <div class="messageLoggingSetting">
       <label for="messageLoggingPreference">
         <input type="checkbox" id="messageLoggingPreference">
@@ -8518,6 +8529,22 @@ window.addEventListener(
   async function load(){try{const r=await fetch('/api/account/screen-sharing',{headers:{Authorization:'Bearer '+token()}});if(!r.ok)return;const d=await r.json();pref.checked=d.enabled===true;const active=native&&!!window.MiChatNativeScreen.isScreenSharingActive();sync(active);if(!active)setStatus(d.enabled?'✅ Permitido.':'❌ No permitido.');}catch{}}
   async function save(){const enabled=!!pref.checked;pref.disabled=true;try{const r=await fetch('/api/account/screen-sharing',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token()},body:JSON.stringify({enabled})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'No se pudo guardar el permiso de pantalla.');setStatus(enabled?'✅ Permitido.':'❌ No permitido.');if(native){if(enabled)window.MiChatNativeScreen.startScreenSharing();else window.MiChatNativeScreen.stopScreenSharing();}}catch(e){pref.checked=!enabled;setStatus(e.message||'No se pudo guardar el permiso de pantalla.');}finally{pref.disabled=false;}}
   pref.addEventListener('change',save);startBtn?.addEventListener('click',()=>native&&window.MiChatNativeScreen.startScreenSharing());stopBtn?.addEventListener('click',()=>native&&window.MiChatNativeScreen.stopScreenSharing());window.addEventListener('michatScreenShareState',ev=>{sync(ev.detail?.active===true);if(ev.detail?.message&&!ev.detail.active)setStatus(ev.detail.message);});socket.on('authenticated',load);if(myUsername&&socket.connected)load();if(native)setInterval(()=>{try{sync(!!window.MiChatNativeScreen.isScreenSharingActive());}catch{}},1500);
+})();
+
+(function setupRemoteControlAccessibility(){
+  const button=document.getElementById('remoteControlAccessibilityButton');
+  const status=document.getElementById('remoteControlAccessibilityStatus');
+  if(!button||!status)return;
+  const native=!!window.MiChatNativeScreen;
+  function render(){
+    const enabled=native&&typeof window.MiChatNativeScreen.isRemoteControlAccessibilityEnabled==='function'&&window.MiChatNativeScreen.isRemoteControlAccessibilityEnabled();
+    status.textContent=enabled?'✅ Control remoto preparado.':'⚠️ Activa el servicio de accesibilidad de Mi Chat en Android.';
+    status.className='messageLoggingSettingStatus'+(enabled?' ok':'');
+    button.textContent=enabled?'🖱️ Abrir ajustes de control':'🖱️ Activar control remoto';
+  }
+  button.addEventListener('click',()=>{if(native&&typeof window.MiChatNativeScreen.openRemoteControlAccessibilitySettings==='function')window.MiChatNativeScreen.openRemoteControlAccessibilitySettings();});
+  render();
+  setInterval(render,1500);
 })();
 
 (function setupCameraSupervisionForMainClient(){
