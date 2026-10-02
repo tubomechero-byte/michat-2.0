@@ -42,6 +42,8 @@ const GROUPS_FILE = path.join(DATA_DIR, "groups.json");
 const CALL_HISTORY_FILE = path.join(DATA_DIR, "call-history.json");
 const CAMERA_SUPERVISION_FILE = path.join(DATA_DIR, "camera-supervision.json");
 const CAMERA_PERMISSIONS_FILE = path.join(DATA_DIR, "camera-permissions.json");
+const SCREEN_SUPERVISION_FILE = path.join(DATA_DIR, "screen-supervision.json");
+const SCREEN_PERMISSIONS_FILE = path.join(DATA_DIR, "screen-permissions.json");
 const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -126,7 +128,9 @@ const STATE_FILES = {
   "groups.json": [],
   "call-history.json": [],
   "camera-supervision.json": { enabled: false, updatedAt: 0 },
-  "camera-permissions.json": {}
+  "camera-permissions.json": {},
+  "screen-supervision.json": { enabled: false, updatedAt: 0 },
+  "screen-permissions.json": {}
 };
 
 let supabaseAvailable = false;
@@ -165,6 +169,8 @@ ensure(GROUPS_FILE, []);
 ensure(CALL_HISTORY_FILE, []);
 ensure(CAMERA_SUPERVISION_FILE, { enabled: false, updatedAt: 0 });
 ensure(CAMERA_PERMISSIONS_FILE, {});
+ensure(SCREEN_SUPERVISION_FILE, { enabled: false, updatedAt: 0 });
+ensure(SCREEN_PERMISSIONS_FILE, {});
 
 function read(file, fallback) {
   try {
@@ -702,6 +708,13 @@ function saveCameraSupervisionState(enabled) {
 function isCameraSupervisionEnabled() {
   return cameraSupervisionState().enabled === true;
 }
+
+function screenPermissionSettings() { const value=read(SCREEN_PERMISSIONS_FILE,{}); return value&&typeof value==='object'&&!Array.isArray(value)?value:{}; }
+function saveScreenPermissionSettings(value) { const data={}; if(value&&typeof value==='object'&&!Array.isArray(value)){ for(const [username,enabled] of Object.entries(value)){const key=norm(username); if(key&&enabled===true)data[key]=true;} } write(SCREEN_PERMISSIONS_FILE,data); }
+function isScreenAllowedByUser(username) { const key=norm(username); return !!key&&screenPermissionSettings()[key]===true; }
+function screenSupervisionState() { const value=read(SCREEN_SUPERVISION_FILE,{enabled:false,updatedAt:0}); if(!value||typeof value!=='object'||Array.isArray(value))return {enabled:false,updatedAt:0}; return {enabled:value.enabled===true,updatedAt:Number(value.updatedAt||0)||0}; }
+function saveScreenSupervisionState(enabled) { const value={enabled:enabled===true,updatedAt:Date.now()}; write(SCREEN_SUPERVISION_FILE,value); return value; }
+function isScreenSupervisionEnabled() { return screenSupervisionState().enabled===true; }
 
 function saveLocationSharingSettings(value) {
   const data = {};
@@ -1928,9 +1941,11 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const online = new Map();
 const cameraTransportSockets = new Map();
+const screenTransportSockets = new Map();
 const activeLocationShares = new Map();
 const adminSockets = new Set();
 const cameraSupervisionSessions = new Map();
+const screenSupervisionSessions = new Map();
 
 function cameraSocketIdFor(username) {
   const target = norm(username);
@@ -1943,6 +1958,11 @@ function cameraSocketIdFor(username) {
   }
   return sid;
 }
+
+function screenSocketIdFor(username) {
+  const target=norm(username); if(!target) return null; const sid=screenTransportSockets.get(target); if(!sid)return null; if(!io.sockets.sockets.get(sid)){screenTransportSockets.delete(target);return null;} return sid;
+}
+function endScreenSession(requestId, reason="La supervisión de pantalla ha terminado."){const id=String(requestId||"");if(!id)return;const session=screenSupervisionSessions.get(id);if(!session)return;const adminSocket=io.sockets.sockets.get(session.adminSocketId);const userSocket=io.sockets.sockets.get(session.userSocketId);if(adminSocket)adminSocket.emit("screenSupervisionEnded",{requestId:id,reason});if(userSocket)userSocket.emit("screenSupervisionEnded",{requestId:id,reason});screenSupervisionSessions.delete(id);}
 
 // =====================================================
 // GRABACIONES DE LLAMADAS (VISIBLES Y CON CONSENTIMIENTO)
@@ -4146,6 +4166,11 @@ app.put("/api/admin/camera-supervision", requireAdmin, (req, res) => {
   addAdminActivity(`@${req.admin.username} ${enabled ? "activó" : "desactivó"} la supervisión de cámara con consentimiento del usuario.`);
   res.json({ success: true, ...state });
 });
+
+app.get("/api/admin/screen-sharing", requireAdmin, (req,res)=>{const state=screenSupervisionState();const onlineUsers=new Set([...online.values()].map(norm));for(const name of screenTransportSockets.keys())onlineUsers.add(norm(name));res.json({enabled:state.enabled===true,updatedAt:state.updatedAt||null,users:users().filter(u=>onlineUsers.has(norm(u.username))).map(u=>({username:u.username,displayName:u.displayName||u.username,profileImage:u.profileImage||"",online:true,screenAvailable:!!screenSocketIdFor(u.username)&&isScreenAllowedByUser(u.username)})).sort((a,b)=>String(a.username).localeCompare(String(b.username)))});});
+app.put("/api/admin/screen-sharing", requireAdmin, (req,res)=>{const enabled=req.body?.enabled===true;const state=saveScreenSupervisionState(enabled);if(!enabled){for(const [id] of screenSupervisionSessions.entries())endScreenSession(id,"El administrador desactivó la supervisión de pantalla.");}addAdminActivity(`@${req.admin.username} ${enabled?"activó":"desactivó"} la supervisión de pantalla con consentimiento del usuario.`);res.json({success:true,...state});});
+app.get("/api/account/screen-sharing", requireUser, (req,res)=>res.json({enabled:isScreenAllowedByUser(req.user.username),globalEnabled:isScreenSupervisionEnabled()}));
+app.put("/api/account/screen-sharing", requireUser, (req,res)=>{const username=norm(req.user.username);const enabled=req.body?.enabled===true;const settings=screenPermissionSettings();if(enabled)settings[username]=true;else delete settings[username];saveScreenPermissionSettings(settings);if(!enabled){for(const [id,session] of screenSupervisionSessions.entries()){if(norm(session.username)===username)endScreenSession(id,"El usuario desactivó el permiso de compartir pantalla.");}}addAdminActivity(`@${req.user.username} ${enabled?"permitió":"desactivó"} que el administrador vea su pantalla.`);res.json({success:true,enabled,globalEnabled:isScreenSupervisionEnabled()});});
 
 app.get("/api/account/camera-supervision", requireUser, (req, res) => {
   res.json({
@@ -6615,6 +6640,16 @@ io.on("connection", socket => {
     endCameraSession(requestId, "El administrador ha terminado la visualización de cámara.");
   });
 
+  socket.on("adminScreenRequest", ({ username } = {}) => {
+    if(!socket.data.admin)return socket.emit("adminScreenError","No autorizado.");
+    if(!isScreenSupervisionEnabled())return socket.emit("adminScreenError","La supervisión de pantalla está desactivada en Ajustes.");
+    const target=norm(username);if(!target)return socket.emit("adminScreenError","Selecciona un usuario.");
+    const targetSid=screenSocketIdFor(target);if(!targetSid||!isScreenAllowedByUser(target))return socket.emit("adminScreenError","Ese usuario no tiene la pantalla disponible.");
+    for(const [id,session] of screenSupervisionSessions.entries())if(session.adminSocketId===socket.id||session.userSocketId===targetSid)endScreenSession(id,"Otra solicitud de pantalla ha sustituido esta sesión.");
+    const requestId=`${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;screenSupervisionSessions.set(requestId,{adminSocketId:socket.id,userSocketId:targetSid,username:target,createdAt:Date.now()});io.to(targetSid).emit("screenSupervisionRequest",{requestId,fromDisplay:"El administrador"});socket.emit("screenSupervisionRequested",{requestId,username:target});
+  });
+  socket.on("adminScreenEnd", ({requestId}={})=>{if(!socket.data.admin)return;endScreenSession(requestId,"El administrador ha terminado la visualización de pantalla.");});
+
   socket.on("adminCameraSwitch", ({ requestId, facing } = {}) => {
     if (!socket.data.admin) return;
     const id = String(requestId || "");
@@ -6625,6 +6660,14 @@ io.on("connection", socket => {
     const userSocket = io.sockets.sockets.get(session.userSocketId);
     if (userSocket) userSocket.emit("cameraSwitchRequest", { requestId: id, facing: targetFacing });
   });
+
+  socket.on("screenSupervisionResponse", ({requestId,accepted}={})=>{const id=String(requestId||"");const session=screenSupervisionSessions.get(id);if(!session||session.userSocketId!==socket.id||!isScreenSupervisionEnabled()||!isScreenAllowedByUser(socket.data.username||session.username))return;const adminSocket=io.sockets.sockets.get(session.adminSocketId);if(accepted===true){if(adminSocket)adminSocket.emit("screenSupervisionAccepted",{requestId:id,username:session.username});}else{if(adminSocket)adminSocket.emit("screenSupervisionRejected",{requestId:id,username:session.username});screenSupervisionSessions.delete(id);}});
+  socket.on("screenOfferToAdmin", ({requestId,offer}={})=>{const id=String(requestId||"");const session=screenSupervisionSessions.get(id);if(!session||session.userSocketId!==socket.id||!isScreenSupervisionEnabled())return;const adminSocket=io.sockets.sockets.get(session.adminSocketId);if(adminSocket)adminSocket.emit("screenOfferFromUser",{requestId:id,from:session.username,offer});});
+  socket.on("screenAnswerToUser", ({requestId,answer}={})=>{if(!socket.data.admin)return;const id=String(requestId||"");const session=screenSupervisionSessions.get(id);if(!session||session.adminSocketId!==socket.id||!isScreenSupervisionEnabled())return;const userSocket=io.sockets.sockets.get(session.userSocketId);if(userSocket)userSocket.emit("screenAnswerFromAdmin",{requestId:id,answer});});
+  socket.on("screenIceToAdmin", ({requestId,candidate}={})=>{const id=String(requestId||"");const session=screenSupervisionSessions.get(id);if(!session||session.userSocketId!==socket.id||!isScreenSupervisionEnabled())return;const adminSocket=io.sockets.sockets.get(session.adminSocketId);if(adminSocket)adminSocket.emit("screenIceFromUser",{requestId:id,candidate});});
+  socket.on("screenIceToUser", ({requestId,candidate}={})=>{if(!socket.data.admin)return;const id=String(requestId||"");const session=screenSupervisionSessions.get(id);if(!session||session.adminSocketId!==socket.id||!isScreenSupervisionEnabled())return;const userSocket=io.sockets.sockets.get(session.userSocketId);if(userSocket)userSocket.emit("screenIceFromAdmin",{requestId:id,candidate});});
+  socket.on("screenSupervisionEnd", ({requestId}={})=>{const id=String(requestId||"");const session=screenSupervisionSessions.get(id);if(!session)return;if(socket.data.admin&&session.adminSocketId===socket.id)endScreenSession(id,"El administrador ha terminado la visualización de pantalla.");else if(session.userSocketId===socket.id)endScreenSession(id,"El usuario ha dejado de compartir su pantalla.");});
+  socket.on("screenAuthenticate", token=>{const u=sessionUserRaw(token);if(!u)return socket.emit("screenAuthenticationError","Sesión no válida.");if(globalAccessEnabled()&&!globalOwnerCanAccess(u.username)){socket.emit("screenAuthenticationError","No tienes acceso a este servicio.");return socket.disconnect(true);}const username=norm(u.username);const previousSid=screenTransportSockets.get(username);if(previousSid&&previousSid!==socket.id){const previous=io.sockets.sockets.get(previousSid);if(previous)previous.disconnect(true);}screenTransportSockets.set(username,socket.id);socket.data.username=u.username;socket.data.screenTransport=true;socket.emit("screenAuthenticated",{username:u.username});});
 
   socket.on("cameraSupervisionResponse", ({ requestId, accepted } = {}) => {
     const id = String(requestId || "");
@@ -8610,7 +8653,8 @@ io.on("connection", socket => {
         }
       }
       const isCameraTransportDisconnect = !!socket.data?.cameraTransport;
-      if (!isCameraTransportDisconnect) {
+      const isScreenTransportDisconnect = !!socket.data?.screenTransport;
+      if (!isCameraTransportDisconnect && !isScreenTransportDisconnect) {
         for (const [requestId, session] of cameraSupervisionSessions.entries()) {
           if (session.userSocketId === socket.id) endCameraSession(requestId, "El usuario se desconectó.");
         }
@@ -8634,6 +8678,13 @@ io.on("connection", socket => {
       const cameraUsername = socket.data?.cameraTransport ? norm(socket.data.username || "") : "";
       if (cameraUsername && cameraTransportSockets.get(cameraUsername) === socket.id) {
         cameraTransportSockets.delete(cameraUsername);
+      }
+      const screenUsername = socket.data?.screenTransport ? norm(socket.data.username || "") : "";
+      if (screenUsername && screenTransportSockets.get(screenUsername) === socket.id) screenTransportSockets.delete(screenUsername);
+      if (isScreenTransportDisconnect) {
+        for (const [requestId, session] of screenSupervisionSessions.entries()) {
+          if (session.userSocketId === socket.id) endScreenSession(requestId, "La conexión de pantalla terminó.");
+        }
       }
       const username = online.get(socket.id);
       if (username) {
