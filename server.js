@@ -203,6 +203,10 @@ const supabaseReady = new Promise(resolve => {
 let supabaseWriteQueue = Promise.resolve();
 const STATE_CACHE = new Map();
 
+function stateKey(file) {
+  return path.basename(String(file || "")).trim();
+}
+
 function readLocalFallback(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); }
   catch { return fallback; }
