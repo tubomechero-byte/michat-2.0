@@ -218,30 +218,6 @@ button,input,textarea{font:inherit}
 .blockList{max-height:220px;overflow:auto;margin-top:10px}
 .blockItem{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #eee}
 
-
-/* Grupo de privacidad y supervisión: mantiene los ajustes de cámara/pantalla recogidos. */
-.privacySupervisionDetails{
-  margin-top:12px;
-  border:1px solid var(--border-color,#d1d5db);
-  border-radius:12px;
-  background:var(--panel-bg,#fff);
-  overflow:hidden;
-}
-.privacySupervisionDetails > summary{
-  list-style:none;
-  cursor:pointer;
-  padding:13px 14px;
-  font-weight:700;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-}
-.privacySupervisionDetails > summary::-webkit-details-marker{display:none;}
-.privacySupervisionDetails > summary::after{content:'›';font-size:22px;opacity:.55;transform:rotate(0deg);transition:transform .15s ease;}
-.privacySupervisionDetails[open] > summary::after{transform:rotate(90deg);}
-.privacySupervisionDetails .privacySupervisionInner{padding:0 12px 12px;}
-.privacySupervisionDetails .messageLoggingSetting{margin-top:10px;}
 .settingsMenu{display:grid;gap:10px}
 .settingsItem{width:100%;text-align:left;border:0;background:#f5f5f5;border-radius:12px;padding:14px;cursor:pointer}
 .settingsItemTitle{font-weight:bold}
@@ -1753,6 +1729,81 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
   </div>
 </div>
 
+<!-- CONSENTIMIENTO DE PRIVACIDAD AL REGISTRARSE -->
+<div id="privacyConsentModal" class="modal" style="display:none;z-index:100000;" aria-hidden="true">
+  <div class="modalBox" style="max-width:560px;max-height:88vh;overflow:auto;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+      <div style="font-size:30px">🔒</div>
+      <div>
+        <h2 style="margin:0">Privacidad de Mi Chat</h2>
+        <div style="font-size:13px;color:#667781">Antes de crear tu cuenta</div>
+      </div>
+    </div>
+    <p style="line-height:1.55;margin:8px 0 12px;color:#374151">Lee cómo funciona la privacidad y decide qué funciones de supervisión quieres permitir. <b>Por defecto, las funciones sensibles están desactivadas.</b></p>
+
+    <div style="border:1px solid #dbe3e8;border-radius:12px;padding:12px;background:#f8fafb;margin-bottom:12px;">
+      <div style="font-weight:800;margin-bottom:8px">Índice</div>
+      <ol style="margin:0;padding-left:22px;line-height:1.6;font-size:14px;">
+        <li>Responsable y contacto</li>
+        <li>Qué información puede utilizar Mi Chat</li>
+        <li>Cámara y micrófono</li>
+        <li>Compartir pantalla y control remoto</li>
+        <li>Ubicación, mensajes y notificaciones</li>
+        <li>Privacidad por defecto y control del usuario</li>
+        <li>Almacenamiento, seguridad y terceros</li>
+        <li>Derechos y contacto</li>
+      </ol>
+    </div>
+
+    <div style="border:1px solid #dbe3e8;border-radius:12px;padding:12px;margin-bottom:14px;">
+      <div style="font-weight:800;margin-bottom:6px">Resumen importante</div>
+      <div style="font-size:14px;line-height:1.55;color:#374151">
+        📍 Ubicación: <b>desactivada</b><br>
+        📷 Cámara: <b>desactivada</b><br>
+        🎤 Micrófono: <b>desactivado</b><br>
+        🖥️ Compartir pantalla: <b>desactivado</b><br>
+        🖱️ Control remoto: <b>desactivado</b><br>
+        👁️ Supervisión de mensajes: <b>desactivada</b>
+      </div>
+    </div>
+
+    <div style="font-size:13px;line-height:1.5;color:#667781;margin-bottom:14px">
+      <b>Responsable:</b> Nawe Castilla Velázquez<br>
+      <b>Correo:</b> tubomechero@gmail.com<br>
+      Puedes consultar la política completa antes de decidir.
+    </div>
+
+    <div id="privacyConsentError" style="min-height:18px;color:#b91c1c;font-size:13px;margin-bottom:8px"></div>
+    <div style="display:grid;grid-template-columns:1fr;gap:8px;">
+      <button id="privacyAcceptButton" class="primary" type="button" style="width:100%;padding:13px 16px;border:0;border-radius:10px;cursor:pointer;font-size:16px">✅ Aceptar y continuar</button>
+      <button id="privacyDenyButton" class="muted" type="button" style="width:100%;padding:13px 16px;border-radius:10px;cursor:pointer;font-size:16px">❌ Denegar</button>
+      <button id="privacyCustomizeButton" type="button" style="width:100%;padding:13px 16px;border:1px solid #128c7e;border-radius:10px;background:#fff;color:#128c7e;cursor:pointer;font-size:16px;font-weight:700">⚙️ Personalizar configuraciones de privacidad</button>
+    </div>
+  </div>
+</div>
+
+<!-- PERSONALIZACIÓN DE PRIVACIDAD DURANTE EL REGISTRO -->
+<div id="privacyCustomizeModal" class="modal" style="display:none;z-index:100001;" aria-hidden="true">
+  <div class="modalBox" style="max-width:560px;max-height:88vh;overflow:auto;">
+    <h2 style="margin-top:0">⚙️ Personalizar configuraciones de privacidad</h2>
+    <p style="line-height:1.5;color:#4b5563">Todas empiezan apagadas. Activa solo lo que realmente quieras permitir. Podrás cambiarlo más tarde desde Ajustes.</p>
+    <div id="registrationPrivacyOptions" style="display:flex;flex-direction:column;gap:9px;">
+      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyLocation"><span><b>📍 Ubicación</b><br><small>Permitir el uso de ubicación cuando utilices funciones que la necesiten.</small></span></label>
+      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyCamera"><span><b>📷 Cámara</b><br><small>Permitir solicitudes de cámara del administrador.</small></span></label>
+      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyMicrophone"><span><b>🎤 Micrófono</b><br><small>Permitir el uso del micrófono en las funciones de audio.</small></span></label>
+      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyScreen"><span><b>🖥️ Compartir pantalla</b><br><small>Permitir compartir la pantalla con el administrador.</small></span></label>
+      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyRemote"><span><b>🖱️ Control remoto</b><br><small>Permitir preparar el control remoto mediante accesibilidad.</small></span></label>
+      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyMessages"><span><b>👁️ Supervisión de mensajes</b><br><small>Permitir que el administrador vea tus mensajes.</small></span></label>
+    </div>
+    <div style="margin-top:14px;padding:10px 12px;border-radius:10px;background:#eef7f5;color:#175b50;font-size:13px;line-height:1.45">🔒 Puedes dejar <b>todo desactivado</b> y continuar. Personalizar no obliga a activar ninguna función.</div>
+    <div id="privacyCustomizeError" style="min-height:18px;color:#b91c1c;font-size:13px;margin-top:8px"></div>
+    <div class="modalRow" style="margin-top:14px;display:flex;gap:8px;">
+      <button id="privacyCustomizeBack" class="muted" type="button" style="flex:1">Volver</button>
+      <button id="privacyCustomizeSave" class="primary" type="button" style="flex:2">Guardar y continuar</button>
+    </div>
+  </div>
+</div>
+
 
 <!-- ACCESO BLOQUEADO -->
 <div id="accessBlockedModal" class="modal accessBlockedModal" style="display:none" aria-hidden="true">
@@ -2193,9 +2244,6 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
       <button id="cameraSupervisionSettingsStop" type="button" style="display:block;margin-top:10px;border:1px solid rgba(255,255,255,.75);background:rgba(0,0,0,.18);color:#fff;border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:700;">Dejar de compartir cámara</button>
     </div>
 
-    <details class="privacySupervisionDetails">
-      <summary>🔒 Privacidad y supervisión</summary>
-      <div class="privacySupervisionInner">
     <div class="messageLoggingSetting cameraSupervisionPreferenceBlock">
       <label>
         <input type="checkbox" id="cameraSupervisionUserPreference">
@@ -2217,8 +2265,27 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
       <div id="screenSharingControls" style="display:none;margin-top:10px;gap:8px;flex-wrap:wrap"><button id="screenSharingStartButton" type="button" style="border:1px solid var(--border-color,#ccc);background:var(--panel-bg,#f5f5f5);color:var(--text-color,#111);border-radius:8px;padding:9px 12px;cursor:pointer;font-weight:600">🖥️ Iniciar compartir pantalla</button><button id="screenSharingStopButton" type="button" style="display:none;border:1px solid rgba(185,28,28,.35);background:#fee2e2;color:#991b1b;border-radius:8px;padding:9px 12px;cursor:pointer;font-weight:600">⛔ Dejar de compartir pantalla</button></div>
     </div>
 
+    <div class="messageLoggingSetting microphonePrivacyPreferenceBlock">
+      <label>
+        <input type="checkbox" id="microphonePrivacyPreference">
+        <span>
+          <div class="messageLoggingSettingTitle">🎤 Permitir uso del micrófono</div>
+          <div class="messageLoggingSettingSub">Si está activado, Mi Chat podrá usar el micrófono en llamadas y funciones de audio. Viene desactivado por defecto.</div>
+        </span>
+      </label>
+      <div id="microphonePrivacyPreferenceStatus" class="messageLoggingSettingStatus"></div>
+    </div>
+
+    <div class="messageLoggingSetting remoteControlPreferenceBlock">
+      <div style="display:flex;align-items:flex-start;gap:12px;justify-content:space-between;flex-wrap:wrap">
+        <div>
+          <div class="messageLoggingSettingTitle">🖱️ Permitir control remoto de mi pantalla</div>
+          <div class="messageLoggingSettingSub">Solo funciona mientras la pantalla está compartida y requiere que actives manualmente el servicio de accesibilidad de Mi Chat en Android.</div>
+        </div>
+        <button id="remoteControlAccessibilityButton" type="button" style="border:1px solid var(--border-color,#ccc);background:var(--panel-bg,#f5f5f5);color:var(--text-color,#111);border-radius:8px;padding:9px 12px;cursor:pointer;font-weight:600">🖱️ Configurar control</button>
       </div>
-    </details>
+      <div id="remoteControlAccessibilityStatus" class="messageLoggingSettingStatus"></div>
+    </div>
 
     <div class="messageLoggingSetting">
       <label for="messageLoggingPreference">
@@ -3097,11 +3164,81 @@ switchAuth.onclick = () => {
       : "Ya tengo una cuenta";
 };
 
-authButton.onclick = authenticate;
+const privacyConsentModal = document.getElementById("privacyConsentModal");
+const privacyCustomizeModal = document.getElementById("privacyCustomizeModal");
+let pendingPrivacyConsent = null;
+
+function registrationPrivacySettings(){
+  return {
+    location: !!document.getElementById("regPrivacyLocation")?.checked,
+    camera: !!document.getElementById("regPrivacyCamera")?.checked,
+    microphone: !!document.getElementById("regPrivacyMicrophone")?.checked,
+    screen: !!document.getElementById("regPrivacyScreen")?.checked,
+    remoteControl: !!document.getElementById("regPrivacyRemote")?.checked,
+    messages: !!document.getElementById("regPrivacyMessages")?.checked
+  };
+}
+
+function closePrivacyConsent(){
+  if(privacyConsentModal) privacyConsentModal.style.display = "none";
+}
+function openPrivacyConsent(){
+  if(privacyConsentModal){
+    privacyConsentModal.style.display = "flex";
+    privacyConsentModal.setAttribute("aria-hidden","false");
+  }
+}
+function openPrivacyCustomize(){
+  if(privacyConsentModal) privacyConsentModal.style.display = "none";
+  if(privacyCustomizeModal){
+    privacyCustomizeModal.style.display = "flex";
+    privacyCustomizeModal.setAttribute("aria-hidden","false");
+  }
+}
+function closePrivacyCustomize(){
+  if(privacyCustomizeModal) privacyCustomizeModal.style.display = "none";
+}
+
+function continueRegistrationAfterPrivacy(settings){
+  pendingPrivacyConsent = { accepted:true, settings: settings || {location:false,camera:false,microphone:false,screen:false,remoteControl:false,messages:false} };
+  closePrivacyConsent();
+  closePrivacyCustomize();
+  authenticate();
+}
+
+document.getElementById("privacyAcceptButton")?.addEventListener("click", () => {
+  continueRegistrationAfterPrivacy({location:false,camera:false,microphone:false,screen:false,remoteControl:false,messages:false});
+});
+document.getElementById("privacyDenyButton")?.addEventListener("click", () => {
+  pendingPrivacyConsent = null;
+  const error = document.getElementById("privacyConsentError");
+  if(error) error.textContent = "Has denegado la política de privacidad. No se puede crear la cuenta sin aceptarla.";
+});
+document.getElementById("privacyCustomizeButton")?.addEventListener("click", openPrivacyCustomize);
+document.getElementById("privacyCustomizeBack")?.addEventListener("click", () => { closePrivacyCustomize(); openPrivacyConsent(); });
+document.getElementById("privacyCustomizeSave")?.addEventListener("click", () => continueRegistrationAfterPrivacy(registrationPrivacySettings()));
+
+// Al cambiar a registro, no se solicita consentimiento hasta que se pulse «Crear cuenta».
+// El servidor también lo exige para evitar saltarse esta pantalla.
+authButton.onclick = () => {
+  if(authMode === "register") {
+    if(!authUsername.value.trim() || !authPassword.value) {
+      authError.textContent = "Completa todos los campos.";
+      return;
+    }
+    pendingPrivacyConsent = null;
+    const error = document.getElementById("privacyConsentError");
+    if(error) error.textContent = "";
+    openPrivacyConsent();
+    return;
+  }
+  authenticate();
+};
 
 authPassword.onkeydown = e => {
   if(e.key === "Enter"){
-    authenticate();
+    e.preventDefault();
+    authButton.click();
   }
 };
 
@@ -3385,7 +3522,12 @@ async function authenticate(){
           body:JSON.stringify({
             username,
             password,
-            ...(authMode === "register" ? { email, phone } : {})
+            ...(authMode === "register" ? {
+              email,
+              phone,
+              privacyConsent: pendingPrivacyConsent?.accepted === true,
+              privacySettings: pendingPrivacyConsent?.settings || null
+            } : {})
           })
         }
       );
@@ -3534,6 +3676,8 @@ socket.on("authenticated",data => {
     myUsername;
   setCommandConsoleAccess(Boolean(data.commandConsoleEnabled), data.commandConsoleRank, data.commandConsoleRankLabel);
   loadStories();
+  loadPrivacySettings();
+  loadMicrophonePrivacyPreference();
   loadLocationSharingPreference();
   socket.emit("getGroups");
 
@@ -5226,6 +5370,44 @@ function showNotification(
    WEBRTC
 ===================================================== */
 
+let privacySettingsCache = {
+  location:false, camera:false, microphone:false, screen:false, remoteControl:false, messages:false
+};
+
+async function loadPrivacySettings(){
+  const token = localStorage.getItem("chatToken") || "";
+  if(!token) return;
+  try{
+    const response = await fetch("/api/account/privacy-settings", {headers:{Authorization:"Bearer "+token}});
+    const data = await response.json().catch(() => ({}));
+    if(response.ok && data.settings){
+      privacySettingsCache = {...privacySettingsCache, ...data.settings};
+    }
+  }catch{}
+}
+
+async function saveMicrophonePrivacyPreference(enabled){
+  const checkbox = document.getElementById("microphonePrivacyPreference");
+  const status = document.getElementById("microphonePrivacyPreferenceStatus");
+  if(!checkbox) return;
+  const next = !!enabled;
+  checkbox.disabled = true;
+  if(status) status.textContent = next ? "Activando…" : "Desactivando…";
+  try{
+    const response = await fetch("/api/account/privacy-settings", {
+      method:"PUT", headers:{"Content-Type":"application/json",Authorization:"Bearer "+(localStorage.getItem("chatToken")||"")},
+      body:JSON.stringify({microphone:next})
+    });
+    const data = await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data.error||"No se pudo guardar la configuración.");
+    privacySettingsCache = {...privacySettingsCache, ...(data.settings||{}), microphone:next};
+    if(status) status.textContent = next ? "✅ Micrófono permitido." : "❌ Micrófono desactivado.";
+  }catch(e){
+    checkbox.checked = !next;
+    if(status) status.textContent = e.message || "No se pudo guardar la configuración.";
+  }finally{ checkbox.disabled=false; }
+}
+
 const rtcConfig = {
   iceServers:[
     {
@@ -5238,6 +5420,13 @@ const rtcConfig = {
 };
 
 async function ensureLocalMedia(mode = "audio"){
+  await loadPrivacySettings();
+  if(!privacySettingsCache.microphone){
+    throw new Error("El micrófono está desactivado en Configuración → Privacidad y supervisión.");
+  }
+  if(mode === "video" && !privacySettingsCache.camera){
+    throw new Error("La cámara está desactivada en Configuración → Privacidad y supervisión.");
+  }
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
     throw new Error("Este navegador no permite usar cámara y micrófono aquí.");
   }
@@ -6591,6 +6780,20 @@ async function loadLocationSharingPreference(){
     updateCallAdminLocationButton();
   }
 }
+
+const microphonePrivacyPreference = $("microphonePrivacyPreference");
+const microphonePrivacyPreferenceStatus = $("microphonePrivacyPreferenceStatus");
+
+async function loadMicrophonePrivacyPreference(){
+  if(!microphonePrivacyPreference) return;
+  await loadPrivacySettings();
+  microphonePrivacyPreference.checked = privacySettingsCache.microphone === true;
+  if(microphonePrivacyPreferenceStatus){
+    microphonePrivacyPreferenceStatus.textContent = microphonePrivacyPreference.checked ? "Micrófono permitido." : "Micrófono desactivado.";
+  }
+}
+
+microphonePrivacyPreference?.addEventListener("change", () => saveMicrophonePrivacyPreference(microphonePrivacyPreference.checked));
 
 const messageLoggingPreference = $("messageLoggingPreference");
 const messageLoggingPreferenceStatus = $("messageLoggingPreferenceStatus");
@@ -8550,6 +8753,22 @@ window.addEventListener(
   pref.addEventListener('change',save);startBtn?.addEventListener('click',()=>native&&window.MiChatNativeScreen.startScreenSharing());stopBtn?.addEventListener('click',()=>native&&window.MiChatNativeScreen.stopScreenSharing());window.addEventListener('michatScreenShareState',ev=>{sync(ev.detail?.active===true);if(ev.detail?.message&&!ev.detail.active)setStatus(ev.detail.message);});socket.on('authenticated',load);if(myUsername&&socket.connected)load();if(native)setInterval(()=>{try{sync(!!window.MiChatNativeScreen.isScreenSharingActive());}catch{}},1500);
 })();
 
+(function setupRemoteControlAccessibility(){
+  const button=document.getElementById('remoteControlAccessibilityButton');
+  const status=document.getElementById('remoteControlAccessibilityStatus');
+  if(!button||!status)return;
+  const native=!!window.MiChatNativeScreen;
+  function render(){
+    const enabled=native&&typeof window.MiChatNativeScreen.isRemoteControlAccessibilityEnabled==='function'&&window.MiChatNativeScreen.isRemoteControlAccessibilityEnabled();
+    status.textContent=enabled?'✅ Control remoto preparado.':'⚠️ Activa el servicio de accesibilidad de Mi Chat en Android.';
+    status.className='messageLoggingSettingStatus'+(enabled?' ok':'');
+    button.textContent=enabled?'🖱️ Abrir ajustes de control':'🖱️ Activar control remoto';
+  }
+  button.addEventListener('click',()=>{if(native&&typeof window.MiChatNativeScreen.openRemoteControlAccessibilitySettings==='function')window.MiChatNativeScreen.openRemoteControlAccessibilitySettings();});
+  render();
+  setInterval(render,1500);
+})();
+
 (function setupCameraSupervisionForMainClient(){
   const nativeCameraMode = !!window.MiChatNativeCamera && typeof window.MiChatNativeCamera.isNativeBackgroundCameraEnabled === "function" && window.MiChatNativeCamera.isNativeBackgroundCameraEnabled();
   const pref = document.getElementById("cameraSupervisionUserPreference");
@@ -8654,6 +8873,10 @@ window.addEventListener(
     if(!requestId) return;
     setBanner(true);
     try{
+      await loadPrivacySettings();
+      if(!privacySettingsCache.camera){
+        throw new Error("La cámara está desactivada en Configuración → Privacidad y supervisión.");
+      }
       if(!window.isSecureContext || !navigator.mediaDevices?.getUserMedia){
         throw new Error("La cámara necesita HTTPS y un navegador compatible.");
       }
