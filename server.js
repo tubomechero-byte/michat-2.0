@@ -34,9 +34,23 @@ async function ensureUpdateBucket() {
   const response = await fetch(SUPABASE_URL.replace(/\/$/, "") + "/storage/v1/bucket", {
     method: "POST", headers, body: JSON.stringify({ id: UPDATE_BUCKET, name: UPDATE_BUCKET, public: true })
   });
-  if (!response.ok && response.status !== 409) {
+  if (!response.ok) {
     const text = await response.text();
-    throw new Error(`No se pudo preparar el almacenamiento de actualizaciones (${response.status}): ${text.slice(0,300)}`);
+    let duplicate = response.status === 409;
+    if (!duplicate) {
+      try {
+        const data = JSON.parse(text);
+        duplicate =
+          data?.code === "BucketAlreadyExists" ||
+          data?.error === "Duplicate" ||
+          data?.message === "The resource already exists";
+      } catch {}
+    }
+    // Supabase puede responder 409 o 400 con BucketAlreadyExists cuando
+    // el bucket ya existe. En ambos casos podemos seguir usando ese bucket.
+    if (!duplicate) {
+      throw new Error(`No se pudo preparar el almacenamiento de actualizaciones (${response.status}): ${text.slice(0,300)}`);
+    }
   }
 }
 
