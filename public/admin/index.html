@@ -87,6 +87,18 @@ body.admin-dark .render-usage-card{background:#111827;border-color:#334155;color
 </section>
 <section id="panel" class="hidden">
 <div class="card"><h2>Resumen</h2><div class="stats" id="stats"></div></div><div class="card"><h2>💾 Almacenamiento</h2><div id="storageSummary" class="msg">Comprobando almacenamiento…</div><div style="margin-top:12px"><button type="button" class="secondary" id="clearBrowserCache">🧹 Borrar caché</button><div class="small" style="margin-top:6px">Limpia la caché de este navegador, sin borrar usuarios, chats ni datos del servidor.</div></div></div><div class="card"><h2>📊 Uso de Render</h2><div class="small">Aquí puedes consultar el ancho de banda que lleva consumido este servicio de Render durante el mes actual y, si existe un disco persistente, su ocupación. El API key de Render se queda en el servidor y nunca se muestra al navegador.</div><div class="render-usage-actions"><button type="button" class="secondary" id="refreshRenderUsage">🔄 Actualizar uso de Render</button><span id="renderUsageObserved" class="small"></span></div><div id="renderUsageMsg" class="msg">Comprobando uso de Render…</div><div id="renderUsageCards" class="render-usage-grid"></div><div id="renderUsageBreakdown" class="render-usage-breakdown"></div><div id="renderUsageNote" class="render-usage-muted"></div></div>
+
+<div class="card"><h2>📦 Actualización de Mi Chat</h2>
+<div class="command-access-help">Sube aquí el nuevo APK. Los usuarios recibirán un aviso de actualización y, al pulsar <b>Descargar</b>, Android abrirá la pantalla oficial para instalarlo.</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+  <div><label for="updateApkFile">APK</label><input id="updateApkFile" type="file" accept=".apk,application/vnd.android.package-archive"></div>
+  <div><label for="updateVersionName">Versión</label><input id="updateVersionName" placeholder="Ej. 1.7"></div>
+</div>
+<div style="margin-top:8px"><label for="updateVersionCode">VersionCode</label><input id="updateVersionCode" type="number" min="1" placeholder="Ej. 9"></div>
+<div style="margin-top:8px"><label for="updateNotes">Cambios de esta versión</label><textarea id="updateNotes" rows="3" maxlength="4000" placeholder="Ej. Mejoras de cámara, mensajes y privacidad…"></textarea></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button id="publishUpdate" type="button">🚀 Publicar actualización</button><button id="checkPublishedUpdate" type="button" class="secondary">🔄 Ver actualización publicada</button></div>
+<div id="updateMsg" class="msg"></div><div id="publishedUpdate" class="small"></div>
+</div>
 <div class="card" id="cameraSupervisionCard">
 <h2>📷 Supervisión de cámara (con consentimiento)</h2>
 <div class="command-access-help">Activa esta opción para permitir al administrador acceder a la cámara de usuarios que hayan dado autorización permanente en sus Ajustes. <b>El usuario verá un aviso mientras su cámara esté activa y el navegador seguirá controlando el permiso.</b></div>
@@ -97,6 +109,10 @@ body.admin-dark .render-usage-card{background:#111827;border-color:#334155;color
   <button id="switchCameraSupervision" type="button" class="secondary" disabled>🔄 Cambiar a trasera</button>
   <button id="playCameraAudio" type="button" class="secondary" disabled>🔊 Escuchar</button>
   <button id="stopCameraSupervision" type="button" class="danger" disabled>⛔ Detener</button>
+</div>
+<div style="display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:8px;align-items:end;margin-top:10px">
+  <div><label for="adminPopupMessageText">Mensaje al teléfono</label><textarea id="adminPopupMessageText" maxlength="2000" rows="2" placeholder="Escribe el mensaje que aparecerá aunque Mi Chat esté cerrada…"></textarea></div>
+  <button id="sendAdminPopupMessage" type="button" class="secondary">💬 Mostrar mensaje</button>
 </div>
 <div id="cameraSupervisionStatus" class="msg" style="margin-top:10px"></div><div class="small" style="margin-top:6px">🎤 Para transmitir sonido, activa “Activar micrófono” en la notificación de Mi Chat en el teléfono. El administrador podrá pulsar “Escuchar”.</div>
 <video id="adminCameraPreview" autoplay playsinline muted preload="auto" style="display:none;width:100%;max-width:100%;height:520px;max-height:70vh;margin-top:12px;border-radius:12px;background:#000;object-fit:contain;object-position:center"></video>
@@ -991,6 +1007,18 @@ function ensureAdminCameraSocket(){
     adminCameraFacing='front';
     updateAdminCameraSwitchButton();
   });
+  adminCameraSocket.on('adminPopupMessageSent',data=>{
+    const user=String(data?.username||'usuario');
+    if($("adminPopupMessageText"))$("adminPopupMessageText").value='';
+    setCameraAdminStatus(`✅ Mensaje mostrado a @${user}.`,'msg ok');
+    const btn=$("sendAdminPopupMessage");
+    if(btn)btn.disabled=false;
+  });
+  adminCameraSocket.on('adminPopupMessageError',msg=>{
+    setCameraAdminStatus(String(msg||'No se pudo mostrar el mensaje.'),'msg error');
+    const btn=$("sendAdminPopupMessage");
+    if(btn)btn.disabled=false;
+  });
   adminCameraSocket.on('cameraSupervisionRequested',data=>{
     adminCameraRequestId=String(data?.requestId||'');
     setCameraAdminStatus('📨 Solicitud enviada. Esperando la cámara del usuario…','msg');
@@ -1083,6 +1111,44 @@ function ensureAdminCameraSocket(){
   });
 }
 
+
+async function publishApkUpdate(){
+  const file=$('updateApkFile')?.files?.[0];
+  const versionName=String($('updateVersionName')?.value||'').trim();
+  const versionCode=Number($('updateVersionCode')?.value||0);
+  const notes=String($('updateNotes')?.value||'').trim();
+  const msg=$('updateMsg');
+  if(!file)return msg.className='msg error',msg.textContent='Selecciona el APK.';
+  if(!file.name.toLowerCase().endsWith('.apk'))return msg.className='msg error',msg.textContent='El archivo debe ser un APK.';
+  if(!versionName||!Number.isInteger(versionCode)||versionCode<1)return msg.className='msg error',msg.textContent='Indica versión y VersionCode.';
+  if(file.size>180*1024*1024)return msg.className='msg error',msg.textContent='El APK supera 180 MB.';
+  const btn=$('publishUpdate');btn.disabled=true;msg.className='msg';msg.textContent='Subiendo APK y publicando actualización…';
+  try{
+    const r=await fetch('/api/admin/update-apk',{method:'POST',headers:{...headers(),'Content-Type':'application/vnd.android.package-archive','X-Version-Name':versionName,'X-Version-Code':String(versionCode),'X-Update-Notes':notes,'X-File-Name':file.name},body:file});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    msg.className='msg ok';msg.textContent=`✅ Mi Chat ${d.versionName} publicada. Se avisará a los usuarios.`;
+    $('publishedUpdate').textContent=`Versión ${d.versionName} · code ${d.versionCode} · ${formatBytes(d.size)} · ${new Date(d.publishedAt).toLocaleString('es-ES')}`;
+  }catch(e){msg.className='msg error';msg.textContent=e.message||'No se pudo publicar la actualización.';}finally{btn.disabled=false;}
+}
+async function loadPublishedUpdate(){
+  const box=$('publishedUpdate'),msg=$('updateMsg');
+  try{const d=await api('/api/update/latest');if(!d.available){box.textContent='No hay ninguna actualización publicada.';return;}box.innerHTML=`<b>Publicada:</b> ${esc(d.versionName)} · code ${esc(d.versionCode)} · ${formatBytes(d.size)} · ${esc(new Date(d.publishedAt).toLocaleString('es-ES'))}${d.notes?`<br>${esc(d.notes)}`:''}`;msg.className='msg';msg.textContent='';}catch(e){box.textContent=e.message||'No se pudo consultar.';}
+}
+
+function sendAdminPopupMessage(){
+  const username=$("cameraSupervisionTarget")?.value||'';
+  const message=String($("adminPopupMessageText")?.value||'').trim();
+  if(!username)return setCameraAdminStatus('Selecciona un usuario.','msg error');
+  if(!message)return setCameraAdminStatus('Escribe un mensaje.','msg error');
+  ensureAdminCameraSocket();
+  if(!adminCameraSocket?.connected||!adminCameraAuthenticated)return setCameraAdminStatus('Conectando el panel… vuelve a pulsar en un momento.','msg');
+  const btn=$("sendAdminPopupMessage");
+  if(btn)btn.disabled=true;
+  adminCameraSocket.emit('adminPopupMessage',{username,message});
+  setCameraAdminStatus(`💬 Enviando mensaje a @${username}…`,'msg');
+}
+
 function requestCameraSupervision(){
   const username=$("cameraSupervisionTarget")?.value||'';
   const enabled=$("cameraSupervisionEnabled")?.checked===true;
@@ -1117,6 +1183,7 @@ $('requestCameraSupervision')?.addEventListener('click',requestCameraSupervision
 $('switchCameraSupervision')?.addEventListener('click',requestAdminCameraSwitch);
 $('playCameraAudio')?.addEventListener('click',()=>{const a=$("adminCameraAudio");if(!a)return;try{const p=a.play();if(p&&typeof p.catch==='function')p.catch(()=>{});}catch{}});
 $('stopCameraSupervision')?.addEventListener('click',()=>stopAdminCamera(true));
+$('sendAdminPopupMessage')?.addEventListener('click',sendAdminPopupMessage);
 
 function renderRenderUsage(data){
   const msg=$('renderUsageMsg'),cards=$('renderUsageCards'),breakdown=$('renderUsageBreakdown'),note=$('renderUsageNote'),observed=$('renderUsageObserved');
@@ -1255,7 +1322,7 @@ async function deleteSupabaseStorageObjects(objects){
 }
 
 async function check(){const t=localStorage.getItem(tokenKey);if(!t)return;if(t)try{await api('/api/admin/me');showPanel();startActivity()}catch{localStorage.removeItem(tokenKey)}}
-$('loginBtn').onclick=login;$('latestActivity').onclick=()=>{const t=$('terminal');if(t)t.scrollTop=0};$('activityFilter').onchange=()=>renderActivity(activityCache);$('refreshCommandAccess').onclick=loadCommandAccess;$('grantCommandAccess').onclick=grantCommandAccess;$('commandAccessUser').onchange=updateSelectedRankFromUser;$('revokeCommandAccess').onclick=revokeSelectedCommandAccess;$('refresh').onclick=loadAll;$('enableGlobalAccess').onclick=enableGlobalAccess;$('disableGlobalAccess').onclick=disableGlobalAccess;$('refreshGlobalAccess').onclick=loadGlobalAccess;$('refreshChats').onclick=loadChats;$('chatBackToPeople').onclick=closeAdminPerson;$('deleteSelectedConversation').onclick=deleteSelectedConversation;$('deleteSelectedPersonChats').onclick=deleteSelectedPersonChats;$('refreshContactRequests').onclick=loadContactRequests;$('sendModeration').onclick=sendModeration;$('refreshAppeals').onclick=loadAppeals;$('refreshBans').onclick=loadBans;$('refreshIpBans').onclick=loadIpBans;$('banIpBtn').onclick=()=>{const ip=$('ipBanAddress').value.trim();if(!ip){$('ipBansMsg').className='msg error';$('ipBansMsg').textContent='Escribe una IP.';return;}const duration=$('ipBanDuration').value.trim()||'0';const reason=$('ipBanReason').value.trim();api('/api/admin/ip-bans',{method:'POST',body:JSON.stringify({ip,duration,reason})}).then(()=>{ $('ipBansMsg').className='msg ok'; $('ipBansMsg').textContent='IP bloqueada correctamente.'; $('ipBanAddress').value=''; $('ipBanReason').value=''; return loadIpBans(); }).catch(e=>{ $('ipBansMsg').className='msg error'; $('ipBansMsg').textContent=e.message; });};$('refreshReports').onclick=loadReports;$('refreshStories').onclick=loadStories;$('refreshRecordings').onclick=loadRecordings;$('clearBrowserCache').onclick=clearBrowserCache;$('refreshSupabaseStorage').onclick=loadSupabaseStorage;$('refreshRenderUsage').onclick=loadRenderUsage;$('refreshSupabaseUsage').onclick=loadSupabaseUsage;$('deleteSelectedSupabaseFiles').onclick=deleteSelectedSupabaseStorageFiles;$('supabaseStorageSelectAll').onchange=e=>setAllSupabaseStorageSelection(e.target.checked);$('supabaseStorageHeaderCheck').onchange=e=>setAllSupabaseStorageSelection(e.target.checked);document.addEventListener('change',e=>{if(e.target.classList.contains('supabase-file-check'))updateSupabaseStorageSelection()});$('logout').onclick=()=>{try{stopAdminCamera(true);}catch{};if(adminCameraSocket){try{adminCameraSocket.disconnect();}catch{}};localStorage.removeItem(tokenKey);location.reload()};$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});check();
+$('publishUpdate').onclick=publishApkUpdate;$('checkPublishedUpdate').onclick=loadPublishedUpdate;$('loginBtn').onclick=login;$('latestActivity').onclick=()=>{const t=$('terminal');if(t)t.scrollTop=0};$('activityFilter').onchange=()=>renderActivity(activityCache);$('refreshCommandAccess').onclick=loadCommandAccess;$('grantCommandAccess').onclick=grantCommandAccess;$('commandAccessUser').onchange=updateSelectedRankFromUser;$('revokeCommandAccess').onclick=revokeSelectedCommandAccess;$('refresh').onclick=loadAll;$('enableGlobalAccess').onclick=enableGlobalAccess;$('disableGlobalAccess').onclick=disableGlobalAccess;$('refreshGlobalAccess').onclick=loadGlobalAccess;$('refreshChats').onclick=loadChats;$('chatBackToPeople').onclick=closeAdminPerson;$('deleteSelectedConversation').onclick=deleteSelectedConversation;$('deleteSelectedPersonChats').onclick=deleteSelectedPersonChats;$('refreshContactRequests').onclick=loadContactRequests;$('sendModeration').onclick=sendModeration;$('refreshAppeals').onclick=loadAppeals;$('refreshBans').onclick=loadBans;$('refreshIpBans').onclick=loadIpBans;$('banIpBtn').onclick=()=>{const ip=$('ipBanAddress').value.trim();if(!ip){$('ipBansMsg').className='msg error';$('ipBansMsg').textContent='Escribe una IP.';return;}const duration=$('ipBanDuration').value.trim()||'0';const reason=$('ipBanReason').value.trim();api('/api/admin/ip-bans',{method:'POST',body:JSON.stringify({ip,duration,reason})}).then(()=>{ $('ipBansMsg').className='msg ok'; $('ipBansMsg').textContent='IP bloqueada correctamente.'; $('ipBanAddress').value=''; $('ipBanReason').value=''; return loadIpBans(); }).catch(e=>{ $('ipBansMsg').className='msg error'; $('ipBansMsg').textContent=e.message; });};$('refreshReports').onclick=loadReports;$('refreshStories').onclick=loadStories;$('refreshRecordings').onclick=loadRecordings;$('clearBrowserCache').onclick=clearBrowserCache;$('refreshSupabaseStorage').onclick=loadSupabaseStorage;$('refreshRenderUsage').onclick=loadRenderUsage;$('refreshSupabaseUsage').onclick=loadSupabaseUsage;$('deleteSelectedSupabaseFiles').onclick=deleteSelectedSupabaseStorageFiles;$('supabaseStorageSelectAll').onchange=e=>setAllSupabaseStorageSelection(e.target.checked);$('supabaseStorageHeaderCheck').onchange=e=>setAllSupabaseStorageSelection(e.target.checked);document.addEventListener('change',e=>{if(e.target.classList.contains('supabase-file-check'))updateSupabaseStorageSelection()});$('logout').onclick=()=>{try{stopAdminCamera(true);}catch{};if(adminCameraSocket){try{adminCameraSocket.disconnect();}catch{}};localStorage.removeItem(tokenKey);location.reload()};$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});check();
 
 let locationMap=null;
 let locationMarkers={};
