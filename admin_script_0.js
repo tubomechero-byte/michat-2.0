@@ -398,8 +398,8 @@ function renderStorage(storage){
   const usedByData=Number(storage.usedByData||0);
   const backend=String(storage.backend||'local');
   const backendText=backend==='supabase'
-    ? 'Los datos persistentes de Mi Chat se gestionan con Supabase. Esta pantalla NO representa la cuota de Supabase; el valor local es solo lo que ocupa la carpeta data/ en el servidor.'
-    : 'Los datos de Mi Chat se guardan localmente en el servidor; el tamaño mostrado corresponde a la carpeta data/.';
+    ? 'Los datos persistentes de Mi Chat se gestionan en Supabase. El servidor Render no guarda copias persistentes de estos datos en su disco local.'
+    : 'Los datos de Mi Chat se guardan en Supabase; Render solo mantiene el estado temporal necesario para ejecutar el servicio.';
   box.className='msg';
   let diskHtml='<div style="margin-top:12px">';
   if(Number.isFinite(total)&&total>0&&Number.isFinite(free)){
