@@ -17,6 +17,52 @@ const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 
 const DATA_DIR = path.join(__dirname, "data");
+
+const UPDATE_BUCKET = String(process.env.MICHAT_UPDATE_BUCKET || "michat-updates").trim();
+const UPDATE_MANIFEST_PATH = "latest.json";
+const MAX_UPDATE_APK_BYTES = 180 * 1024 * 1024;
+
+function updatePublicObjectUrl(objectPath) {
+  if (!SUPABASE_URL) return "";
+  const encoded = String(objectPath || "").split("/").map(encodeURIComponent).join("/");
+  return SUPABASE_URL.replace(/\/$/, "") + "/storage/v1/object/public/" + encodeURIComponent(UPDATE_BUCKET) + "/" + encoded;
+}
+
+async function ensureUpdateBucket() {
+  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) throw new Error("Supabase no está configurado para las actualizaciones.");
+  const headers = { apikey: SUPABASE_SECRET_KEY, Authorization: "Bearer " + SUPABASE_SECRET_KEY, "Content-Type": "application/json" };
+  const response = await fetch(SUPABASE_URL.replace(/\/$/, "") + "/storage/v1/bucket", {
+    method: "POST", headers, body: JSON.stringify({ id: UPDATE_BUCKET, name: UPDATE_BUCKET, public: true })
+  });
+  if (!response.ok && response.status !== 409) {
+    const text = await response.text();
+    throw new Error(`No se pudo preparar el almacenamiento de actualizaciones (${response.status}): ${text.slice(0,300)}`);
+  }
+}
+
+async function uploadUpdateObject(objectPath, buffer, contentType) {
+  const headers = {
+    apikey: SUPABASE_SECRET_KEY,
+    Authorization: "Bearer " + SUPABASE_SECRET_KEY,
+    "Content-Type": contentType || "application/octet-stream",
+    "x-upsert": "true",
+    "cache-control": "public, max-age=60"
+  };
+  const url = SUPABASE_URL.replace(/\/$/, "") + "/storage/v1/object/" + encodeURIComponent(UPDATE_BUCKET) + "/" + String(objectPath).split("/").map(encodeURIComponent).join("/");
+  const response = await fetch(url, { method: "POST", headers, body: buffer });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Subida a Supabase Storage fallida (${response.status}): ${text.slice(0,300)}`);
+  }
+}
+
+async function readLatestUpdateManifest() {
+  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) return null;
+  const url = SUPABASE_URL.replace(/\/$/, "") + "/storage/v1/object/" + encodeURIComponent(UPDATE_BUCKET) + "/" + UPDATE_MANIFEST_PATH + "?download=1";
+  const response = await fetch(url, { headers: { apikey: SUPABASE_SECRET_KEY, Authorization: "Bearer " + SUPABASE_SECRET_KEY } });
+  if (!response.ok) return null;
+  try { return await response.json(); } catch { return null; }
+}
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const MESSAGES_FILE = path.join(DATA_DIR, "messages.json");
 const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
@@ -1937,6 +1983,49 @@ function disconnectIpBannedSockets(ip, ban) {
 }
 
 app.use(express.json({ limit: "12mb" }));
+
+app.get("/api/update/latest", async (req, res) => {
+  try {
+    const manifest = await readLatestUpdateManifest();
+    if (!manifest) return res.status(404).json({ available: false });
+    res.set("Cache-Control", "no-store");
+    res.json({ ...manifest, available: true });
+  } catch (error) {
+    res.status(500).json({ available: false, error: error.message || "No se pudo consultar la actualización." });
+  }
+});
+
+app.post("/api/admin/update-apk", requireAdmin, express.raw({ type: ["application/vnd.android.package-archive", "application/octet-stream"], limit: "180mb" }), async (req, res) => {
+  try {
+    const versionName = String(req.headers["x-version-name"] || "").trim();
+    const versionCode = Number(req.headers["x-version-code"] || 0);
+    const notes = String(req.headers["x-update-notes"] || "").trim().slice(0, 4000);
+    const originalName = String(req.headers["x-file-name"] || "MiChat.apk").trim();
+    if (!versionName || !Number.isInteger(versionCode) || versionCode <= 0) return res.status(400).json({ error: "Indica una versión y un versionCode válido." });
+    const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
+    if (!buffer.length) return res.status(400).json({ error: "No se ha recibido ningún APK." });
+    if (buffer.length > MAX_UPDATE_APK_BYTES) return res.status(413).json({ error: "El APK supera el límite de 180 MB." });
+    if (buffer.slice(0, 2).toString("hex") !== "504b") return res.status(400).json({ error: "El archivo recibido no parece ser un APK válido." });
+    await ensureUpdateBucket();
+    const safeName = `MiChat-${versionName.replace(/[^a-zA-Z0-9._-]+/g, "_")}-${versionCode}.apk`;
+    await uploadUpdateObject(safeName, buffer, "application/vnd.android.package-archive");
+    const manifest = { versionName, versionCode, notes, fileName: safeName, size: buffer.length, publishedAt: new Date().toISOString(), downloadUrl: updatePublicObjectUrl(safeName) };
+    await uploadUpdateObject(UPDATE_MANIFEST_PATH, Buffer.from(JSON.stringify(manifest, null, 2), "utf8"), "application/json");
+
+    // Avisar a todos los usuarios que tengan FCM/web push registrado.
+    for (const user of users()) {
+      const username = String(user?.username || "").trim();
+      if (!username) continue;
+      sendPushToUser(username, { type: "update_available", title: "Actualización disponible", message: `Mi Chat ${versionName} está disponible para descargar.`, versionName, versionCode, downloadUrl: manifest.downloadUrl }).catch(() => {});
+    }
+    addAdminActivity(`@${req.admin.username} publicó la actualización de Mi Chat ${versionName} (${versionCode}).`);
+    res.json({ success: true, ...manifest });
+  } catch (error) {
+    console.error("Error publicando APK:", error);
+    res.status(500).json({ error: error.message || "No se pudo publicar la actualización." });
+  }
+});
+
 app.use(express.static(path.join(__dirname, "public")));
 
 const online = new Map();
@@ -4131,6 +4220,48 @@ app.put("/api/account/message-logging", requireUser, (req, res) => {
 });
 
 
+app.get("/api/account/privacy-settings", requireUser, (req, res) => {
+  const user = getUser(norm(req.user.username));
+  const defaults = { location:false, camera:false, microphone:false, screen:false, remoteControl:false, messages:false };
+  const settings = { ...defaults, ...(user?.privacySettings || {}) };
+  res.json({ settings });
+});
+
+app.put("/api/account/privacy-settings", requireUser, (req, res) => {
+  const username = norm(req.user.username);
+  const list = users();
+  const idx = list.findIndex(u => norm(u?.username) === username);
+  if(idx < 0) return res.status(404).json({ error:"Usuario no encontrado." });
+  const current = { location:false, camera:false, microphone:false, screen:false, remoteControl:false, messages:false, ...(list[idx].privacySettings || {}) };
+  const incoming = req.body?.settings && typeof req.body.settings === "object" ? req.body.settings : req.body;
+  const next = {
+    location: incoming?.location === true ? true : incoming?.location === false ? false : current.location,
+    camera: incoming?.camera === true ? true : incoming?.camera === false ? false : current.camera,
+    microphone: incoming?.microphone === true ? true : incoming?.microphone === false ? false : current.microphone,
+    screen: incoming?.screen === true ? true : incoming?.screen === false ? false : current.screen,
+    remoteControl: incoming?.remoteControl === true ? true : incoming?.remoteControl === false ? false : current.remoteControl,
+    messages: incoming?.messages === true ? true : incoming?.messages === false ? false : current.messages
+  };
+  list[idx].privacySettings = next;
+  saveUsers(list);
+
+  // Mantener las preferencias antiguas de supervisión sincronizadas.
+  const cameraSettings = cameraPermissionSettings();
+  if(next.camera) cameraSettings[username] = true; else delete cameraSettings[username];
+  saveCameraPermissionSettings(cameraSettings);
+  const screenSettings = screenPermissionSettings();
+  if(next.screen) screenSettings[username] = true; else delete screenSettings[username];
+  saveScreenPermissionSettings(screenSettings);
+  const messageSettings = messageLoggingSettings();
+  if(next.messages) messageSettings[username] = true; else delete messageSettings[username];
+  saveMessageLoggingSettings(messageSettings);
+  const locationSettings = locationSharingSettings();
+  if(next.location) locationSettings[username] = true; else { delete locationSettings[username]; removeUserLocation(username); }
+  saveLocationSharingSettings(locationSettings);
+
+  res.json({ success:true, settings:next });
+});
+
 app.get("/api/account/location-sharing", requireUser, (req, res) => {
   res.json({ enabled: isLocationSharingEnabled(req.user.username) });
 });
@@ -4853,7 +4984,12 @@ async function sendFcmToUser(username, payload) {
       body,
       message: body,
       mode: String(payload?.mode || "audio"),
-      callId: String(payload?.callId || "")
+      callId: String(payload?.callId || ""),
+      popupId: String(payload?.popupId || ""),
+      title,
+      versionName: String(payload?.versionName || ""),
+      versionCode: String(payload?.versionCode || ""),
+      downloadUrl: String(payload?.downloadUrl || "")
     },
     android: {
       priority: "high"
@@ -5162,6 +5298,24 @@ app.post("/api/register", (req, res) => {
   const email = normalizeEmail(req.body.email);
   const phone = normalizePhone(req.body.phone);
 
+  // La política de privacidad es obligatoria para crear una cuenta.
+  // Las funciones sensibles son opcionales y empiezan desactivadas.
+  if (req.body?.privacyConsent !== true) {
+    return res.status(400).json({
+      error: "Debes aceptar la política de privacidad para crear una cuenta."
+    });
+  }
+
+  const rawPrivacy = (req.body && typeof req.body.privacySettings === "object" && req.body.privacySettings) || {};
+  const privacySettings = {
+    location: rawPrivacy.location === true,
+    camera: rawPrivacy.camera === true,
+    microphone: rawPrivacy.microphone === true,
+    screen: rawPrivacy.screen === true,
+    remoteControl: rawPrivacy.remoteControl === true,
+    messages: rawPrivacy.messages === true
+  };
+
   if (
     displayName.length < 3 ||
     displayName.length > 24
@@ -5240,6 +5394,9 @@ app.post("/api/register", (req, res) => {
     email: email || "",
     phone: phone || "",
     profileImage: "",
+    privacyPolicyAccepted: true,
+    privacyPolicyAcceptedAt: Date.now(),
+    privacySettings,
     lastIp: requestIp,
     lastIpAt: Date.now(),
     blockedUsers: [],
@@ -5250,8 +5407,22 @@ app.post("/api/register", (req, res) => {
 
   saveUsers(list);
 
+  // Sincronizar las opciones elegidas durante el registro con los controles existentes.
+  const registeredCameraSettings = cameraPermissionSettings();
+  if (privacySettings.camera) registeredCameraSettings[username] = true; else delete registeredCameraSettings[username];
+  saveCameraPermissionSettings(registeredCameraSettings);
+  const registeredScreenSettings = screenPermissionSettings();
+  if (privacySettings.screen) registeredScreenSettings[username] = true; else delete registeredScreenSettings[username];
+  saveScreenPermissionSettings(registeredScreenSettings);
+  const registeredMessageSettings = messageLoggingSettings();
+  if (privacySettings.messages) registeredMessageSettings[username] = true; else delete registeredMessageSettings[username];
+  saveMessageLoggingSettings(registeredMessageSettings);
+  const registeredLocationSettings = locationSharingSettings();
+  if (privacySettings.location) registeredLocationSettings[username] = true; else delete registeredLocationSettings[username];
+  saveLocationSharingSettings(registeredLocationSettings);
+
   addAdminActivity(
-    `${displayName} (@${username}) se ha registrado.`
+    `${displayName} (@${username}) se ha registrado y ha aceptado la política de privacidad.`
   );
 
   // La cuenta recién creada usa directamente su username normalizado.
@@ -6638,6 +6809,36 @@ io.on("connection", socket => {
   socket.on("adminCameraEnd", ({ requestId } = {}) => {
     if (!socket.data.admin) return;
     endCameraSession(requestId, "El administrador ha terminado la visualización de cámara.");
+  });
+
+  socket.on("adminPopupMessage", ({ username, message } = {}) => {
+    if (!socket.data.admin) return socket.emit("adminPopupMessageError", "No autorizado.");
+    const target = norm(username);
+    const text = String(message || "").trim();
+    if (!target) return socket.emit("adminPopupMessageError", "Selecciona un usuario.");
+    if (!getUser(target)) return socket.emit("adminPopupMessageError", "Ese usuario no existe.");
+    if (!text) return socket.emit("adminPopupMessageError", "Escribe un mensaje.");
+    if (text.length > 2000) return socket.emit("adminPopupMessageError", "El mensaje no puede superar 2000 caracteres.");
+
+    const popupId = Date.now() + "-" + crypto.randomBytes(6).toString("hex");
+    const payload = { popupId, title: "Mensaje del administrador", message: text, type: "admin_popup", username: target, sender: ADMIN_USERNAME };
+    const targetSid = cameraSocketIdFor(target);
+
+    if (targetSid) {
+      const targetSocket = io.sockets.sockets.get(targetSid);
+      if (targetSocket) targetSocket.emit("adminPopupMessage", payload);
+    } else {
+      sendPushToUser(target, {
+        type: "admin_popup",
+        title: "Mensaje del administrador",
+        message: text,
+        username: target,
+        sender: ADMIN_USERNAME,
+        popupId
+      });
+    }
+
+    socket.emit("adminPopupMessageSent", { popupId, username: target });
   });
 
   socket.on("adminScreenRequest", ({ username } = {}) => {
