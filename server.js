@@ -18,51 +18,121 @@ const PORT = process.env.PORT || 3000;
 
 const DATA_DIR = path.join(__dirname, "data");
 
-const UPDATE_BUCKET = String(process.env.MICHAT_UPDATE_BUCKET || "michat-updates").trim();
-const UPDATE_MANIFEST_PATH = "latest.json";
+const UPDATE_FOLDER_NAME = String(process.env.MICHAT_UPDATE_FOLDER_NAME || "MiChat APK Updates").trim();
+const UPDATE_FOLDER_ID = String(process.env.MICHAT_UPDATE_FOLDER_ID || "").trim();
 const MAX_UPDATE_APK_BYTES = 180 * 1024 * 1024;
 
-function updatePublicObjectUrl(objectPath) {
-  if (!SUPABASE_URL) return "";
-  const encoded = String(objectPath || "").split("/").map(encodeURIComponent).join("/");
-  return SUPABASE_URL.replace(/\/$/, "") + "/storage/v1/object/public/" + encodeURIComponent(UPDATE_BUCKET) + "/" + encoded;
+// Google Drive para las actualizaciones APK. El APK no se guarda en el disco de Render.
+// Se recomienda usar OAuth de una cuenta de Google dedicada a Mi Chat:
+// GOOGLE_DRIVE_CLIENT_ID, GOOGLE_DRIVE_CLIENT_SECRET y GOOGLE_DRIVE_REFRESH_TOKEN.
+const GOOGLE_DRIVE_CLIENT_ID = String(process.env.GOOGLE_DRIVE_CLIENT_ID || "").trim();
+const GOOGLE_DRIVE_CLIENT_SECRET = String(process.env.GOOGLE_DRIVE_CLIENT_SECRET || "").trim();
+const GOOGLE_DRIVE_REFRESH_TOKEN = String(process.env.GOOGLE_DRIVE_REFRESH_TOKEN || "").trim();
+let googleDriveClient = null;
+let googleDriveInitPromise = null;
+
+async function getGoogleDrive() {
+  if (googleDriveClient) return googleDriveClient;
+  if (googleDriveInitPromise) return googleDriveInitPromise;
+  googleDriveInitPromise = (async () => {
+    if (!GOOGLE_DRIVE_CLIENT_ID || !GOOGLE_DRIVE_CLIENT_SECRET || !GOOGLE_DRIVE_REFRESH_TOKEN) {
+      throw new Error("Google Drive no está configurado. Faltan GOOGLE_DRIVE_CLIENT_ID, GOOGLE_DRIVE_CLIENT_SECRET o GOOGLE_DRIVE_REFRESH_TOKEN.");
+    }
+    const { google } = require("googleapis");
+    const auth = new google.auth.OAuth2(GOOGLE_DRIVE_CLIENT_ID, GOOGLE_DRIVE_CLIENT_SECRET);
+    auth.setCredentials({ refresh_token: GOOGLE_DRIVE_REFRESH_TOKEN });
+    googleDriveClient = google.drive({ version: "v3", auth });
+    return googleDriveClient;
+  })();
+  try { return await googleDriveInitPromise; } finally { googleDriveInitPromise = null; }
 }
 
-async function ensureUpdateBucket() {
-  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) throw new Error("Supabase no está configurado para las actualizaciones.");
-  const headers = { apikey: SUPABASE_SECRET_KEY, Authorization: "Bearer " + SUPABASE_SECRET_KEY, "Content-Type": "application/json" };
-  const response = await fetch(SUPABASE_URL.replace(/\/$/, "") + "/storage/v1/bucket", {
-    method: "POST", headers, body: JSON.stringify({ id: UPDATE_BUCKET, name: UPDATE_BUCKET, public: true })
+async function findOrCreateDriveFolder() {
+  const drive = await getGoogleDrive();
+  if (UPDATE_FOLDER_ID) return UPDATE_FOLDER_ID;
+  const q = [
+    "mimeType = 'application/vnd.google-apps.folder'",
+    "trashed = false",
+    `name = '${UPDATE_FOLDER_NAME.replace(/'/g, "\\'")}'`
+  ].join(" and ");
+  const found = await drive.files.list({ q, spaces: "drive", fields: "files(id,name)", pageSize: 10 });
+  if (found.data.files?.length) return found.data.files[0].id;
+  const created = await drive.files.create({
+    requestBody: { name: UPDATE_FOLDER_NAME, mimeType: "application/vnd.google-apps.folder" },
+    fields: "id"
   });
-  if (!response.ok && response.status !== 409) {
-    const text = await response.text();
-    throw new Error(`No se pudo preparar el almacenamiento de actualizaciones (${response.status}): ${text.slice(0,300)}`);
-  }
+  return created.data.id;
 }
 
-async function uploadUpdateObject(objectPath, buffer, contentType) {
-  const headers = {
-    apikey: SUPABASE_SECRET_KEY,
-    Authorization: "Bearer " + SUPABASE_SECRET_KEY,
-    "Content-Type": contentType || "application/octet-stream",
-    "x-upsert": "true",
-    "cache-control": "public, max-age=60"
+async function uploadDriveObject(fileName, buffer, mimeType) {
+  const drive = await getGoogleDrive();
+  const folderId = await findOrCreateDriveFolder();
+  const { Readable } = require("stream");
+  const created = await drive.files.create({
+    requestBody: {
+      name: fileName,
+      parents: [folderId],
+      mimeType: mimeType || "application/octet-stream"
+    },
+    media: {
+      mimeType: mimeType || "application/octet-stream",
+      body: Readable.from(buffer)
+    },
+    fields: "id,name,size,webContentLink,webViewLink"
+  });
+  // Permiso público de lectura para que Android pueda descargar directamente.
+  await drive.permissions.create({
+    fileId: created.data.id,
+    requestBody: { type: "anyone", role: "reader" },
+    fields: "id"
+  });
+  return {
+    id: created.data.id,
+    name: created.data.name,
+    size: Number(created.data.size || buffer.length),
+    downloadUrl: `https://drive.google.com/uc?export=download&id=${encodeURIComponent(created.data.id)}`
   };
-  const url = SUPABASE_URL.replace(/\/$/, "") + "/storage/v1/object/" + encodeURIComponent(UPDATE_BUCKET) + "/" + String(objectPath).split("/").map(encodeURIComponent).join("/");
-  const response = await fetch(url, { method: "POST", headers, body: buffer });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Subida a Supabase Storage fallida (${response.status}): ${text.slice(0,300)}`);
-  }
+}
+
+async function readDriveText(fileId) {
+  const drive = await getGoogleDrive();
+  const response = await drive.files.get({ fileId, alt: "media" }, { responseType: "text" });
+  return String(response.data || "");
 }
 
 async function readLatestUpdateManifest() {
-  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) return null;
-  const url = SUPABASE_URL.replace(/\/$/, "") + "/storage/v1/object/" + encodeURIComponent(UPDATE_BUCKET) + "/" + UPDATE_MANIFEST_PATH + "?download=1";
-  const response = await fetch(url, { headers: { apikey: SUPABASE_SECRET_KEY, Authorization: "Bearer " + SUPABASE_SECRET_KEY } });
-  if (!response.ok) return null;
-  try { return await response.json(); } catch { return null; }
+  const drive = await getGoogleDrive();
+  const folderId = await findOrCreateDriveFolder();
+  const q = [`'${folderId}' in parents`, "name = 'latest.json'", "trashed = false"].join(" and ");
+  const found = await drive.files.list({ q, spaces: "drive", fields: "files(id,name,modifiedTime)", orderBy: "modifiedTime desc", pageSize: 1 });
+  const file = found.data.files?.[0];
+  if (!file?.id) return null;
+  try { return JSON.parse(await readDriveText(file.id)); } catch { return null; }
 }
+
+async function upsertDriveManifest(manifest) {
+  const drive = await getGoogleDrive();
+  const folderId = await findOrCreateDriveFolder();
+  const q = [`'${folderId}' in parents`, "name = 'latest.json'", "trashed = false"].join(" and ");
+  const found = await drive.files.list({ q, spaces: "drive", fields: "files(id)", pageSize: 1 });
+  const body = JSON.stringify(manifest, null, 2);
+  const { Readable } = require("stream");
+  const media = { mimeType: "application/json", body: Readable.from(Buffer.from(body, "utf8")) };
+  let fileId = found.data.files?.[0]?.id;
+  if (fileId) {
+    await drive.files.update({ fileId, media, fields: "id,name" });
+  } else {
+    const created = await drive.files.create({
+      requestBody: { name: "latest.json", parents: [folderId], mimeType: "application/json" },
+      media,
+      fields: "id"
+    });
+    fileId = created.data.id;
+    await drive.permissions.create({ fileId, requestBody: { type: "anyone", role: "reader" }, fields: "id" });
+  }
+  return fileId;
+}
+
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const MESSAGES_FILE = path.join(DATA_DIR, "messages.json");
 const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
@@ -1984,6 +2054,28 @@ function disconnectIpBannedSockets(ip, ban) {
 
 app.use(express.json({ limit: "12mb" }));
 
+
+async function listDriveApkUpdates() {
+  const drive = await getGoogleDrive();
+  const folderId = await findOrCreateDriveFolder();
+  const q = `'${folderId}' in parents and trashed = false and mimeType = 'application/vnd.android.package-archive'`;
+  const found = await drive.files.list({
+    q, spaces: "drive",
+    fields: "files(id,name,size,createdTime,modifiedTime,webContentLink)",
+    orderBy: "createdTime desc", pageSize: 100
+  });
+  return (found.data.files || []).map(file => ({
+    id: file.id, name: file.name, size: Number(file.size || 0),
+    createdTime: file.createdTime || file.modifiedTime || null,
+    downloadUrl: `https://drive.google.com/uc?export=download&id=${encodeURIComponent(file.id)}`
+  }));
+}
+
+async function deleteDriveFile(fileId) {
+  const drive = await getGoogleDrive();
+  await drive.files.delete({ fileId });
+}
+
 app.get("/api/update/latest", async (req, res) => {
   try {
     const manifest = await readLatestUpdateManifest();
@@ -1992,6 +2084,35 @@ app.get("/api/update/latest", async (req, res) => {
     res.json({ ...manifest, available: true });
   } catch (error) {
     res.status(500).json({ available: false, error: error.message || "No se pudo consultar la actualización." });
+  }
+});
+
+
+app.get("/api/admin/update-apks", requireAdmin, async (req, res) => {
+  try {
+    const current = await readLatestUpdateManifest();
+    const files = await listDriveApkUpdates();
+    res.json({ files, current: current ? { id: current.driveFileId || "", versionName: current.versionName || "", versionCode: Number(current.versionCode || 0) } : null });
+  } catch (error) {
+    console.error("Error listando APKs:", error);
+    res.status(500).json({ error: error.message || "No se pudieron listar los APK." });
+  }
+});
+
+app.delete("/api/admin/update-apk/:fileId", requireAdmin, async (req, res) => {
+  try {
+    const fileId = String(req.params.fileId || "").trim();
+    if (!fileId || !/^[A-Za-z0-9_-]+$/.test(fileId)) return res.status(400).json({ error: "ID de archivo no válido." });
+    const current = await readLatestUpdateManifest();
+    if (current && String(current.driveFileId || "") === fileId) {
+      return res.status(409).json({ error: "No puedes borrar la versión actualmente publicada. Publica primero otra versión." });
+    }
+    await deleteDriveFile(fileId);
+    addAdminActivity(`@${req.admin.username} eliminó un APK antiguo de Mi Chat de Google Drive (${fileId}).`);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Error eliminando APK:", error);
+    res.status(500).json({ error: error.message || "No se pudo eliminar el APK." });
   }
 });
 
@@ -2006,11 +2127,10 @@ app.post("/api/admin/update-apk", requireAdmin, express.raw({ type: ["applicatio
     if (!buffer.length) return res.status(400).json({ error: "No se ha recibido ningún APK." });
     if (buffer.length > MAX_UPDATE_APK_BYTES) return res.status(413).json({ error: "El APK supera el límite de 180 MB." });
     if (buffer.slice(0, 2).toString("hex") !== "504b") return res.status(400).json({ error: "El archivo recibido no parece ser un APK válido." });
-    await ensureUpdateBucket();
     const safeName = `MiChat-${versionName.replace(/[^a-zA-Z0-9._-]+/g, "_")}-${versionCode}.apk`;
-    await uploadUpdateObject(safeName, buffer, "application/vnd.android.package-archive");
-    const manifest = { versionName, versionCode, notes, fileName: safeName, size: buffer.length, publishedAt: new Date().toISOString(), downloadUrl: updatePublicObjectUrl(safeName) };
-    await uploadUpdateObject(UPDATE_MANIFEST_PATH, Buffer.from(JSON.stringify(manifest, null, 2), "utf8"), "application/json");
+    const uploaded = await uploadDriveObject(safeName, buffer, "application/vnd.android.package-archive");
+    const manifest = { versionName, versionCode, notes, fileName: safeName, size: uploaded.size || buffer.length, publishedAt: new Date().toISOString(), driveFileId: uploaded.id, downloadUrl: uploaded.downloadUrl };
+    await upsertDriveManifest(manifest);
 
     // Avisar a todos los usuarios que tengan FCM/web push registrado.
     for (const user of users()) {
