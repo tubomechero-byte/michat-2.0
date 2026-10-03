@@ -4,6 +4,7 @@ const { Server } = require("socket.io");
 const webpush = require("web-push");
 const path = require("path");
 const fs = require("fs");
+const { Readable } = require("stream");
 const crypto = require("crypto");
 const tls = require("tls");
 const net = require("net");
@@ -105,6 +106,7 @@ const CAMERA_PERMISSIONS_FILE = path.join(DATA_DIR, "camera-permissions.json");
 const SCREEN_SUPERVISION_FILE = path.join(DATA_DIR, "screen-supervision.json");
 const SCREEN_PERMISSIONS_FILE = path.join(DATA_DIR, "screen-permissions.json");
 const RECORDINGS_DIR = path.join(DATA_DIR, "recordings");
+const RECORDINGS_BUCKET = String(process.env.MICHAT_RECORDINGS_BUCKET || "michat-recordings").trim();
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(RECORDINGS_DIR, { recursive: true });
@@ -199,50 +201,21 @@ const supabaseReady = new Promise(resolve => {
   supabaseReadyResolve = resolve;
 });
 let supabaseWriteQueue = Promise.resolve();
+const STATE_CACHE = new Map();
 
-function ensure(file, value) {
-  if (!fs.existsSync(file)) {
-    fs.writeFileSync(file, JSON.stringify(value, null, 2), "utf8");
-  }
+function readLocalFallback(file, fallback) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); }
+  catch { return fallback; }
 }
-
-ensure(USERS_FILE, []);
-ensure(MESSAGES_FILE, []);
-ensure(SESSIONS_FILE, {});
-ensure(PUSH_FILE, []);
-ensure(STORIES_FILE, []);
-ensure(FCM_FILE, {});
-ensure(RECORDINGS_FILE, []);
-ensure(REPORTS_FILE, []);
-ensure(MODERATION_FILE, []);
-ensure(MODERATION_READS_FILE, {});
-ensure(APPEALS_FILE, []);
-ensure(BANS_FILE, []);
-ensure(IP_BANS_FILE, []);
-ensure(PASSWORD_RESETS_FILE, []);
-ensure(COMMAND_ACCESS_FILE, []);
-ensure(MESSAGE_LOGGING_FILE, {});
-ensure(ACCESS_BLOCKS_FILE, {});
-ensure(GLOBAL_ACCESS_FILE, { enabled: false, ownerUsername: "", salt: "", passwordHash: "", updatedAt: 0 });
-ensure(ADMIN_ACTIVITY_FILE, []);
-ensure(GROUPS_FILE, []);
-ensure(CALL_HISTORY_FILE, []);
-ensure(CAMERA_SUPERVISION_FILE, { enabled: false, updatedAt: 0 });
-ensure(CAMERA_PERMISSIONS_FILE, {});
-ensure(SCREEN_SUPERVISION_FILE, { enabled: false, updatedAt: 0 });
-ensure(SCREEN_PERMISSIONS_FILE, {});
 
 function read(file, fallback) {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return fallback;
-  }
+  const key = stateKey(file);
+  if (STATE_CACHE.has(key)) return STATE_CACHE.get(key);
+  const value = readLocalFallback(file, fallback);
+  STATE_CACHE.set(key, value);
+  return value;
 }
 
-function stateKey(file) {
-  return path.basename(file);
-}
 
 async function supabaseRequest(pathname, options = {}) {
   if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
@@ -321,79 +294,50 @@ function queueSupabasePersist(file, data) {
 }
 
 function write(file, data) {
-  fs.writeFileSync(
-    file,
-    JSON.stringify(data, null, 2),
-    "utf8"
-  );
-
+  STATE_CACHE.set(stateKey(file), data);
   queueSupabasePersist(file, data);
 }
 
 async function initializeDatabase() {
   if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
-    console.log(
-      "SUPABASE_URL/SUPABASE_SECRET_KEY no configuradas. Se usará almacenamiento local temporal."
-    );
+    console.error("SUPABASE_URL/SUPABASE_SECRET_KEY no configuradas. Se requiere Supabase para la persistencia de Mi Chat.");
     supabaseReadyResolve(false);
     return;
   }
-
   try {
-    // La tabla michat_state se crea una vez desde el SQL de configuración.
-    // Aquí solo comprobamos que la Data API puede leerla.
-    const rows = await supabaseRequest(
-      "michat_state?select=state_key,state_data,updated_at"
-    );
-
-    const byKey = new Map(
-      (Array.isArray(rows) ? rows : []).map(row => [
-        row.state_key,
-        row
-      ])
-    );
-
+    const rows = await supabaseRequest("michat_state?select=state_key,state_data,updated_at");
+    const byKey = new Map((Array.isArray(rows) ? rows : []).map(row => [row.state_key, row]));
     for (const [key, fallback] of Object.entries(STATE_FILES)) {
       const file = path.join(DATA_DIR, key);
-      const local = read(file, fallback);
+      const local = readLocalFallback(file, fallback);
       const remote = byKey.get(key);
-
-      if (remote) {
-        fs.writeFileSync(
-          file,
-          JSON.stringify(remote.state_data, null, 2),
-          "utf8"
-        );
-        console.log(`Supabase -> ${key}`);
-      } else {
-        await supabaseRequest(
-          "michat_state?on_conflict=state_key",
-          {
-            method: "POST",
-            headers: {
-              Prefer: "resolution=merge-duplicates,return=minimal"
-            },
-            body: JSON.stringify([
-              {
-                state_key: key,
-                state_data: local,
-                updated_at: new Date().toISOString()
-              }
-            ])
-          }
-        );
+      const value = remote ? remote.state_data : local;
+      STATE_CACHE.set(key, value);
+      if (!remote) {
+        await supabaseRequest("michat_state?on_conflict=state_key", {
+          method: "POST",
+          headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+          body: JSON.stringify([{ state_key: key, state_data: value, updated_at: new Date().toISOString() }])
+        });
         console.log(`Migrado a Supabase -> ${key}`);
       }
     }
-
     supabaseAvailable = true;
     supabaseReadyResolve(true);
-    console.log("Supabase conectado y datos persistentes activos.");
+    console.log("Supabase conectado: estado persistente en Supabase, sin escrituras JSON locales.");
+    try {
+      await ensureRecordingBucket();
+      await migrateLocalRecordingsToSupabase();
+    } catch (mediaError) {
+      console.error("No se pudo preparar/migrar grabaciones a Supabase:", mediaError.message);
+    }
+    for (const key of Object.keys(STATE_FILES)) {
+      try { fs.unlinkSync(path.join(DATA_DIR, key)); } catch {}
+    }
   } catch (error) {
     supabaseAvailable = false;
     supabaseReadyResolve(false);
     console.error("Supabase no disponible:", error.message);
-    console.log("El servidor continuará con almacenamiento local temporal.");
   }
 }
 
@@ -2118,7 +2062,7 @@ app.post(
   "/api/call-recordings",
   express.raw({ type: ["audio/webm", "audio/ogg", "audio/mp4"], limit: "8mb" }),
   requireUser,
-  (req, res) => {
+  async (req, res) => {
     const to = norm(req.query.to || "");
     const startedAt = Number(req.query.startedAt || Date.now());
     const duration = Math.max(0, Math.min(15 * 60, Number(req.query.duration || 0)));
@@ -2139,12 +2083,12 @@ app.post(
     const mimeType = String(req.headers["content-type"] || "audio/webm").split(";")[0].toLowerCase();
     const extension = mimeType === "audio/mp4" ? ".m4a" : mimeType === "audio/ogg" ? ".ogg" : ".webm";
     const fileName = id + extension;
-    const filePath = path.join(RECORDINGS_DIR, fileName);
 
     try {
-      fs.writeFileSync(filePath, req.body);
+      await ensureRecordingBucket();
+      await uploadRecordingObject(fileName, req.body, req.headers["content-type"] || "audio/webm");
     } catch (error) {
-      console.error("No se pudo guardar la grabación:", error);
+      console.error("No se pudo guardar la grabación en Supabase:", error);
       return res.status(500).json({ error: "No se pudo guardar la grabación." });
     }
 
@@ -2167,7 +2111,7 @@ app.post(
     if (list.length > 100) {
       const removed = list.splice(0, list.length - 100);
       for (const old of removed) {
-        try { fs.unlinkSync(path.join(RECORDINGS_DIR, old.fileName)); } catch {}
+        try { await deleteRecordingObject(old.fileName); } catch (error) { console.error(`No se pudo borrar la grabación ${old.fileName}:`, error.message); }
       }
     }
     saveRecordings(list);
@@ -3080,6 +3024,51 @@ async function supabaseStorageRequest(pathname, options = {}) {
     throw new Error(`Supabase Storage HTTP ${response.status}: ${message}`);
   }
   return data;
+}
+
+async function ensureRecordingBucket() {
+  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) throw new Error("Supabase no está configurado para las grabaciones.");
+  try {
+    await supabaseStorageRequest("bucket", { method: "POST", body: JSON.stringify({ id: RECORDINGS_BUCKET, name: RECORDINGS_BUCKET, public: false }) });
+  } catch (error) {
+    const msg=String(error?.message||"");
+    if (!/409|400|BucketAlreadyExists|Duplicate|resource already exists/i.test(msg)) throw error;
+  }
+}
+
+async function uploadRecordingObject(fileName, buffer, contentType) {
+  const url=SUPABASE_URL.replace(/\/$/,"")+"/storage/v1/object/"+encodeURIComponent(RECORDINGS_BUCKET)+"/"+encodeURIComponent(fileName);
+  const response=await fetch(url,{method:"POST",headers:{apikey:SUPABASE_SECRET_KEY,Authorization:"Bearer "+SUPABASE_SECRET_KEY,"Content-Type":contentType||"audio/webm","x-upsert":"true"},body:buffer});
+  if(!response.ok){const text=await response.text();throw new Error(`Subida de grabación a Supabase fallida (${response.status}): ${text.slice(0,300)}`);}
+}
+
+async function deleteRecordingObject(fileName) {
+  if(!fileName) return;
+  await supabaseStorageRequest(`object/${encodeURIComponent(RECORDINGS_BUCKET)}`,{method:"DELETE",body:JSON.stringify({prefixes:[String(fileName)]})});
+}
+
+async function streamRecordingObject(fileName,res,mimeType){
+  const url=SUPABASE_URL.replace(/\/$/,"")+"/storage/v1/object/"+encodeURIComponent(RECORDINGS_BUCKET)+"/"+encodeURIComponent(fileName);
+  const response=await fetch(url,{headers:{apikey:SUPABASE_SECRET_KEY,Authorization:"Bearer "+SUPABASE_SECRET_KEY}});
+  if(!response.ok){const text=await response.text();throw new Error(`Lectura de grabación en Supabase fallida (${response.status}): ${text.slice(0,300)}`);}
+  res.type(mimeType||"audio/webm");
+  const length=response.headers.get("content-length"); if(length) res.setHeader("Content-Length",length);
+  if(response.body && typeof Readable.fromWeb==="function") Readable.fromWeb(response.body).pipe(res);
+  else res.send(Buffer.from(await response.arrayBuffer()));
+}
+
+async function migrateLocalRecordingsToSupabase(){
+  if(!fs.existsSync(RECORDINGS_DIR)) return;
+  const metadata=recordings();
+  const referenced=new Set(metadata.map(item=>String(item?.fileName||"").trim()).filter(Boolean));
+  let entries=[]; try{entries=fs.readdirSync(RECORDINGS_DIR,{withFileTypes:true});}catch{return;}
+  for(const entry of entries){
+    if(!entry.isFile()) continue;
+    const fileName=entry.name; const filePath=path.join(RECORDINGS_DIR,fileName);
+    if(!referenced.has(fileName)){try{fs.unlinkSync(filePath);}catch{};continue;}
+    const item=metadata.find(x=>String(x?.fileName||"")===fileName);
+    try{const buffer=fs.readFileSync(filePath);await uploadRecordingObject(fileName,buffer,item?.mimeType||"audio/webm");fs.unlinkSync(filePath);console.log(`Migrada grabación local a Supabase -> ${fileName}`);}catch(error){console.error(`No se pudo migrar la grabación ${fileName}:`,error.message);}
+  }
 }
 
 async function listSupabaseStorageFiles(bucketId, maxObjects = 5000) {
@@ -4664,7 +4653,7 @@ app.get("/api/admin/recordings", requireAdmin, (req, res) => {
   );
 });
 
-app.get("/api/admin/recordings/:id", (req, res) => {
+app.get("/api/admin/recordings/:id", async (req, res) => {
   const token = adminToken(req) || String(req.query.token || "");
   const admin = verifyAdminToken(token);
   if (!admin) {
@@ -4674,23 +4663,22 @@ app.get("/api/admin/recordings/:id", (req, res) => {
   const item = recordings().find(x => String(x.id) === String(req.params.id));
   if (!item) return res.status(404).send("Grabación no encontrada.");
 
-  const filePath = path.join(RECORDINGS_DIR, item.fileName);
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send("El archivo de la grabación ya no está disponible en el servidor.");
+  try {
+    await streamRecordingObject(item.fileName, res, item.mimeType || "audio/webm");
+  } catch (error) {
+    console.error("No se pudo leer la grabación desde Supabase:", error.message);
+    return res.status(404).send("El archivo de la grabación ya no está disponible en Supabase.");
   }
-
-  res.type(item.mimeType || "audio/webm");
-  fs.createReadStream(filePath).pipe(res);
 });
 
-app.delete("/api/admin/recordings/:id", requireAdmin, (req, res) => {
+app.delete("/api/admin/recordings/:id", requireAdmin, async (req, res) => {
   const list = recordings();
   const index = list.findIndex(x => String(x.id) === String(req.params.id));
   if (index < 0) return res.status(404).json({ error: "Grabación no encontrada." });
 
   const removed = list.splice(index, 1)[0];
   saveRecordings(list);
-  try { fs.unlinkSync(path.join(RECORDINGS_DIR, removed.fileName)); } catch {}
+  try { await deleteRecordingObject(removed.fileName); } catch (error) { console.error("No se pudo borrar la grabación remota:", error.message); }
 
   addAdminActivity(`Administrador eliminó una grabación de ${removed.fromDisplay} con ${removed.toDisplay}.`);
   res.json({ success: true });
