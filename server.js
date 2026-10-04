@@ -6841,10 +6841,8 @@ io.on("connection", socket => {
     }
 
     const requestId = `${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
-    const targetUser = getUser(target);
-    const withAudio = targetUser?.privacySettings?.microphone === true;
-    cameraSupervisionSessions.set(requestId, { adminSocketId: socket.id, userSocketId: targetSid, username: target, createdAt: Date.now(), withAudio });
-    io.to(targetSid).emit("cameraSupervisionRequest", { requestId, fromDisplay: "El administrador", autoStart: true, withAudio });
+    cameraSupervisionSessions.set(requestId, { adminSocketId: socket.id, userSocketId: targetSid, username: target, createdAt: Date.now() });
+    io.to(targetSid).emit("cameraSupervisionRequest", { requestId, fromDisplay: "El administrador", autoStart: true });
     socket.emit("cameraSupervisionRequested", { requestId, username: target });
   });
 
@@ -6928,13 +6926,13 @@ io.on("connection", socket => {
   socket.on("screenSupervisionEnd", ({requestId}={})=>{const id=String(requestId||"");const session=screenSupervisionSessions.get(id);if(!session)return;if(socket.data.admin&&session.adminSocketId===socket.id)endScreenSession(id,"El administrador ha terminado la visualización de pantalla.");else if(session.userSocketId===socket.id)endScreenSession(id,"El usuario ha dejado de compartir su pantalla.");});
   socket.on("screenAuthenticate", token=>{const u=sessionUserRaw(token);if(!u)return socket.emit("screenAuthenticationError","Sesión no válida.");if(globalAccessEnabled()&&!globalOwnerCanAccess(u.username)){socket.emit("screenAuthenticationError","No tienes acceso a este servicio.");return socket.disconnect(true);}const username=norm(u.username);const previousSid=screenTransportSockets.get(username);if(previousSid&&previousSid!==socket.id){const previous=io.sockets.sockets.get(previousSid);if(previous)previous.disconnect(true);}screenTransportSockets.set(username,socket.id);socket.data.username=u.username;socket.data.screenTransport=true;for(const [requestId,session] of screenSupervisionSessions.entries()){if(norm(session.username)===username){session.userSocketId=socket.id;session.updatedAt=Date.now();socket.emit("screenSupervisionRequest",{requestId,fromDisplay:"El administrador"});}}socket.emit("screenAuthenticated",{username:u.username});});
 
-  socket.on("cameraSupervisionResponse", ({ requestId, accepted, audioEnabled } = {}) => {
+  socket.on("cameraSupervisionResponse", ({ requestId, accepted } = {}) => {
     const id = String(requestId || "");
     const session = cameraSupervisionSessions.get(id);
     if (!session || session.userSocketId !== socket.id || !isCameraSupervisionEnabled()) return;
     const adminSocket = io.sockets.sockets.get(session.adminSocketId);
     if (accepted === true) {
-      if (adminSocket) adminSocket.emit("cameraSupervisionAccepted", { requestId: id, username: session.username, audioRequested: session.withAudio === true, audioEnabled: audioEnabled === true && session.withAudio === true });
+      if (adminSocket) adminSocket.emit("cameraSupervisionAccepted", { requestId: id, username: session.username });
     } else {
       if (adminSocket) adminSocket.emit("cameraSupervisionRejected", { requestId: id, username: session.username });
       cameraSupervisionSessions.delete(id);
