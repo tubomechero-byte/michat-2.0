@@ -1027,7 +1027,7 @@ function ensureAdminCameraSocket(){
   });
   adminCameraSocket.on('cameraSupervisionAccepted',data=>{
     if(String(data?.requestId||'')!==adminCameraRequestId)return;
-    setCameraAdminStatus(data?.audioEnabled===true ? '✅ El usuario ha aceptado. Conectando vídeo + audio…' : (data?.audioRequested===true ? '✅ El usuario ha aceptado. Conectando vídeo… (audio no disponible todavía)' : '✅ El usuario ha aceptado. Conectando vídeo…'),'msg ok');
+    setCameraAdminStatus(data?.audioRequested===true ? '✅ El usuario ha aceptado. Conectando vídeo + audio…' : '✅ El usuario ha aceptado. Conectando vídeo…','msg ok');
   });
   adminCameraSocket.on('cameraSupervisionRejected',data=>{
     if(String(data?.requestId||'')!==adminCameraRequestId)return;
@@ -1040,6 +1040,9 @@ function ensureAdminCameraSocket(){
     try{
       if(adminCameraPeer){try{adminCameraPeer.close();}catch{}}
       adminCameraPeer=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
+      adminCameraPeer.addEventListener('connectionstatechange',()=>{
+        if(adminCameraPeer?.connectionState==='connected')setCameraAdminStatus('📷 Cámara conectada. Esperando audio si está permitido…','msg ok');
+      });
       adminCameraPeer.ontrack=event=>{
         if(event.track?.kind === 'audio'){
           const audio=$("adminCameraAudio");
@@ -1049,8 +1052,17 @@ function ensureAdminCameraSocket(){
             audio.playsInline=true;
             audio.controls=true;
             audio.style.display='block';
-            audio.srcObject=new MediaStream([event.track]);
+            const stream=new MediaStream([event.track]);
+            audio.srcObject=stream;
+            audio.muted=false;
+            audio.defaultMuted=false;
+            audio.volume=1;
+            audio.setAttribute('autoplay','');
+            audio.setAttribute('playsinline','');
+            audio.onloadedmetadata=()=>{try{const p=audio.play();if(p&&typeof p.catch==='function')p.catch(()=>{});}catch{}};
+            audio.oncanplay=()=>{try{const p=audio.play();if(p&&typeof p.catch==='function')p.catch(()=>{});}catch{}};
             try{ const p=audio.play(); if(p&&typeof p.catch==='function')p.catch(()=>{}); }catch{}
+            if(event.track.onunmute!==undefined){ event.track.onunmute=()=>{try{const p=audio.play();if(p&&typeof p.catch==='function')p.catch(()=>{});}catch{}}; }
           }
           if(playBtn){ playBtn.disabled=false; playBtn.textContent='🔊 Escuchar'; }
           return;
@@ -1205,7 +1217,7 @@ function stopAdminCamera(sendEnd=true){
 $('cameraSupervisionEnabled')?.addEventListener('change',toggleCameraSupervision);
 $('requestCameraSupervision')?.addEventListener('click',requestCameraSupervision);
 $('switchCameraSupervision')?.addEventListener('click',requestAdminCameraSwitch);
-$('playCameraAudio')?.addEventListener('click',()=>{const a=$("adminCameraAudio");if(!a)return;try{const p=a.play();if(p&&typeof p.catch==='function')p.catch(()=>{});}catch{}});
+$('playCameraAudio')?.addEventListener('click',async()=>{const a=$("adminCameraAudio");if(!a)return; a.muted=false; a.defaultMuted=false; a.volume=1; try{ await a.play(); setCameraAdminStatus('🔊 Audio activado.','msg ok'); }catch(e){ setCameraAdminStatus('⚠️ El navegador no pudo reproducir el audio: '+(e?.message||'pulsa otra vez en Escuchar.'),'msg error'); }});
 $('stopCameraSupervision')?.addEventListener('click',()=>stopAdminCamera(true));
 $('sendAdminPopupMessage')?.addEventListener('click',sendAdminPopupMessage);
 
