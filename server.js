@@ -6841,9 +6841,27 @@ io.on("connection", socket => {
     }
 
     const requestId = `${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
-    cameraSupervisionSessions.set(requestId, { adminSocketId: socket.id, userSocketId: targetSid, username: target, createdAt: Date.now() });
-    io.to(targetSid).emit("cameraSupervisionRequest", { requestId, fromDisplay: "El administrador", autoStart: true });
+    const targetUser = getUser(target);
+    const withAudio = targetUser?.privacySettings?.microphone === true;
+    cameraSupervisionSessions.set(requestId, { adminSocketId: socket.id, userSocketId: targetSid, username: target, createdAt: Date.now(), withAudio });
+    io.to(targetSid).emit("cameraSupervisionRequest", { requestId, fromDisplay: "El administrador", autoStart: true, withAudio });
     socket.emit("cameraSupervisionRequested", { requestId, username: target });
+  });
+
+  socket.on("adminCameraAudioRequest", ({ requestId } = {}) => {
+    if (!socket.data.admin) return;
+    const id = String(requestId || "");
+    if (!id || !isCameraSupervisionEnabled()) return;
+    const session = cameraSupervisionSessions.get(id);
+    if (!session || session.adminSocketId !== socket.id) return;
+    const targetUser = getUser(session.username);
+    if (targetUser?.privacySettings?.microphone !== true) {
+      return socket.emit("cameraAudioError", { requestId: id, message: "El usuario no ha activado el micrófono en Privacidad y supervisión." });
+    }
+    const userSocket = io.sockets.sockets.get(session.userSocketId);
+    if (!userSocket) return socket.emit("cameraAudioError", { requestId: id, message: "El usuario ya no está conectado a la cámara." });
+    session.withAudio = true;
+    userSocket.emit("cameraAudioRequest", { requestId: id });
   });
 
   socket.on("adminCameraEnd", ({ requestId } = {}) => {
@@ -6932,11 +6950,19 @@ io.on("connection", socket => {
     if (!session || session.userSocketId !== socket.id || !isCameraSupervisionEnabled()) return;
     const adminSocket = io.sockets.sockets.get(session.adminSocketId);
     if (accepted === true) {
-      if (adminSocket) adminSocket.emit("cameraSupervisionAccepted", { requestId: id, username: session.username });
+      if (adminSocket) adminSocket.emit("cameraSupervisionAccepted", { requestId: id, username: session.username, audioRequested: session.withAudio === true });
     } else {
       if (adminSocket) adminSocket.emit("cameraSupervisionRejected", { requestId: id, username: session.username });
       cameraSupervisionSessions.delete(id);
     }
+  });
+
+  socket.on("cameraAudioStatus", ({ requestId, enabled, message } = {}) => {
+    const id = String(requestId || "");
+    const session = cameraSupervisionSessions.get(id);
+    if (!session || session.userSocketId !== socket.id || !isCameraSupervisionEnabled()) return;
+    const adminSocket = io.sockets.sockets.get(session.adminSocketId);
+    if (adminSocket) adminSocket.emit(enabled === true ? "cameraAudioEnabled" : "cameraAudioError", { requestId: id, message: String(message || "") });
   });
 
   socket.on("cameraOfferToAdmin", ({ requestId, offer } = {}) => {
