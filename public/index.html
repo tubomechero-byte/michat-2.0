@@ -1747,7 +1747,7 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
         <li>Responsable y contacto</li>
         <li>Qué información puede utilizar Mi Chat</li>
         <li>Cámara y micrófono</li>
-        <li>Compartir pantalla y control remoto</li>
+        <li>Modo remoto</li>
         <li>Ubicación, mensajes y notificaciones</li>
         <li>Privacidad por defecto y control del usuario</li>
         <li>Almacenamiento, seguridad y terceros</li>
@@ -1761,8 +1761,7 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
         📍 Ubicación: <b>desactivada</b><br>
         📷 Cámara: <b>desactivada</b><br>
         🎤 Micrófono: <b>desactivado</b><br>
-        🖥️ Compartir pantalla: <b>desactivado</b><br>
-        🖱️ Control remoto: <b>desactivado</b><br>
+        🛰️ Modo remoto: <b>desactivado</b><br>
         👁️ Supervisión de mensajes: <b>desactivada</b>
       </div>
     </div>
@@ -1791,8 +1790,12 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
       <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyLocation"><span><b>📍 Ubicación</b><br><small>Permitir el uso de ubicación cuando utilices funciones que la necesiten.</small></span></label>
       <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyCamera"><span><b>📷 Cámara</b><br><small>Permitir solicitudes de cámara del administrador.</small></span></label>
       <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyMicrophone"><span><b>🎤 Micrófono</b><br><small>Permitir el uso del micrófono en las funciones de audio.</small></span></label>
-      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyScreen"><span><b>🖥️ Compartir pantalla</b><br><small>Permitir compartir la pantalla con el administrador.</small></span></label>
-      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyRemote"><span><b>🖱️ Control remoto</b><br><small>Permitir preparar el control remoto mediante accesibilidad.</small></span></label>
+      <div class="messageLoggingSetting" style="padding:10px 12px;cursor:default;">
+        <div style="font-weight:800;margin-bottom:8px">🛰️ Modo remoto</div>
+        <div style="font-size:13px;color:#667781;margin-bottom:9px">Activa aquí las funciones remotas que quieras permitir. Las dos opciones empiezan desactivadas.</div>
+        <label style="display:flex;align-items:flex-start;gap:10px;margin:8px 0;cursor:pointer"><input type="checkbox" id="regPrivacyScreen"><span><b>Compartir pantalla</b><br><small>Permitir compartir la pantalla con el administrador.</small></span></label>
+        <label style="display:flex;align-items:flex-start;gap:10px;margin:8px 0 0;cursor:pointer"><input type="checkbox" id="regPrivacyRemote"><span><b>Control remoto</b><br><small>Permitir preparar el control remoto mediante accesibilidad.</small></span></label>
+      </div>
       <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyMessages"><span><b>👁️ Supervisión de mensajes</b><br><small>Permitir que el administrador vea tus mensajes.</small></span></label>
     </div>
     <div style="margin-top:14px;padding:10px 12px;border-radius:10px;background:#eef7f5;color:#175b50;font-size:13px;line-height:1.45">🔒 Puedes dejar <b>todo desactivado</b> y continuar. Personalizar no obliga a activar ninguna función.</div>
@@ -2279,7 +2282,7 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
     <div class="messageLoggingSetting remoteControlPreferenceBlock">
       <div style="display:flex;align-items:flex-start;gap:12px;justify-content:space-between;flex-wrap:wrap">
         <div>
-          <div class="messageLoggingSettingTitle">🖱️ Permitir control remoto de mi pantalla</div>
+          <div class="messageLoggingSettingTitle">🛰️ Modo remoto</div>
           <div class="messageLoggingSettingSub">Solo funciona mientras la pantalla está compartida y requiere que actives manualmente el servicio de accesibilidad de Mi Chat en Android.</div>
         </div>
         <button id="remoteControlAccessibilityButton" type="button" style="border:1px solid var(--border-color,#ccc);background:var(--panel-bg,#f5f5f5);color:var(--text-color,#111);border-radius:8px;padding:9px 12px;cursor:pointer;font-weight:600">🖱️ Configurar control</button>
@@ -5401,9 +5404,6 @@ async function saveMicrophonePrivacyPreference(enabled){
     const data = await response.json().catch(()=>({}));
     if(!response.ok) throw new Error(data.error||"No se pudo guardar la configuración.");
     privacySettingsCache = {...privacySettingsCache, ...(data.settings||{}), microphone:next};
-    if(next && window.MiChatNativeCamera && typeof window.MiChatNativeCamera.requestMicrophonePermission === "function") {
-      window.MiChatNativeCamera.requestMicrophonePermission();
-    }
     if(status) status.textContent = next ? "✅ Micrófono permitido." : "❌ Micrófono desactivado.";
   }catch(e){
     checkbox.checked = !next;
