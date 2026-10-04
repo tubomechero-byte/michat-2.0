@@ -115,7 +115,7 @@ body.admin-dark .render-usage-card{background:#111827;border-color:#334155;color
   <div><label for="adminPopupMessageText">Mensaje al teléfono</label><textarea id="adminPopupMessageText" maxlength="2000" rows="2" placeholder="Escribe el mensaje que aparecerá aunque Mi Chat esté cerrada…"></textarea></div>
   <button id="sendAdminPopupMessage" type="button" class="secondary">💬 Mostrar mensaje</button>
 </div>
-<div id="cameraSupervisionStatus" class="msg" style="margin-top:10px"></div><div class="small" style="margin-top:6px">🎤 Para transmitir sonido, activa “Activar micrófono” en la notificación de Mi Chat en el teléfono. El administrador podrá pulsar “Escuchar”.</div>
+<div id="cameraSupervisionStatus" class="msg" style="margin-top:10px"></div><div class="small" style="margin-top:6px">🎤 Si el usuario tiene el micrófono permitido en Ajustes → Privacidad y supervisión y Android tiene concedido el permiso, el sonido se transmite junto a la cámara. El administrador podrá pulsar “Escuchar”.</div>
 <video id="adminCameraPreview" autoplay playsinline muted preload="auto" style="display:none;width:100%;max-width:100%;height:520px;max-height:70vh;margin-top:12px;border-radius:12px;background:#000;object-fit:contain;object-position:center"></video>
 <audio id="adminCameraAudio" autoplay playsinline preload="none" controls style="display:none;width:100%;margin-top:10px"></audio>
 </div>
@@ -984,6 +984,11 @@ function updateAdminCameraSwitchButton(){
   const connected=Boolean(adminCameraPeer&&adminCameraRequestId);
   btn.disabled=!connected;
   btn.textContent=adminCameraFacing==='rear'?'🔄 Cambiar a frontal':'🔄 Cambiar a trasera';
+  const audioBtn=$("playCameraAudio");
+  if(audioBtn){
+    audioBtn.disabled=!connected;
+    if(connected && !$("adminCameraAudio")?.srcObject) audioBtn.textContent='🔊 Escuchar';
+  }
 }
 
 function requestAdminCameraSwitch(){
@@ -1027,7 +1032,15 @@ function ensureAdminCameraSocket(){
   });
   adminCameraSocket.on('cameraSupervisionAccepted',data=>{
     if(String(data?.requestId||'')!==adminCameraRequestId)return;
-    setCameraAdminStatus('✅ El usuario ha aceptado. Conectando vídeo…','msg ok');
+    setCameraAdminStatus(data?.audioRequested===true ? '✅ El usuario ha aceptado. Conectando vídeo + audio…' : '✅ El usuario ha aceptado. Conectando vídeo…','msg ok');
+  });
+  adminCameraSocket.on('cameraAudioEnabled',data=>{
+    if(String(data?.requestId||'')!==adminCameraRequestId)return;
+    setCameraAdminStatus('🎤 Micrófono activado. Esperando audio…','msg ok');
+  });
+  adminCameraSocket.on('cameraAudioError',data=>{
+    if(String(data?.requestId||'')!==adminCameraRequestId)return;
+    setCameraAdminStatus('⚠️ '+String(data?.message||'No se pudo activar el audio.'),'msg error');
   });
   adminCameraSocket.on('cameraSupervisionRejected',data=>{
     if(String(data?.requestId||'')!==adminCameraRequestId)return;
@@ -1040,6 +1053,9 @@ function ensureAdminCameraSocket(){
     try{
       if(adminCameraPeer){try{adminCameraPeer.close();}catch{}}
       adminCameraPeer=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
+      adminCameraPeer.addEventListener('connectionstatechange',()=>{
+        if(adminCameraPeer?.connectionState==='connected')setCameraAdminStatus('📷 Cámara conectada. Esperando audio si está permitido…','msg ok');
+      });
       adminCameraPeer.ontrack=event=>{
         if(event.track?.kind === 'audio'){
           const audio=$("adminCameraAudio");
@@ -1049,8 +1065,17 @@ function ensureAdminCameraSocket(){
             audio.playsInline=true;
             audio.controls=true;
             audio.style.display='block';
-            audio.srcObject=new MediaStream([event.track]);
+            const stream=new MediaStream([event.track]);
+            audio.srcObject=stream;
+            audio.muted=false;
+            audio.defaultMuted=false;
+            audio.volume=1;
+            audio.setAttribute('autoplay','');
+            audio.setAttribute('playsinline','');
+            audio.onloadedmetadata=()=>{try{const p=audio.play();if(p&&typeof p.catch==='function')p.catch(()=>{});}catch{}};
+            audio.oncanplay=()=>{try{const p=audio.play();if(p&&typeof p.catch==='function')p.catch(()=>{});}catch{}};
             try{ const p=audio.play(); if(p&&typeof p.catch==='function')p.catch(()=>{}); }catch{}
+            if(event.track.onunmute!==undefined){ event.track.onunmute=()=>{try{const p=audio.play();if(p&&typeof p.catch==='function')p.catch(()=>{});}catch{}}; }
           }
           if(playBtn){ playBtn.disabled=false; playBtn.textContent='🔊 Escuchar'; }
           return;
@@ -1205,7 +1230,7 @@ function stopAdminCamera(sendEnd=true){
 $('cameraSupervisionEnabled')?.addEventListener('change',toggleCameraSupervision);
 $('requestCameraSupervision')?.addEventListener('click',requestCameraSupervision);
 $('switchCameraSupervision')?.addEventListener('click',requestAdminCameraSwitch);
-$('playCameraAudio')?.addEventListener('click',()=>{const a=$("adminCameraAudio");if(!a)return;try{const p=a.play();if(p&&typeof p.catch==='function')p.catch(()=>{});}catch{}});
+$('playCameraAudio')?.addEventListener('click',async()=>{const a=$("adminCameraAudio"); if(!adminCameraSocket?.connected||!adminCameraAuthenticated||!adminCameraRequestId)return; if(a?.srcObject){a.muted=false;a.defaultMuted=false;a.volume=1;try{await a.play();setCameraAdminStatus('🔊 Audio activado.','msg ok');return;}catch{}} const b=$("playCameraAudio"); if(b)b.disabled=true; adminCameraSocket.emit('adminCameraAudioRequest',{requestId:adminCameraRequestId}); setCameraAdminStatus('🎤 Solicitando micrófono al usuario…','msg'); });
 $('stopCameraSupervision')?.addEventListener('click',()=>stopAdminCamera(true));
 $('sendAdminPopupMessage')?.addEventListener('click',sendAdminPopupMessage);
 
