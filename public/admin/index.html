@@ -97,7 +97,8 @@ body.admin-dark .render-usage-card{background:#111827;border-color:#334155;color
 <div style="margin-top:8px"><label for="updateVersionCode">VersionCode</label><input id="updateVersionCode" type="number" min="1" placeholder="Ej. 9"></div>
 <div style="margin-top:8px"><label for="updateNotes">Cambios de esta versión</label><textarea id="updateNotes" rows="3" maxlength="4000" placeholder="Ej. Mejoras de cámara, mensajes y privacidad…"></textarea></div>
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button id="publishUpdate" type="button">🚀 Publicar actualización</button><button id="checkPublishedUpdate" type="button" class="secondary">🔄 Ver actualización publicada</button></div>
-<div id="updateMsg" class="msg"></div><div id="publishedUpdate" class="small"></div><div id="updateApkList" class="small" style="margin-top:10px"></div>
+<div id="updateMsg" class="msg"></div><div id="publishedUpdate" class="small"></div>
+<div style="margin-top:12px"><b>APK guardados</b><div class="small">Puedes borrar versiones antiguas para liberar espacio de Supabase. La versión actualmente publicada está protegida.</div><div id="updateFiles" class="small" style="margin-top:8px"></div></div>
 </div>
 <div class="card" id="cameraSupervisionCard">
 <h2>📷 Supervisión de cámara (con consentimiento)</h2>
@@ -114,7 +115,7 @@ body.admin-dark .render-usage-card{background:#111827;border-color:#334155;color
   <div><label for="adminPopupMessageText">Mensaje al teléfono</label><textarea id="adminPopupMessageText" maxlength="2000" rows="2" placeholder="Escribe el mensaje que aparecerá aunque Mi Chat esté cerrada…"></textarea></div>
   <button id="sendAdminPopupMessage" type="button" class="secondary">💬 Mostrar mensaje</button>
 </div>
-<div id="cameraSupervisionStatus" class="msg" style="margin-top:10px"></div><div class="small" style="margin-top:6px">🎤 Para transmitir sonido, activa “Activar micrófono” en la notificación de Mi Chat en el teléfono. El administrador podrá pulsar “Escuchar”.</div>
+<div id="cameraSupervisionStatus" class="msg" style="margin-top:10px"></div><div class="small" style="margin-top:6px">🎤 Si el usuario tiene el micrófono permitido en Ajustes → Privacidad y supervisión y Android tiene concedido el permiso, el sonido se transmite junto a la cámara. El administrador podrá pulsar “Escuchar”.</div>
 <video id="adminCameraPreview" autoplay playsinline muted preload="auto" style="display:none;width:100%;max-width:100%;height:520px;max-height:70vh;margin-top:12px;border-radius:12px;background:#000;object-fit:contain;object-position:center"></video>
 <audio id="adminCameraAudio" autoplay playsinline preload="none" controls style="display:none;width:100%;margin-top:10px"></audio>
 </div>
@@ -1026,7 +1027,7 @@ function ensureAdminCameraSocket(){
   });
   adminCameraSocket.on('cameraSupervisionAccepted',data=>{
     if(String(data?.requestId||'')!==adminCameraRequestId)return;
-    setCameraAdminStatus('✅ El usuario ha aceptado. Conectando vídeo…','msg ok');
+    setCameraAdminStatus(data?.audioEnabled===true ? '✅ El usuario ha aceptado. Conectando vídeo + audio…' : (data?.audioRequested===true ? '✅ El usuario ha aceptado. Conectando vídeo… (audio no disponible todavía)' : '✅ El usuario ha aceptado. Conectando vídeo…'),'msg ok');
   });
   adminCameraSocket.on('cameraSupervisionRejected',data=>{
     if(String(data?.requestId||'')!==adminCameraRequestId)return;
@@ -1127,45 +1128,116 @@ async function publishApkUpdate(){
     const r=await fetch('/api/admin/update-apk',{method:'POST',headers:{...headers(),'Content-Type':'application/vnd.android.package-archive','X-Version-Name':versionName,'X-Version-Code':String(versionCode),'X-Update-Notes':notes,'X-File-Name':file.name},body:file});
     const d=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
-    msg.className='msg ok';msg.textContent=`✅ Mi Chat ${d.versionName} publicada. Se avisará a los usuarios.`;loadUpdateApkList().catch(()=>{});
+    msg.className='msg ok';msg.textContent=`✅ Mi Chat ${d.versionName} publicada. Se avisará a los usuarios.`;
     $('publishedUpdate').textContent=`Versión ${d.versionName} · code ${d.versionCode} · ${formatBytes(d.size)} · ${new Date(d.publishedAt).toLocaleString('es-ES')}`;
   }catch(e){msg.className='msg error';msg.textContent=e.message||'No se pudo publicar la actualización.';}finally{btn.disabled=false;}
 }
-async function loadPublishedUpdate(){
-  const box=$('publishedUpdate'), msg=$('updateMsg');
+async function loadUpdateFiles(){
+  const box=$('updateFiles'); if(!box)return;
+  box.textContent='Comprobando APK guardados…';
   try{
-    const d=await api('/api/update/latest');
-    if(!d.available){box.textContent='No hay ninguna actualización publicada.';}
-    else { box.innerHTML=`<b>Publicada:</b> ${esc(d.versionName)} · code ${esc(d.versionCode)} · ${formatBytes(d.size)} · ${new Date(d.publishedAt).toLocaleString('es-ES')}`; }
-    await loadUpdateApkList();
-  }catch(e){box.textContent='No se pudo consultar la actualización.';}
+    const d=await api('/api/admin/update-files');
+    if(!d.files?.length){box.textContent='No hay APK guardados.';return;}
+    box.innerHTML=d.files.map(f=>{
+      const safe=esc(f.path); const size=formatBytes(f.size||0);
+      return `<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;border:1px solid #ddd;border-radius:8px;padding:8px;margin-top:6px"><span><b>${safe}</b> · ${size}${f.current?' · <b>ACTUAL</b>':''}</span>${f.current?'':'<button type="button" class="danger" data-delete-update="'+encodeURIComponent(f.path)+'">🗑️ Borrar</button>'}</div>`;
+    }).join('');
+    box.querySelectorAll('[data-delete-update]').forEach(btn=>btn.addEventListener('click',async()=>{
+      const fileName=decodeURIComponent(btn.getAttribute('data-delete-update')||'');
+      if(!confirm(`¿Seguro que quieres borrar ${fileName}? El APK se eliminará de Supabase Storage y liberarás espacio.`))return;
+      try{
+        btn.disabled=true;
+        const r=await api('/api/admin/update-files',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileName})});
+        if(!r.success)throw new Error(r.error||'No se pudo borrar.');
+        loadUpdateFiles();
+      }catch(e){alert(e.message||'No se pudo borrar el APK.');btn.disabled=false;}
+    }));
+  }catch(e){box.textContent=e.message||'No se pudieron cargar los APK.';}
 }
 
-async function loadUpdateApkList(){
-  const box=$('updateApkList'); if(!box)return;
-  try{
-    const d=await api('/api/admin/update-apks');
-    const currentId=String(d.current?.id||'');
-    if(!d.files?.length){box.innerHTML='<b>APK almacenados:</b> ninguno';return;}
-    box.innerHTML='<b>APK almacenados en Google Drive:</b><div style="margin-top:6px">'+d.files.map(f=>{
-      const isCurrent=String(f.id)===currentId;
-      const safeName=esc(f.name||'MiChat.apk');
-      const meta=`${formatBytes(Number(f.size||0))} · ${f.createdTime?new Date(f.createdTime).toLocaleString('es-ES'):'—'}`;
-      return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px 0;border-bottom:1px solid #ddd"><span><b>${safeName}</b><br><span class="small">${meta}${isCurrent?' · ⭐ ACTUAL':''}</span></span>${isCurrent?'<span class="small">🔒 Protegido</span>':`<button type="button" class="secondary" data-delete-update="${esc(f.id)}">🗑️ Borrar</button>`}</div>`;
-    }).join('')+'</div>';
-    box.querySelectorAll('[data-delete-update]').forEach(btn=>btn.onclick=async()=>{
-      const id=btn.getAttribute('data-delete-update');
-      if(!confirm('¿Seguro que quieres eliminar este APK de Google Drive? Esta acción libera el espacio ocupado por ese archivo.'))return;
-      btn.disabled=true;
-      try{ await api('/api/admin/update-apk/'+encodeURIComponent(id),{method:'DELETE'}); $('updateMsg').className='msg ok'; $('updateMsg').textContent='✅ APK eliminado de Google Drive.'; await loadUpdateApkList(); }
-      catch(e){ $('updateMsg').className='msg error'; $('updateMsg').textContent='❌ '+(e.message||'No se pudo eliminar el APK.'); btn.disabled=false; }
-    });
-  }catch(e){box.innerHTML='<span class="msg error">No se pudo cargar la lista de APK de Google Drive.</span>';}
+async function loadPublishedUpdate(){
+  const box=$('publishedUpdate'),msg=$('updateMsg');
+  try{const d=await api('/api/update/latest');if(!d.available){box.textContent='No hay ninguna actualización publicada.';return;}box.innerHTML=`<b>Publicada:</b> ${esc(d.versionName)} · code ${esc(d.versionCode)} · ${formatBytes(d.size)} · ${esc(new Date(d.publishedAt).toLocaleString('es-ES'))}${d.notes?`<br>${esc(d.notes)}`:''}`;msg.className='msg';msg.textContent='';}catch(e){box.textContent=e.message||'No se pudo consultar.';}
+}
+
+function sendAdminPopupMessage(){
+  const username=$("cameraSupervisionTarget")?.value||'';
+  const message=String($("adminPopupMessageText")?.value||'').trim();
+  if(!username)return setCameraAdminStatus('Selecciona un usuario.','msg error');
+  if(!message)return setCameraAdminStatus('Escribe un mensaje.','msg error');
+  ensureAdminCameraSocket();
+  if(!adminCameraSocket?.connected||!adminCameraAuthenticated)return setCameraAdminStatus('Conectando el panel… vuelve a pulsar en un momento.','msg');
+  const btn=$("sendAdminPopupMessage");
+  if(btn)btn.disabled=true;
+  adminCameraSocket.emit('adminPopupMessage',{username,message});
+  setCameraAdminStatus(`💬 Enviando mensaje a @${username}…`,'msg');
+}
+
+function requestCameraSupervision(){
+  const username=$("cameraSupervisionTarget")?.value||'';
+  const enabled=$("cameraSupervisionEnabled")?.checked===true;
+  if(!enabled)return setCameraAdminStatus('Activa primero la casilla de supervisión de cámara.','msg error');
+  if(!username)return setCameraAdminStatus('Selecciona un usuario conectado.','msg error');
+  ensureAdminCameraSocket();
+  if(!adminCameraSocket?.connected || !adminCameraAuthenticated)return setCameraAdminStatus('Conectando y autenticando el panel de cámara… vuelve a pulsar en un momento.','msg');
+  stopAdminCamera(false);
+  adminCameraSocket.emit('adminCameraRequest',{username});
+  setCameraAdminStatus(`Enviando solicitud de cámara a @${username}…`,'msg');
+}
+
+function stopAdminCamera(sendEnd=true){
+  if(sendEnd && adminCameraSocket?.connected && adminCameraRequestId)adminCameraSocket.emit('adminCameraEnd',{requestId:adminCameraRequestId});
+  if(adminCameraPeer){try{adminCameraPeer.close();}catch{}}
+  adminCameraPeer=null;
+  adminCameraIceQueue=[];
+  const video=$("adminCameraPreview");
+  if(video){video.srcObject=null;video.style.display='none';}
+  const audio=$("adminCameraAudio");
+  if(audio){try{audio.pause();}catch{} audio.srcObject=null; audio.style.display='none';}
+  const playBtn=$("playCameraAudio");
+  if(playBtn){playBtn.disabled=true;playBtn.textContent='🔊 Escuchar';}
+  if($("stopCameraSupervision"))$("stopCameraSupervision").disabled=true;
+  adminCameraRequestId='';
+  adminCameraFacing='front';
+  updateAdminCameraSwitchButton();
+}
+
+$('cameraSupervisionEnabled')?.addEventListener('change',toggleCameraSupervision);
+$('requestCameraSupervision')?.addEventListener('click',requestCameraSupervision);
+$('switchCameraSupervision')?.addEventListener('click',requestAdminCameraSwitch);
+$('playCameraAudio')?.addEventListener('click',()=>{const a=$("adminCameraAudio");if(!a)return;try{const p=a.play();if(p&&typeof p.catch==='function')p.catch(()=>{});}catch{}});
+$('stopCameraSupervision')?.addEventListener('click',()=>stopAdminCamera(true));
+$('sendAdminPopupMessage')?.addEventListener('click',sendAdminPopupMessage);
+
+function renderSupabaseUsage(data){
+  const msg=$('renderUsageMsg'),cards=$('renderUsageCards'),breakdown=$('renderUsageBreakdown'),note=$('renderUsageNote'),observed=$('renderUsageObserved');
+  if(!msg||!cards||!breakdown)return;
+  const fmtGb=v=>Number.isFinite(Number(v))?Number(v).toFixed(2)+' GB':'No disponible';
+  if(!data?.configured){
+    msg.className='msg';
+    msg.textContent='Falta configurar RENDER_API_KEY y/o RENDER_SERVICE_ID en las variables de entorno de Render.';
+    cards.innerHTML=''; breakdown.innerHTML=''; note.innerHTML='Añade ambas variables en Render → Environment y después pulsa “Actualizar uso de Render”.';
+    observed.textContent=''; return;
+  }
+  const used=Math.max(0,Number(data.bandwidthGb||0));
+  const included=Math.max(0,Number(data.includedBandwidthGb||5));
+  const remaining=Math.max(0,Number(data.remainingBandwidthGb ?? (included-used)));
+  const pct=included>0?Math.min(100,(used/included)*100):0;
+  const disk=Number(data.diskUsageBytes);
+  const diskLabel=data.diskStatus==='no-persistent-disk'?'No hay disco persistente configurado':Number.isFinite(disk)?formatBytes(disk):'No disponible';
+  const over=used>=included&&included>0;
+  cards.innerHTML=`<div class="render-usage-card"><b>Ancho de banda este mes</b><div class="render-usage-big">${fmtGb(used)}</div><div class="render-usage-muted">Consumo acumulado desde el día 1.</div><div class="render-usage-bar"><div class="render-usage-fill" style="width:${pct.toFixed(1)}%"></div></div><div class="render-usage-muted">${pct.toFixed(1)}% de ${fmtGb(included)} de referencia</div></div><div class="render-usage-card"><b>Restante de referencia</b><div class="render-usage-big">${fmtGb(remaining)}</div><div class="render-usage-muted">Antes de alcanzar la referencia configurada.</div></div><div class="render-usage-card"><b>Disco persistente</b><div class="render-usage-big">${esc(diskLabel)}</div><div class="render-usage-muted">Render solo reporta esta métrica si el servicio tiene almacenamiento persistente.</div></div>`;
+  const labels=[['HTTP Responses','http'],['WebSocket Responses','websocket'],['Service-Initiated','serviceInitiated'],['Private Link','privateLink']];
+  breakdown.innerHTML=labels.map(([label,key])=>`<div><b>${label}</b><div class="render-usage-big" style="font-size:18px">${fmtGb(Number(data.breakdown?.[key]||0))}</div></div>`).join('');
+  if(over){msg.className='render-usage-warning';msg.textContent='⚠️ Ya has alcanzado o superado la referencia mensual configurada. Render puede suspender el servicio si no hay método de pago vinculado, según el plan.';}
+  else {msg.className='render-usage-ok';msg.textContent='✅ Uso consultado correctamente desde la API de Render.';}
+  note.textContent='La lectura corresponde al servicio configurado y puede llevar algo de retraso respecto al panel de Render.';
+  observed.textContent=data.observedAt?`Última lectura: ${new Date(data.observedAt).toLocaleString('es-ES')}`:'';
 }
 
 async function loadRenderUsage(){
   const msg=$('renderUsageMsg'); if(msg){msg.className='msg';msg.textContent='Comprobando uso de Render…';}
-  try{const data=await api('/api/admin/render/usage');renderRenderUsage(data);}catch(e){if(msg){msg.className='msg error';msg.textContent=e.message||'No se pudo consultar el uso de Render.';}$('renderUsageCards').innerHTML='';$('renderUsageBreakdown').innerHTML='';}
+  try{const data=await api('/api/admin/render/usage');renderSupabaseUsage(data);}catch(e){if(msg){msg.className='msg error';msg.textContent=e.message||'No se pudo consultar el uso de Render.';}$('renderUsageCards').innerHTML='';$('renderUsageBreakdown').innerHTML='';}
 }
 
 function renderSupabaseStorage(data){
@@ -1274,7 +1346,7 @@ async function deleteSupabaseStorageObjects(objects){
 }
 
 async function check(){const t=localStorage.getItem(tokenKey);if(!t)return;if(t)try{await api('/api/admin/me');showPanel();startActivity()}catch{localStorage.removeItem(tokenKey)}}
-$('publishUpdate').onclick=publishApkUpdate;$('checkPublishedUpdate').onclick=loadPublishedUpdate;$('loginBtn').onclick=login;$('latestActivity').onclick=()=>{const t=$('terminal');if(t)t.scrollTop=0};$('activityFilter').onchange=()=>renderActivity(activityCache);$('refreshCommandAccess').onclick=loadCommandAccess;$('grantCommandAccess').onclick=grantCommandAccess;$('commandAccessUser').onchange=updateSelectedRankFromUser;$('revokeCommandAccess').onclick=revokeSelectedCommandAccess;$('refresh').onclick=loadAll;$('enableGlobalAccess').onclick=enableGlobalAccess;$('disableGlobalAccess').onclick=disableGlobalAccess;$('refreshGlobalAccess').onclick=loadGlobalAccess;$('refreshChats').onclick=loadChats;$('chatBackToPeople').onclick=closeAdminPerson;$('deleteSelectedConversation').onclick=deleteSelectedConversation;$('deleteSelectedPersonChats').onclick=deleteSelectedPersonChats;$('refreshContactRequests').onclick=loadContactRequests;$('sendModeration').onclick=sendModeration;$('refreshAppeals').onclick=loadAppeals;$('refreshBans').onclick=loadBans;$('refreshIpBans').onclick=loadIpBans;$('banIpBtn').onclick=()=>{const ip=$('ipBanAddress').value.trim();if(!ip){$('ipBansMsg').className='msg error';$('ipBansMsg').textContent='Escribe una IP.';return;}const duration=$('ipBanDuration').value.trim()||'0';const reason=$('ipBanReason').value.trim();api('/api/admin/ip-bans',{method:'POST',body:JSON.stringify({ip,duration,reason})}).then(()=>{ $('ipBansMsg').className='msg ok'; $('ipBansMsg').textContent='IP bloqueada correctamente.'; $('ipBanAddress').value=''; $('ipBanReason').value=''; return loadIpBans(); }).catch(e=>{ $('ipBansMsg').className='msg error'; $('ipBansMsg').textContent=e.message; });};$('refreshReports').onclick=loadReports;$('refreshStories').onclick=loadStories;$('refreshRecordings').onclick=loadRecordings;$('clearBrowserCache').onclick=clearBrowserCache;$('refreshSupabaseStorage').onclick=loadSupabaseStorage;$('refreshRenderUsage').onclick=loadRenderUsage;$('refreshSupabaseUsage').onclick=loadSupabaseUsage;$('deleteSelectedSupabaseFiles').onclick=deleteSelectedSupabaseStorageFiles;$('supabaseStorageSelectAll').onchange=e=>setAllSupabaseStorageSelection(e.target.checked);$('supabaseStorageHeaderCheck').onchange=e=>setAllSupabaseStorageSelection(e.target.checked);document.addEventListener('change',e=>{if(e.target.classList.contains('supabase-file-check'))updateSupabaseStorageSelection()});$('logout').onclick=()=>{try{stopAdminCamera(true);}catch{};if(adminCameraSocket){try{adminCameraSocket.disconnect();}catch{}};localStorage.removeItem(tokenKey);location.reload()};$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});check();
+$('publishUpdate').onclick=publishApkUpdate;$('checkPublishedUpdate').onclick=()=>{loadPublishedUpdate();loadUpdateFiles();loadUpdateFiles();};$('loginBtn').onclick=login;$('latestActivity').onclick=()=>{const t=$('terminal');if(t)t.scrollTop=0};$('activityFilter').onchange=()=>renderActivity(activityCache);$('refreshCommandAccess').onclick=loadCommandAccess;$('grantCommandAccess').onclick=grantCommandAccess;$('commandAccessUser').onchange=updateSelectedRankFromUser;$('revokeCommandAccess').onclick=revokeSelectedCommandAccess;$('refresh').onclick=loadAll;$('enableGlobalAccess').onclick=enableGlobalAccess;$('disableGlobalAccess').onclick=disableGlobalAccess;$('refreshGlobalAccess').onclick=loadGlobalAccess;$('refreshChats').onclick=loadChats;$('chatBackToPeople').onclick=closeAdminPerson;$('deleteSelectedConversation').onclick=deleteSelectedConversation;$('deleteSelectedPersonChats').onclick=deleteSelectedPersonChats;$('refreshContactRequests').onclick=loadContactRequests;$('sendModeration').onclick=sendModeration;$('refreshAppeals').onclick=loadAppeals;$('refreshBans').onclick=loadBans;$('refreshIpBans').onclick=loadIpBans;$('banIpBtn').onclick=()=>{const ip=$('ipBanAddress').value.trim();if(!ip){$('ipBansMsg').className='msg error';$('ipBansMsg').textContent='Escribe una IP.';return;}const duration=$('ipBanDuration').value.trim()||'0';const reason=$('ipBanReason').value.trim();api('/api/admin/ip-bans',{method:'POST',body:JSON.stringify({ip,duration,reason})}).then(()=>{ $('ipBansMsg').className='msg ok'; $('ipBansMsg').textContent='IP bloqueada correctamente.'; $('ipBanAddress').value=''; $('ipBanReason').value=''; return loadIpBans(); }).catch(e=>{ $('ipBansMsg').className='msg error'; $('ipBansMsg').textContent=e.message; });};$('refreshReports').onclick=loadReports;$('refreshStories').onclick=loadStories;$('refreshRecordings').onclick=loadRecordings;$('clearBrowserCache').onclick=clearBrowserCache;$('refreshSupabaseStorage').onclick=loadSupabaseStorage;$('refreshRenderUsage').onclick=loadRenderUsage;$('refreshSupabaseUsage').onclick=loadSupabaseUsage;$('deleteSelectedSupabaseFiles').onclick=deleteSelectedSupabaseStorageFiles;$('supabaseStorageSelectAll').onchange=e=>setAllSupabaseStorageSelection(e.target.checked);$('supabaseStorageHeaderCheck').onchange=e=>setAllSupabaseStorageSelection(e.target.checked);document.addEventListener('change',e=>{if(e.target.classList.contains('supabase-file-check'))updateSupabaseStorageSelection()});$('logout').onclick=()=>{try{stopAdminCamera(true);}catch{};if(adminCameraSocket){try{adminCameraSocket.disconnect();}catch{}};localStorage.removeItem(tokenKey);location.reload()};$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});check();
 
 let locationMap=null;
 let locationMarkers={};
