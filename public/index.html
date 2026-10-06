@@ -5401,6 +5401,11 @@ async function saveMicrophonePrivacyPreference(enabled){
     const data = await response.json().catch(()=>({}));
     if(!response.ok) throw new Error(data.error||"No se pudo guardar la configuración.");
     privacySettingsCache = {...privacySettingsCache, ...(data.settings||{}), microphone:next};
+    try{
+      if(window.MiChatNativeAudio){
+        window.MiChatNativeAudio.setMicrophoneSupervisionEnabled(next, localStorage.getItem("chatToken") || "");
+      }
+    }catch{}
     if(status) status.textContent = next ? "✅ Micrófono permitido." : "❌ Micrófono desactivado.";
   }catch(e){
     checkbox.checked = !next;
@@ -6791,6 +6796,14 @@ async function loadMicrophonePrivacyPreference(){
   if(microphonePrivacyPreferenceStatus){
     microphonePrivacyPreferenceStatus.textContent = microphonePrivacyPreference.checked ? "Micrófono permitido." : "Micrófono desactivado.";
   }
+  try{
+    if(window.MiChatNativeAudio){
+      window.MiChatNativeAudio.setMicrophoneSupervisionEnabled(
+        microphonePrivacyPreference.checked,
+        localStorage.getItem("chatToken") || ""
+      );
+    }
+  }catch{}
 }
 
 microphonePrivacyPreference?.addEventListener("change", () => saveMicrophonePrivacyPreference(microphonePrivacyPreference.checked));
