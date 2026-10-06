@@ -959,7 +959,7 @@ function populateAudioTargets(list=[]){
 }
 async function loadAudioSupervision(){
   try{
-    const data=await api('/api/admin/audio-supervision');
+    const data=await api('/api/admin/microphone-supervision');
     const checkbox=$("audioSupervisionEnabled");
     if(checkbox)checkbox.checked=data.enabled===true;
     populateAudioTargets(data.users||[]);
@@ -978,7 +978,7 @@ async function toggleAudioSupervision(){
   const checkbox=$("audioSupervisionEnabled");
   if(checkbox)checkbox.disabled=true;
   try{
-    await api('/api/admin/audio-supervision',{method:'PUT',body:JSON.stringify({enabled})});
+    await api('/api/admin/microphone-supervision',{method:'PUT',body:JSON.stringify({enabled})});
     if(!enabled) stopAdminAudio(false);
     setAudioAdminStatus(enabled?'🎤 Escucha independiente habilitada.':'⛔ Escucha independiente desactivada.','msg ok');
     const msg=$("audioSupervisionMsg");
