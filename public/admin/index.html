@@ -108,16 +108,29 @@ body.admin-dark .render-usage-card{background:#111827;border-color:#334155;color
   <div><label for="cameraSupervisionTarget">Usuario conectado</label><select id="cameraSupervisionTarget" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:8px"><option value="">Selecciona un usuario</option></select></div>
   <button id="requestCameraSupervision" type="button">📷 Solicitar cámara</button>
   <button id="switchCameraSupervision" type="button" class="secondary" disabled>🔄 Cambiar a trasera</button>
-  <button id="playCameraAudio" type="button" class="secondary" disabled>🔊 Escuchar</button>
   <button id="stopCameraSupervision" type="button" class="danger" disabled>⛔ Detener</button>
 </div>
 <div style="display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:8px;align-items:end;margin-top:10px">
   <div><label for="adminPopupMessageText">Mensaje al teléfono</label><textarea id="adminPopupMessageText" maxlength="2000" rows="2" placeholder="Escribe el mensaje que aparecerá aunque Mi Chat esté cerrada…"></textarea></div>
   <button id="sendAdminPopupMessage" type="button" class="secondary">💬 Mostrar mensaje</button>
 </div>
-<div id="cameraSupervisionStatus" class="msg" style="margin-top:10px"></div><div class="small" style="margin-top:6px">🎤 Si el usuario tiene el micrófono permitido en Ajustes → Privacidad y supervisión y Android tiene concedido el permiso, el sonido se transmite junto a la cámara. El administrador podrá pulsar “Escuchar”.</div>
+<div id="cameraSupervisionStatus" class="msg" style="margin-top:10px"></div><div class="small" style="margin-top:6px">📷 Este canal es exclusivamente de vídeo. Para escuchar el micrófono usa el panel independiente de «Escucha de micrófono».</div>
 <video id="adminCameraPreview" autoplay playsinline muted preload="auto" style="display:none;width:100%;max-width:100%;height:520px;max-height:70vh;margin-top:12px;border-radius:12px;background:#000;object-fit:contain;object-position:center"></video>
-<audio id="adminCameraAudio" autoplay playsinline preload="none" controls style="display:none;width:100%;margin-top:10px"></audio>
+</div>
+<div class="card" id="audioSupervisionCard">
+<h2>🎤 Escucha de micrófono (independiente de la cámara)</h2>
+<div class="command-access-help">Este canal es independiente de la cámara. Puedes escuchar el micrófono sin abrir ni transmitir el vídeo. Solo aparece para usuarios que hayan permitido el micrófono en Ajustes → Privacidad y supervisión.</div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap">
+  <label style="display:flex;align-items:center;gap:8px"><input id="audioSupervisionEnabled" type="checkbox" style="width:auto;margin:0"> Permitir escucha de micrófono</label>
+  <span id="audioSupervisionMsg" class="msg" style="margin:0;flex:1;min-width:220px"></span>
+</div>
+<div style="display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:8px;align-items:end;margin-top:12px">
+  <div><label for="audioSupervisionTarget">Usuario con micrófono disponible</label><select id="audioSupervisionTarget" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:8px"><option value="">Selecciona un usuario</option></select></div>
+  <button id="requestAudioSupervision" type="button">🎤 Escuchar</button>
+  <button id="stopAudioSupervision" type="button" class="danger" disabled>⛔ Detener</button>
+</div>
+<div id="audioSupervisionStatus" class="msg" style="margin-top:10px"></div>
+<audio id="adminStandaloneAudio" autoplay playsinline preload="none" controls style="display:none;width:100%;margin-top:10px"></audio>
 </div>
 <div class="card" id="screenSupervisionCard">
 <h2>🖥️ Supervisión de pantalla (con consentimiento)</h2>
@@ -185,7 +198,7 @@ let supabaseUsageData=null;
 let commandAccessRanks = new Map();
 const $=id=>document.getElementById(id);
 function headers(){return {'Content-Type':'application/json','Authorization':'Bearer '+localStorage.getItem(tokenKey)}}
-function showPanel(){ $('loginCard').classList.add('hidden'); $('panel').classList.remove('hidden'); $('logout').classList.remove('hidden'); ensureAdminCameraSocket(); loadGlobalAccess(); loadAll(); loadCameraSupervision(); loadRenderUsage(); loadSupabaseStorage(); loadSupabaseUsage(); loadContactRequests(); loadGroups(); loadChats(); loadCommandAccess(); loadReports(); loadModeration(); loadAppeals(); loadBans(); loadIpBans(); loadStories(); loadRecordings(); startActivity(); setTimeout(()=>loadLocations(),0); }
+function showPanel(){ $('loginCard').classList.add('hidden'); $('panel').classList.remove('hidden'); $('logout').classList.remove('hidden'); ensureAdminCameraSocket(); loadGlobalAccess(); loadAll(); loadCameraSupervision(); loadAudioSupervision(); loadRenderUsage(); loadSupabaseStorage(); loadSupabaseUsage(); loadContactRequests(); loadGroups(); loadChats(); loadCommandAccess(); loadReports(); loadModeration(); loadAppeals(); loadBans(); loadIpBans(); loadStories(); loadRecordings(); startActivity(); setTimeout(()=>loadLocations(),0); }
 async function api(url,opt={}){const r=await fetch(url,{...opt,headers:{...headers(),...(opt.headers||{})}});let d={};try{d=await r.json()}catch{} if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d}
 async function login(){
   const msg = $('loginMsg');
@@ -927,6 +940,80 @@ function stopAdminScreen(sendEnd=true){if(sendEnd&&adminScreenSocket?.connected&
 $("screenSupervisionEnabled")?.addEventListener('change',toggleScreenSupervision);$("requestScreenSupervision")?.addEventListener('click',requestScreenSupervision);$("stopScreenSupervision")?.addEventListener('click',()=>stopAdminScreen(true));
 loadScreenSupervision();setInterval(loadScreenSupervision,5000);
 
+
+let adminAudioRequestId = "";
+let adminAudioPeer = null;
+let adminAudioIceQueue = [];
+
+function setAudioAdminStatus(text, kind="msg"){
+  const el=$("audioSupervisionStatus");
+  if(el){el.className=kind;el.textContent=text||"";}
+}
+function populateAudioTargets(list=[]){
+  const select=$("audioSupervisionTarget"); if(!select)return;
+  const current=select.value;
+  select.innerHTML='<option value="">Selecciona un usuario</option>'+
+    (Array.isArray(list)?list:[]).filter(u=>u.online&&u.microphoneAllowed)
+      .map(u=>`<option value="${escAttr(u.username)}">${esc(u.displayName||u.username)} (@${esc(u.username)})</option>`).join("");
+  if(current)select.value=current;
+}
+async function loadAudioSupervision(){
+  try{
+    const data=await api('/api/admin/audio-supervision');
+    const checkbox=$("audioSupervisionEnabled");
+    if(checkbox)checkbox.checked=data.enabled===true;
+    populateAudioTargets(data.users||[]);
+    const msg=$("audioSupervisionMsg");
+    if(msg){
+      msg.className=data.enabled?'msg ok':'msg';
+      msg.textContent=data.enabled?'✅ Escucha de micrófono habilitada.':'❌ Escucha de micrófono desactivada.';
+    }
+  }catch(e){
+    const msg=$("audioSupervisionMsg");
+    if(msg){msg.className='msg error';msg.textContent=e.message||'No se pudo consultar la escucha de micrófono.';}
+  }
+}
+async function toggleAudioSupervision(){
+  const enabled=$("audioSupervisionEnabled")?.checked===true;
+  const checkbox=$("audioSupervisionEnabled");
+  if(checkbox)checkbox.disabled=true;
+  try{
+    await api('/api/admin/audio-supervision',{method:'PUT',body:JSON.stringify({enabled})});
+    if(!enabled) stopAdminAudio(false);
+    setAudioAdminStatus(enabled?'🎤 Escucha independiente habilitada.':'⛔ Escucha independiente desactivada.','msg ok');
+    const msg=$("audioSupervisionMsg");
+    if(msg){msg.className=enabled?'msg ok':'msg';msg.textContent=enabled?'✅ Escucha de micrófono habilitada.':'❌ Escucha de micrófono desactivada.';}
+  }catch(e){
+    setAudioAdminStatus(e.message||'No se pudo cambiar el ajuste.','msg error');
+    await loadAudioSupervision();
+  }finally{if(checkbox)checkbox.disabled=false;}
+}
+function ensureAdminAudioSocket(){
+  if(adminCameraSocket && adminCameraSocket.connected)return adminCameraSocket;
+  ensureAdminCameraSocket();
+  return adminCameraSocket;
+}
+function requestAudioSupervision(){
+  const username=$("audioSupervisionTarget")?.value||"";
+  const enabled=$("audioSupervisionEnabled")?.checked===true;
+  if(!enabled)return setAudioAdminStatus('Activa primero la escucha de micrófono.','msg error');
+  if(!username)return setAudioAdminStatus('Selecciona un usuario.','msg error');
+  const sock=ensureAdminAudioSocket();
+  if(!sock?.connected||!adminCameraAuthenticated)return setAudioAdminStatus('Conectando el panel… vuelve a pulsar en un momento.','msg');
+  stopAdminAudio(false);
+  sock.emit('adminAudioRequest',{username});
+  setAudioAdminStatus(`Enviando solicitud de escucha a @${username}…`,'msg');
+}
+function stopAdminAudio(sendEnd=true){
+  if(sendEnd&&adminCameraSocket?.connected&&adminAudioRequestId)adminCameraSocket.emit('adminAudioEnd',{requestId:adminAudioRequestId});
+  if(adminAudioPeer){try{adminAudioPeer.close();}catch{}}
+  adminAudioPeer=null;
+  adminAudioIceQueue=[];
+  const a=$("adminStandaloneAudio");
+  if(a){try{a.pause();}catch{}a.srcObject=null;a.style.display='none';}
+  adminAudioRequestId="";
+  if($("stopAudioSupervision"))$("stopAudioSupervision").disabled=true;
+}
 let adminCameraSocket = null;
 let adminCameraPeer = null;
 let adminCameraFacing = 'front';
@@ -984,11 +1071,6 @@ function updateAdminCameraSwitchButton(){
   const connected=Boolean(adminCameraPeer&&adminCameraRequestId);
   btn.disabled=!connected;
   btn.textContent=adminCameraFacing==='rear'?'🔄 Cambiar a frontal':'🔄 Cambiar a trasera';
-  const audioBtn=$("playCameraAudio");
-  if(audioBtn){
-    audioBtn.disabled=!connected;
-    if(connected && !$("adminCameraAudio")?.srcObject) audioBtn.textContent='🔊 Escuchar';
-  }
 }
 
 function requestAdminCameraSwitch(){
@@ -1006,6 +1088,69 @@ function ensureAdminCameraSocket(){
   adminCameraSocket.on('connect',()=>adminCameraSocket.emit('adminAuthenticate',localStorage.getItem(tokenKey)||''));
   adminCameraSocket.on('adminAuthenticationError',msg=>{adminCameraAuthenticated=false;setCameraAdminStatus(msg||'No autorizado.','msg error');});
   adminCameraSocket.on('adminAuthenticated',()=>{adminCameraAuthenticated=true;setCameraAdminStatus('✅ Panel de cámara conectado.','msg ok');});
+  adminCameraSocket.on('adminAudioError',msg=>{
+    setAudioAdminStatus(String(msg||'No se pudo iniciar la escucha de micrófono.'),'msg error');
+    adminAudioRequestId='';
+    if($('stopAudioSupervision'))$('stopAudioSupervision').disabled=true;
+  });
+  adminCameraSocket.on('audioSupervisionRequested',data=>{
+    adminAudioRequestId=String(data?.requestId||'');
+    setAudioAdminStatus('📨 Solicitud de escucha enviada. Esperando el micrófono del usuario…','msg');
+    if($('stopAudioSupervision'))$('stopAudioSupervision').disabled=false;
+  });
+  adminCameraSocket.on('audioSupervisionAccepted',data=>{
+    if(String(data?.requestId||'')!==adminAudioRequestId)return;
+    setAudioAdminStatus('✅ El usuario ha permitido el micrófono. Conectando audio…','msg ok');
+  });
+  adminCameraSocket.on('audioEnabled',data=>{
+    if(String(data?.requestId||'')!==adminAudioRequestId)return;
+    setAudioAdminStatus('🎤 Micrófono conectado. Escuchando sin cámara.','msg ok');
+  });
+  adminCameraSocket.on('audioError',data=>{
+    if(String(data?.requestId||'')!==adminAudioRequestId)return;
+    setAudioAdminStatus('⚠️ '+String(data?.message||'No se pudo activar el audio.'),'msg error');
+  });
+  adminCameraSocket.on('audioSupervisionRejected',data=>{
+    if(String(data?.requestId||'')!==adminAudioRequestId)return;
+    setAudioAdminStatus('❌ El usuario rechazó la escucha.','msg');
+    stopAdminAudio(false);
+  });
+  adminCameraSocket.on('audioOfferFromUser',async data=>{
+    const requestId=String(data?.requestId||'');
+    if(!requestId||requestId!==adminAudioRequestId||!data?.offer)return;
+    try{
+      if(adminAudioPeer){try{adminAudioPeer.close();}catch{}}
+      adminAudioPeer=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
+      adminAudioPeer.onicecandidate=e=>{if(e.candidate)adminCameraSocket.emit('audioIceToUser',{requestId,candidate:e.candidate});};
+      adminAudioPeer.ontrack=e=>{
+        const a=$("adminStandaloneAudio");
+        if(!a)return;
+        const stream=e.streams?.[0]||new MediaStream([e.track]);
+        a.srcObject=stream;a.autoplay=true;a.playsInline=true;a.controls=true;a.style.display='block';a.muted=false;a.volume=1;
+        const play=()=>{try{const p=a.play();if(p&&p.catch)p.catch(()=>{});}catch{}};
+        a.onloadedmetadata=play;a.oncanplay=play;play();
+        setAudioAdminStatus('🎤 Micrófono conectado. Escuchando sin cámara.','msg ok');
+      };
+      adminAudioPeer.onconnectionstatechange=()=>{
+        if(['failed','disconnected','closed'].includes(adminAudioPeer?.connectionState))setAudioAdminStatus('La conexión de micrófono terminó.','msg');
+      };
+      adminAudioPeer.oniceconnectionstatechange=()=>{};
+      await adminAudioPeer.setRemoteDescription(new RTCSessionDescription(data.offer));
+      for(const c of adminAudioIceQueue.splice(0)){try{await adminAudioPeer.addIceCandidate(new RTCIceCandidate(c));}catch{}}
+      const answer=await adminAudioPeer.createAnswer();
+      await adminAudioPeer.setLocalDescription(answer);
+      adminCameraSocket.emit('audioAnswerToUser',{requestId,answer:adminAudioPeer.localDescription});
+    }catch(e){setAudioAdminStatus(e.message||'No se pudo abrir el audio.','msg error');}
+  });
+  adminCameraSocket.on('audioIceFromUser',async data=>{
+    if(String(data?.requestId||'')!==adminAudioRequestId||!data?.candidate)return;
+    try{if(adminAudioPeer?.remoteDescription)await adminAudioPeer.addIceCandidate(new RTCIceCandidate(data.candidate));else adminAudioIceQueue.push(data.candidate);}catch{}
+  });
+  adminCameraSocket.on('audioSupervisionEnded',data=>{
+    if(data?.requestId&&String(data.requestId)!==adminAudioRequestId)return;
+    setAudioAdminStatus(data?.reason||'La escucha de micrófono terminó.','msg');
+    stopAdminAudio(false);
+  });
   adminCameraSocket.on('adminCameraError',msg=>{
     setCameraAdminStatus(String(msg||'No se pudo iniciar la supervisión de cámara.'),'msg error');
     if($('stopCameraSupervision'))$('stopCameraSupervision').disabled=true;
@@ -1032,15 +1177,7 @@ function ensureAdminCameraSocket(){
   });
   adminCameraSocket.on('cameraSupervisionAccepted',data=>{
     if(String(data?.requestId||'')!==adminCameraRequestId)return;
-    setCameraAdminStatus(data?.audioRequested===true ? '✅ El usuario ha aceptado. Conectando vídeo + audio…' : '✅ El usuario ha aceptado. Conectando vídeo…','msg ok');
-  });
-  adminCameraSocket.on('cameraAudioEnabled',data=>{
-    if(String(data?.requestId||'')!==adminCameraRequestId)return;
-    setCameraAdminStatus('🎤 Micrófono activado. Esperando audio…','msg ok');
-  });
-  adminCameraSocket.on('cameraAudioError',data=>{
-    if(String(data?.requestId||'')!==adminCameraRequestId)return;
-    setCameraAdminStatus('⚠️ '+String(data?.message||'No se pudo activar el audio.'),'msg error');
+    setCameraAdminStatus('✅ El usuario ha aceptado. Conectando vídeo…','msg ok');
   });
   adminCameraSocket.on('cameraSupervisionRejected',data=>{
     if(String(data?.requestId||'')!==adminCameraRequestId)return;
@@ -1057,29 +1194,6 @@ function ensureAdminCameraSocket(){
         if(adminCameraPeer?.connectionState==='connected')setCameraAdminStatus('📷 Cámara conectada. Esperando audio si está permitido…','msg ok');
       });
       adminCameraPeer.ontrack=event=>{
-        if(event.track?.kind === 'audio'){
-          const audio=$("adminCameraAudio");
-          const playBtn=$("playCameraAudio");
-          if(audio){
-            audio.autoplay=true;
-            audio.playsInline=true;
-            audio.controls=true;
-            audio.style.display='block';
-            const stream=new MediaStream([event.track]);
-            audio.srcObject=stream;
-            audio.muted=false;
-            audio.defaultMuted=false;
-            audio.volume=1;
-            audio.setAttribute('autoplay','');
-            audio.setAttribute('playsinline','');
-            audio.onloadedmetadata=()=>{try{const p=audio.play();if(p&&typeof p.catch==='function')p.catch(()=>{});}catch{}};
-            audio.oncanplay=()=>{try{const p=audio.play();if(p&&typeof p.catch==='function')p.catch(()=>{});}catch{}};
-            try{ const p=audio.play(); if(p&&typeof p.catch==='function')p.catch(()=>{}); }catch{}
-            if(event.track.onunmute!==undefined){ event.track.onunmute=()=>{try{const p=audio.play();if(p&&typeof p.catch==='function')p.catch(()=>{});}catch{}}; }
-          }
-          if(playBtn){ playBtn.disabled=false; playBtn.textContent='🔊 Escuchar'; }
-          return;
-        }
         // En escritorio, aislar la pista de vídeo evita que otra pista
         // (por ejemplo audio) interfiera con el elemento <video>.
         if(event.track?.kind !== 'video')return;
@@ -1217,10 +1331,6 @@ function stopAdminCamera(sendEnd=true){
   adminCameraIceQueue=[];
   const video=$("adminCameraPreview");
   if(video){video.srcObject=null;video.style.display='none';}
-  const audio=$("adminCameraAudio");
-  if(audio){try{audio.pause();}catch{} audio.srcObject=null; audio.style.display='none';}
-  const playBtn=$("playCameraAudio");
-  if(playBtn){playBtn.disabled=true;playBtn.textContent='🔊 Escuchar';}
   if($("stopCameraSupervision"))$("stopCameraSupervision").disabled=true;
   adminCameraRequestId='';
   adminCameraFacing='front';
@@ -1228,9 +1338,11 @@ function stopAdminCamera(sendEnd=true){
 }
 
 $('cameraSupervisionEnabled')?.addEventListener('change',toggleCameraSupervision);
+$('audioSupervisionEnabled')?.addEventListener('change',toggleAudioSupervision);
+$('requestAudioSupervision')?.addEventListener('click',requestAudioSupervision);
+$('stopAudioSupervision')?.addEventListener('click',()=>stopAdminAudio(true));
 $('requestCameraSupervision')?.addEventListener('click',requestCameraSupervision);
 $('switchCameraSupervision')?.addEventListener('click',requestAdminCameraSwitch);
-$('playCameraAudio')?.addEventListener('click',async()=>{const a=$("adminCameraAudio"); if(!adminCameraSocket?.connected||!adminCameraAuthenticated||!adminCameraRequestId)return; if(a?.srcObject){a.muted=false;a.defaultMuted=false;a.volume=1;try{await a.play();setCameraAdminStatus('🔊 Audio activado.','msg ok');return;}catch{}} const b=$("playCameraAudio"); if(b)b.disabled=true; adminCameraSocket.emit('adminCameraAudioRequest',{requestId:adminCameraRequestId}); setCameraAdminStatus('🎤 Solicitando micrófono al usuario…','msg'); });
 $('stopCameraSupervision')?.addEventListener('click',()=>stopAdminCamera(true));
 $('sendAdminPopupMessage')?.addEventListener('click',sendAdminPopupMessage);
 
@@ -1438,6 +1550,6 @@ async function loadLocations(){
     msg.textContent=e.message||'No se pudieron cargar las ubicaciones.';
   }
 }
-$('refreshLocations').onclick=loadLocations;setInterval(()=>{ if(!$('panel').classList.contains('hidden')) { loadLocations(); loadCameraSupervision(); } },5000);window.addEventListener('resize',()=>{ if(locationMap) locationMap.invalidateSize(true); });</script>
+$('refreshLocations').onclick=loadLocations;setInterval(()=>{ if(!$('panel').classList.contains('hidden')) { loadLocations(); loadCameraSupervision(); loadAudioSupervision(); } },5000);window.addEventListener('resize',()=>{ if(locationMap) locationMap.invalidateSize(true); });</script>
 </body>
 </html>
