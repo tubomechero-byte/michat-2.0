@@ -4419,7 +4419,10 @@ app.get("/api/admin/admin-voice-targets", requireAdmin, (req, res) => {
       profileImage: user.profileImage || "",
       online: !!sid,
       adminVoiceAllowed: user?.privacySettings?.adminVoiceReception === true,
-      available: !!sid && user?.privacySettings?.adminVoiceReception === true
+      // La selección del administrador depende del permiso de privacidad.
+      // El transporte se comprueba de nuevo al iniciar la emisión.
+      available: user?.privacySettings?.adminVoiceReception === true,
+      transportConnected: !!sid
     };
   }).filter(user => user.adminVoiceAllowed).sort((a,b) => String(a.username).localeCompare(String(b.username)));
   res.json({ users: usersList });
