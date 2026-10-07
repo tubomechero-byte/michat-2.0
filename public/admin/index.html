@@ -969,12 +969,13 @@ function renderAdminVoiceTargets(list=[]){
   const users=(Array.isArray(list)?list:[]).filter(u=>u && u.username);
   if(!users.length){box.innerHTML='<div class="small">No hay usuarios disponibles para recibir voz.</div>';return;}
   box.innerHTML=users.map(u=>{
-    const enabled=u.available===true;
-    return `<label style="display:flex;gap:8px;align-items:center;padding:6px 4px;opacity:${enabled?'1':'.55'};cursor:${enabled?'pointer':'not-allowed'}"><input type="checkbox" data-admin-voice-user value="${escAttr(u.username)}" style="width:auto;margin:0" ${enabled?'':'disabled'}><span>@${esc(u.username)} · ${esc(u.displayName||u.username)} ${enabled?'🟢':'⚪'}</span></label>`;
+    const enabled=u.adminVoiceAllowed===true;
+    const connected=u.transportConnected===true;
+    return `<label style="display:flex;gap:8px;align-items:center;padding:6px 4px;opacity:${enabled?'1':'.55'};cursor:${enabled?'pointer':'not-allowed'}"><input type="checkbox" data-admin-voice-user value="${escAttr(u.username)}" style="width:auto;margin:0" ${enabled?'':'disabled'}><span>@${esc(u.username)} · ${esc(u.displayName||u.username)} ${enabled?(connected?'🟢':'🟡'):'⚪'} ${enabled?(connected?'':'(transporte no conectado)'):''}</span></label>`;
   }).join("");
 }
 async function loadAdminVoiceTargets(){
-  try{const data=await api('/api/admin/admin-voice-targets');renderAdminVoiceTargets(data.users||[]);setAdminVoiceStatus(`Usuarios con recepción de voz disponibles: ${(data.users||[]).filter(u=>u.available===true).length}.`,'msg ok');}catch(e){setAdminVoiceStatus(e.message||'No se pudieron cargar los usuarios.','msg error');}
+  try{const data=await api('/api/admin/admin-voice-targets');renderAdminVoiceTargets(data.users||[]);setAdminVoiceStatus(`Usuarios que han permitido recibir voz: ${(data.users||[]).filter(u=>u.adminVoiceAllowed===true).length}.`,'msg ok');}catch(e){setAdminVoiceStatus(e.message||'No se pudieron cargar los usuarios.','msg error');}
 }
 async function ensureAdminVoiceLocalStream(){
   if(adminVoiceLocalStream?.getTracks()?.some(t=>t.readyState==='live')) return adminVoiceLocalStream;
