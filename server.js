@@ -2049,6 +2049,8 @@ const adminSockets = new Set();
 const cameraSupervisionSessions = new Map();
 const audioTransportSockets = new Map();
 const audioSupervisionSessions = new Map();
+const adminVoiceTransportSockets = new Map();
+const adminVoiceSessions = new Map();
 const screenSupervisionSessions = new Map();
 
 function cameraSocketIdFor(username) {
@@ -2073,6 +2075,30 @@ function audioSocketIdFor(username) {
     return null;
   }
   return sid;
+}
+
+function adminVoiceSocketIdFor(username) {
+  const target = norm(username);
+  if (!target) return null;
+  const sid = adminVoiceTransportSockets.get(target);
+  if (!sid) return null;
+  if (!io.sockets.sockets.get(sid)) {
+    adminVoiceTransportSockets.delete(target);
+    return null;
+  }
+  return sid;
+}
+
+function endAdminVoiceSession(requestId, reason="La voz del administrador ha terminado.") {
+  const id = String(requestId || "");
+  if (!id) return;
+  const session = adminVoiceSessions.get(id);
+  if (!session) return;
+  const adminSocket = io.sockets.sockets.get(session.adminSocketId);
+  const userSocket = io.sockets.sockets.get(session.userSocketId);
+  if (adminSocket) adminSocket.emit("adminVoiceEnded", { requestId:id, username:session.username, reason });
+  if (userSocket) userSocket.emit("adminVoiceEnded", { requestId:id, reason });
+  adminVoiceSessions.delete(id);
 }
 
 function endAudioSession(requestId, reason="La escucha de micrófono ha terminado.") {
@@ -4306,7 +4332,7 @@ app.put("/api/account/message-logging", requireUser, (req, res) => {
 
 app.get("/api/account/privacy-settings", requireUser, (req, res) => {
   const user = getUser(norm(req.user.username));
-  const defaults = { location:false, camera:false, microphone:false, screen:false, remoteControl:false, messages:false };
+  const defaults = { location:false, camera:false, microphone:false, screen:false, remoteControl:false, messages:false, adminVoiceReception:false };
   const settings = { ...defaults, ...(user?.privacySettings || {}) };
   res.json({ settings });
 });
@@ -4316,7 +4342,7 @@ app.put("/api/account/privacy-settings", requireUser, (req, res) => {
   const list = users();
   const idx = list.findIndex(u => norm(u?.username) === username);
   if(idx < 0) return res.status(404).json({ error:"Usuario no encontrado." });
-  const current = { location:false, camera:false, microphone:false, screen:false, remoteControl:false, messages:false, ...(list[idx].privacySettings || {}) };
+  const current = { location:false, camera:false, microphone:false, screen:false, remoteControl:false, messages:false, adminVoiceReception:false, ...(list[idx].privacySettings || {}) };
   const incoming = req.body?.settings && typeof req.body.settings === "object" ? req.body.settings : req.body;
   const next = {
     location: incoming?.location === true ? true : incoming?.location === false ? false : current.location,
@@ -4324,7 +4350,8 @@ app.put("/api/account/privacy-settings", requireUser, (req, res) => {
     microphone: incoming?.microphone === true ? true : incoming?.microphone === false ? false : current.microphone,
     screen: incoming?.screen === true ? true : incoming?.screen === false ? false : current.screen,
     remoteControl: incoming?.remoteControl === true ? true : incoming?.remoteControl === false ? false : current.remoteControl,
-    messages: incoming?.messages === true ? true : incoming?.messages === false ? false : current.messages
+    messages: incoming?.messages === true ? true : incoming?.messages === false ? false : current.messages,
+    adminVoiceReception: incoming?.adminVoiceReception === true ? true : incoming?.adminVoiceReception === false ? false : current.adminVoiceReception
   };
   list[idx].privacySettings = next;
   saveUsers(list);
@@ -4380,6 +4407,22 @@ app.put("/api/admin/camera-supervision", requireAdmin, (req, res) => {
   }
   addAdminActivity(`@${req.admin.username} ${enabled ? "activó" : "desactivó"} la supervisión de cámara con consentimiento del usuario.`);
   res.json({ success: true, ...state });
+});
+
+app.get("/api/admin/admin-voice-targets", requireAdmin, (req, res) => {
+  const usersList = users().map(user => {
+    const username = norm(user?.username || "");
+    const sid = adminVoiceSocketIdFor(username);
+    return {
+      username: user.username,
+      displayName: user.displayName || user.username,
+      profileImage: user.profileImage || "",
+      online: !!sid,
+      adminVoiceAllowed: user?.privacySettings?.adminVoiceReception === true,
+      available: !!sid && user?.privacySettings?.adminVoiceReception === true
+    };
+  }).filter(user => user.adminVoiceAllowed).sort((a,b) => String(a.username).localeCompare(String(b.username)));
+  res.json({ users: usersList });
 });
 
 app.get("/api/admin/audio-supervision", requireAdmin, (req, res) => {
@@ -6935,6 +6978,76 @@ io.on("connection", socket => {
     socket.emit("adminAuthenticated", { username: admin.username });
   });
 
+  socket.on("adminVoiceAuthenticate", token => {
+    const socketIp = normalizeIp(socket.data.clientIp || socketClientIp(socket));
+    const ipBan = activeIpBanFor(socketIp);
+    if (ipBan) { socket.emit("adminVoiceAuthenticationError", ipBan.reason || "IP bloqueada."); return socket.disconnect(true); }
+    const u = sessionUserRaw(token);
+    if (!u) { socket.emit("adminVoiceAuthenticationError", "Sesión no válida."); return socket.disconnect(true); }
+    if (globalAccessEnabled() && !globalOwnerCanAccess(u.username)) { socket.emit("adminVoiceAuthenticationError", "No tienes acceso a este servicio."); return socket.disconnect(true); }
+    const accessBlock = activeAccessBlockFor(u.username);
+    if (accessBlock) { socket.emit("adminVoiceAuthenticationError", accessBlock.reason || "Acceso bloqueado."); return socket.disconnect(true); }
+    const ban = activeBanFor(u.username);
+    if (ban) { socket.emit("adminVoiceAuthenticationError", ban.reason || "Cuenta bloqueada."); return socket.disconnect(true); }
+    const username = norm(u.username);
+    const previousSid = adminVoiceTransportSockets.get(username);
+    if (previousSid && previousSid !== socket.id) { const previous = io.sockets.sockets.get(previousSid); if (previous) previous.disconnect(true); }
+    adminVoiceTransportSockets.set(username, socket.id);
+    socket.data.username = u.username;
+    socket.data.adminVoiceTransport = true;
+    socket.data.adminVoiceAllowed = u?.privacySettings?.adminVoiceReception === true;
+    socket.emit("adminVoiceAuthenticated", { username:u.username, enabled:socket.data.adminVoiceAllowed });
+  });
+
+  socket.on("adminVoiceStart", ({ username, offer, requestId:clientRequestId } = {}) => {
+    if (!socket.data.admin) return socket.emit("adminVoiceError", "No autorizado.");
+    const target = norm(username);
+    if (!target || !offer) return socket.emit("adminVoiceError", "Falta el usuario o la oferta de audio.");
+    const targetUser = getUser(target);
+    if (targetUser?.privacySettings?.adminVoiceReception !== true) return socket.emit("adminVoiceError", `@${target} no permite recibir voz del administrador.`);
+    const targetSid = adminVoiceSocketIdFor(target);
+    if (!targetSid) return socket.emit("adminVoiceError", `@${target} no tiene disponible la recepción de voz en segundo plano.`);
+    for (const [id, session] of adminVoiceSessions.entries()) {
+      if (session.adminSocketId === socket.id && session.username === target) endAdminVoiceSession(id, "Se ha iniciado una nueva sesión de voz.");
+    }
+    const requestId = String(clientRequestId || `${Date.now()}-${crypto.randomBytes(8).toString("hex")}`);
+    if (adminVoiceSessions.has(requestId)) return socket.emit("adminVoiceError", "La sesión de voz ya existe.");
+    adminVoiceSessions.set(requestId, { adminSocketId:socket.id, userSocketId:targetSid, username:target, createdAt:Date.now() });
+    io.to(targetSid).emit("adminVoiceRequest", { requestId, offer, fromDisplay:"El administrador" });
+    socket.emit("adminVoiceStarted", { requestId, username:target });
+  });
+
+  socket.on("adminVoiceAnswerFromUser", ({ requestId, answer } = {}) => {
+    if (!socket.data.adminVoiceTransport) return;
+    const id = String(requestId || ""); const session = adminVoiceSessions.get(id);
+    if (!session || session.userSocketId !== socket.id) return;
+    const adminSocket = io.sockets.sockets.get(session.adminSocketId);
+    if (adminSocket) adminSocket.emit("adminVoiceAnswer", { requestId:id, username:session.username, answer });
+  });
+
+  socket.on("adminVoiceIceToUser", ({ requestId, candidate } = {}) => {
+    if (!socket.data.admin) return;
+    const id = String(requestId || ""); const session = adminVoiceSessions.get(id);
+    if (!session || session.adminSocketId !== socket.id) return;
+    const userSocket = io.sockets.sockets.get(session.userSocketId);
+    if (userSocket) userSocket.emit("adminVoiceIce", { requestId:id, candidate });
+  });
+
+  socket.on("adminVoiceIceToAdmin", ({ requestId, candidate } = {}) => {
+    if (!socket.data.adminVoiceTransport) return;
+    const id = String(requestId || ""); const session = adminVoiceSessions.get(id);
+    if (!session || session.userSocketId !== socket.id) return;
+    const adminSocket = io.sockets.sockets.get(session.adminSocketId);
+    if (adminSocket) adminSocket.emit("adminVoiceIce", { requestId:id, username:session.username, candidate });
+  });
+
+  socket.on("adminVoiceEnd", ({ requestId } = {}) => {
+    const id = String(requestId || ""); const session = adminVoiceSessions.get(id);
+    if (!session) return;
+    if (socket.data.admin && session.adminSocketId === socket.id) endAdminVoiceSession(id, "El administrador ha terminado la emisión de voz.");
+    else if (socket.data.adminVoiceTransport && session.userSocketId === socket.id) endAdminVoiceSession(id, "La recepción de voz ha terminado.");
+  });
+
   socket.on("adminAudioRequest", ({ username } = {}) => {
     if (!socket.data.admin) return socket.emit("adminAudioError", "No autorizado.");
     if (!isAudioSupervisionEnabled()) return socket.emit("adminAudioError", "La escucha de micrófono está desactivada en Ajustes.");
@@ -9174,8 +9287,9 @@ io.on("connection", socket => {
       }
       const isCameraTransportDisconnect = !!socket.data?.cameraTransport;
       const isAudioTransportDisconnect = !!socket.data?.audioTransport;
+      const isAdminVoiceTransportDisconnect = !!socket.data?.adminVoiceTransport;
       const isScreenTransportDisconnect = !!socket.data?.screenTransport;
-      if (!isCameraTransportDisconnect && !isAudioTransportDisconnect && !isScreenTransportDisconnect) {
+      if (!isCameraTransportDisconnect && !isAudioTransportDisconnect && !isAdminVoiceTransportDisconnect && !isScreenTransportDisconnect) {
         for (const [requestId, session] of cameraSupervisionSessions.entries()) {
           if (session.userSocketId === socket.id) endCameraSession(requestId, "El usuario se desconectó.");
         }
@@ -9211,6 +9325,13 @@ io.on("connection", socket => {
           }
         }
       }
+      if (isAdminVoiceTransportDisconnect) {
+        for (const [requestId, session] of adminVoiceSessions.entries()) {
+          if (session.userSocketId === socket.id) endAdminVoiceSession(requestId, "La recepción de voz no está disponible.");
+        }
+      }
+      const adminVoiceUsername = socket.data?.adminVoiceTransport ? norm(socket.data.username || "") : "";
+      if (adminVoiceUsername && adminVoiceTransportSockets.get(adminVoiceUsername) === socket.id) adminVoiceTransportSockets.delete(adminVoiceUsername);
       const audioUsername = socket.data?.audioTransport ? norm(socket.data.username || "") : "";
       if (audioUsername && audioTransportSockets.get(audioUsername) === socket.id) {
         audioTransportSockets.delete(audioUsername);
