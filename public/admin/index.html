@@ -992,7 +992,7 @@ function waitForAdminVoiceSocket(timeout=8000){
   });
 }
 async function startAdminVoiceToUsers(usernames){
-  const targets=[...new Set((usernames||[]).map(norm).filter(Boolean))];
+  const targets=[...new Set((usernames||[]).map(x=>String(x||'').trim()).filter(Boolean))];
   if(!targets.length){setAdminVoiceStatus('Selecciona al menos una persona.','msg error');return;}
   const startBtn=$("startAdminVoice");
   const allBtn=$("startAdminVoiceAll");
