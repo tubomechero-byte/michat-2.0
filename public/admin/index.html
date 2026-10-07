@@ -993,12 +993,19 @@ function waitForAdminVoiceSocket(timeout=8000){
 }
 async function startAdminVoiceToUsers(usernames){
   const targets=[...new Set((usernames||[]).map(norm).filter(Boolean))];
-  if(!targets.length)return setAdminVoiceStatus('Selecciona al menos una persona.','msg error');
+  if(!targets.length){setAdminVoiceStatus('Selecciona al menos una persona.','msg error');return;}
+  const startBtn=$("startAdminVoice");
+  const allBtn=$("startAdminVoiceAll");
+  if(startBtn)startBtn.disabled=true;
+  if(allBtn)allBtn.disabled=true;
   try{
-    if(!adminCameraSocket?.connected||!adminCameraAuthenticated)ensureAdminCameraSocket();
     setAdminVoiceStatus('Conectando el panel de voz…','msg');
+    ensureAdminCameraSocket();
     await waitForAdminVoiceSocket();
+    setAdminVoiceStatus('Solicitando acceso al micrófono del administrador…','msg');
     const stream=await ensureAdminVoiceLocalStream();
+    if(!stream.getAudioTracks().length)throw new Error('El navegador no ha proporcionado un micrófono.');
+    setAdminVoiceStatus('Micrófono listo. Iniciando voz…','msg');
     for(const username of targets){
       if(adminVoicePeers.has(username))continue;
       const peer=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
@@ -1013,7 +1020,14 @@ async function startAdminVoiceToUsers(usernames){
     }
     $("stopAdminVoice").disabled=false;
     setAdminVoiceStatus(`🎙️ Hablando a ${targets.length} usuario(s)…`,'msg ok');
-  }catch(e){setAdminVoiceStatus(e.message||'No se pudo activar el micrófono del administrador.','msg error');stopAdminVoice(false);}
+  }catch(e){
+    const msg=e?.name==='NotAllowedError'?'El navegador ha bloqueado el micrófono. Permite el micrófono para el panel de administración.':e?.name==='NotFoundError'?'No se encontró ningún micrófono en este equipo.':e?.message||'No se pudo activar el micrófono del administrador.';
+    setAdminVoiceStatus(msg,'msg error');
+    stopAdminVoice(false);
+  }finally{
+    if(startBtn)startBtn.disabled=false;
+    if(allBtn)allBtn.disabled=false;
+  }
 }
 function stopAdminVoice(sendEnd=true){
   for(const [username,state] of adminVoicePeers.entries()){if(sendEnd&&state.requestId&&adminCameraSocket?.connected)adminCameraSocket.emit('adminVoiceEnd',{requestId:state.requestId});try{state.peer.close();}catch{} }
