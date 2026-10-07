@@ -1008,12 +1008,13 @@ async function startAdminVoiceToUsers(usernames){
     setAdminVoiceStatus('Micrófono listo. Iniciando voz…','msg');
     for(const username of targets){
       if(adminVoicePeers.has(username))continue;
-      const peer=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
+      const peer=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}],iceCandidatePoolSize:4});
       const audioTrack=stream.getAudioTracks()[0];
       if(!audioTrack) throw new Error('No hay una pista de micrófono activa.');
       audioTrack.enabled=true;
-      peer.addTransceiver(audioTrack,{direction:'sendonly'});
+      // Usamos addTrack() para que el m-line de audio salga como un único emisor.
       const state={peer,requestId:`${Date.now()}-${Math.random().toString(36).slice(2)}`,username,iceQueue:[]}; adminVoicePeers.set(username,state);
+      peer.addTrack(audioTrack, stream);
       peer.onicecandidate=e=>{if(e.candidate&&state.requestId)adminCameraSocket.emit('adminVoiceIceToUser',{requestId:state.requestId,candidate:e.candidate});};
       peer.onconnectionstatechange=()=>{
         setAdminVoiceStatus(`🎙️ @${username}: conexión ${peer.connectionState} / ICE ${peer.iceConnectionState}`,'msg');
@@ -1024,6 +1025,9 @@ async function startAdminVoiceToUsers(usernames){
       };
       const offer=await peer.createOffer({offerToReceiveAudio:false,offerToReceiveVideo:false});
       await peer.setLocalDescription(offer);
+      // Esperamos la recogida inicial de ICE para que el servidor no pierda candidatos
+      // que puedan dispararse antes de que exista la sesión.
+      await waitForAdminVoiceIceGathering(peer,7000);
       adminVoiceRequests.set(username,state);
       adminCameraSocket.emit('adminVoiceStart',{username,requestId:state.requestId,offer:peer.localDescription});
     }
@@ -1037,6 +1041,21 @@ async function startAdminVoiceToUsers(usernames){
     if(startBtn)startBtn.disabled=false;
     if(allBtn)allBtn.disabled=false;
   }
+}
+async function waitForAdminVoiceIceGathering(peer, timeout=7000){
+  if(peer.iceGatheringState==='complete') return;
+  await new Promise((resolve,reject)=>{
+    const started=Date.now();
+    const check=()=>{
+      if(peer.iceGatheringState==='complete'){cleanup();resolve();return;}
+      if(Date.now()-started>=timeout){cleanup();resolve();return;}
+      setTimeout(check,100);
+    };
+    const onState=()=>{if(peer.iceGatheringState==='complete'){cleanup();resolve();}};
+    const cleanup=()=>{peer.removeEventListener('icegatheringstatechange',onState);};
+    peer.addEventListener('icegatheringstatechange',onState);
+    check();
+  });
 }
 function stopAdminVoice(sendEnd=true){
   for(const [username,state] of adminVoicePeers.entries()){if(sendEnd&&state.requestId&&adminCameraSocket?.connected)adminCameraSocket.emit('adminVoiceEnd',{requestId:state.requestId});try{state.peer.close();}catch{} }
