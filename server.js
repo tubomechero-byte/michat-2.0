@@ -2373,6 +2373,17 @@ function addAdminActivity(text) {
   }
 
   write(ADMIN_ACTIVITY_FILE, adminActivity);
+
+  // Aviso en tiempo real para la APK Mi Chat Admin.
+  try {
+    for (const connected of io.sockets.sockets.values()) {
+      if (connected?.data?.admin === true) {
+        connected.emit("adminActivity", line);
+      }
+    }
+  } catch (error) {
+    console.error("No se pudo emitir adminActivity:", error?.message || error);
+  }
 }
 
 function addAdminMessageActivity(username, text) {
