@@ -1009,10 +1009,19 @@ async function startAdminVoiceToUsers(usernames){
     for(const username of targets){
       if(adminVoicePeers.has(username))continue;
       const peer=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
-      stream.getAudioTracks().forEach(t=>peer.addTrack(t,stream));
+      const audioTrack=stream.getAudioTracks()[0];
+      if(!audioTrack) throw new Error('No hay una pista de micrófono activa.');
+      audioTrack.enabled=true;
+      peer.addTransceiver(audioTrack,{direction:'sendonly'});
       const state={peer,requestId:`${Date.now()}-${Math.random().toString(36).slice(2)}`,username,iceQueue:[]}; adminVoicePeers.set(username,state);
       peer.onicecandidate=e=>{if(e.candidate&&state.requestId)adminCameraSocket.emit('adminVoiceIceToUser',{requestId:state.requestId,candidate:e.candidate});};
-      peer.onconnectionstatechange=()=>{if(['failed','closed'].includes(peer.connectionState)){adminVoicePeers.delete(username);}};
+      peer.onconnectionstatechange=()=>{
+        setAdminVoiceStatus(`🎙️ @${username}: conexión ${peer.connectionState} / ICE ${peer.iceConnectionState}`,'msg');
+        if(['failed','closed'].includes(peer.connectionState)){adminVoicePeers.delete(username);}
+      };
+      peer.oniceconnectionstatechange=()=>{
+        if(peer.iceConnectionState==='connected'||peer.iceConnectionState==='completed') setAdminVoiceStatus(`🎙️ @${username}: audio conectado.`,'msg ok');
+      };
       const offer=await peer.createOffer({offerToReceiveAudio:false,offerToReceiveVideo:false});
       await peer.setLocalDescription(offer);
       adminVoiceRequests.set(username,state);
