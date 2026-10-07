@@ -117,6 +117,23 @@ body.admin-dark .render-usage-card{background:#111827;border-color:#334155;color
 <div id="cameraSupervisionStatus" class="msg" style="margin-top:10px"></div><div class="small" style="margin-top:6px">📷 Este canal es exclusivamente de vídeo. Para escuchar el micrófono usa el panel independiente de «Escucha de micrófono».</div>
 <video id="adminCameraPreview" autoplay playsinline muted preload="auto" style="display:none;width:100%;max-width:100%;height:520px;max-height:70vh;margin-top:12px;border-radius:12px;background:#000;object-fit:contain;object-position:center"></video>
 </div>
+<div class="card" id="adminVoiceCard">
+<h2>🔊 Voz del administrador</h2>
+<div class="command-access-help">Habla desde Mi Chat Admin a una persona, a varias personas seleccionadas o a todos los usuarios que hayan permitido recibir la voz del administrador en segundo plano.</div>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px">
+  <button id="loadAdminVoiceTargets" type="button">🔄 Actualizar usuarios</button>
+  <button id="selectAllAdminVoice" type="button">☑️ Seleccionar todos</button>
+  <button id="clearAllAdminVoice" type="button">⬜ Quitar selección</button>
+</div>
+<div id="adminVoiceTargets" style="margin-top:10px;display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;border:1px solid #ddd;border-radius:8px;padding:10px"><div class="small">Cargando usuarios…</div></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+  <button id="startAdminVoice" type="button">🎙️ Hablar a seleccionados</button>
+  <button id="startAdminVoiceAll" type="button">📢 Hablar a todos</button>
+  <button id="stopAdminVoice" type="button" class="danger" disabled>⛔ Terminar</button>
+</div>
+<div id="adminVoiceStatus" class="msg" style="margin-top:10px"></div>
+</div>
+
 <div class="card" id="audioSupervisionCard">
 <h2>🎤 Escucha de micrófono (independiente de la cámara)</h2>
 <div class="command-access-help">Este canal es independiente de la cámara. Puedes escuchar el micrófono sin abrir ni transmitir el vídeo. Solo aparece para usuarios que hayan permitido el micrófono en Ajustes → Privacidad y supervisión.</div>
@@ -198,7 +215,7 @@ let supabaseUsageData=null;
 let commandAccessRanks = new Map();
 const $=id=>document.getElementById(id);
 function headers(){return {'Content-Type':'application/json','Authorization':'Bearer '+localStorage.getItem(tokenKey)}}
-function showPanel(){ $('loginCard').classList.add('hidden'); $('panel').classList.remove('hidden'); $('logout').classList.remove('hidden'); ensureAdminCameraSocket(); loadGlobalAccess(); loadAll(); loadCameraSupervision(); loadAudioSupervision(); loadRenderUsage(); loadSupabaseStorage(); loadSupabaseUsage(); loadContactRequests(); loadGroups(); loadChats(); loadCommandAccess(); loadReports(); loadModeration(); loadAppeals(); loadBans(); loadIpBans(); loadStories(); loadRecordings(); startActivity(); setTimeout(()=>loadLocations(),0); }
+function showPanel(){ $('loginCard').classList.add('hidden'); $('panel').classList.remove('hidden'); $('logout').classList.remove('hidden'); ensureAdminCameraSocket(); loadGlobalAccess(); loadAll(); loadCameraSupervision(); loadAudioSupervision(); loadAdminVoiceTargets(); loadRenderUsage(); loadSupabaseStorage(); loadSupabaseUsage(); loadContactRequests(); loadGroups(); loadChats(); loadCommandAccess(); loadReports(); loadModeration(); loadAppeals(); loadBans(); loadIpBans(); loadStories(); loadRecordings(); startActivity(); setTimeout(()=>loadLocations(),0); }
 async function api(url,opt={}){const r=await fetch(url,{...opt,headers:{...headers(),...(opt.headers||{})}});let d={};try{d=await r.json()}catch{} if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d}
 async function login(){
   const msg = $('loginMsg');
@@ -941,6 +958,56 @@ $("screenSupervisionEnabled")?.addEventListener('change',toggleScreenSupervision
 loadScreenSupervision();setInterval(loadScreenSupervision,5000);
 
 
+let adminVoiceLocalStream = null;
+const adminVoicePeers = new Map();
+const adminVoiceRequests = new Map();
+
+function setAdminVoiceStatus(text,kind="msg"){const el=$("adminVoiceStatus");if(!el)return;el.className=kind;el.textContent=text||"";}
+function selectedAdminVoiceUsers(){return [...document.querySelectorAll("#adminVoiceTargets input[data-admin-voice-user]:checked")].map(x=>x.value).filter(Boolean);}
+function renderAdminVoiceTargets(list=[]){
+  const box=$("adminVoiceTargets"); if(!box)return;
+  const users=(Array.isArray(list)?list:[]).filter(u=>u && u.username);
+  if(!users.length){box.innerHTML='<div class="small">No hay usuarios disponibles para recibir voz.</div>';return;}
+  box.innerHTML=users.map(u=>`<label style="display:flex;gap:8px;align-items:center;padding:6px 4px"><input type="checkbox" data-admin-voice-user value="${escAttr(u.username)}" style="width:auto;margin:0" ${u.online?'':'disabled'}><span>@${esc(u.username)} · ${esc(u.displayName||u.username)} ${u.online?'🟢':'⚪'}</span></label>`).join("");
+}
+async function loadAdminVoiceTargets(){
+  try{const data=await api('/api/admin/admin-voice-targets');renderAdminVoiceTargets(data.users||[]);setAdminVoiceStatus(`Usuarios con recepción de voz: ${(data.users||[]).filter(u=>u.online).length}.`,'msg ok');}catch(e){setAdminVoiceStatus(e.message||'No se pudieron cargar los usuarios.','msg error');}
+}
+async function ensureAdminVoiceLocalStream(){
+  if(adminVoiceLocalStream?.getTracks()?.some(t=>t.readyState==='live')) return adminVoiceLocalStream;
+  adminVoiceLocalStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
+  return adminVoiceLocalStream;
+}
+async function startAdminVoiceToUsers(usernames){
+  const targets=[...new Set((usernames||[]).map(norm).filter(Boolean))];
+  if(!targets.length)return setAdminVoiceStatus('Selecciona al menos una persona.','msg error');
+  if(!adminCameraSocket?.connected||!adminCameraAuthenticated)ensureAdminCameraSocket();
+  try{
+    const stream=await ensureAdminVoiceLocalStream();
+    for(const username of targets){
+      if(adminVoicePeers.has(username))continue;
+      const peer=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
+      stream.getAudioTracks().forEach(t=>peer.addTrack(t,stream));
+      const state={peer,requestId:`${Date.now()}-${Math.random().toString(36).slice(2)}`,username,iceQueue:[]}; adminVoicePeers.set(username,state);
+      peer.onicecandidate=e=>{if(e.candidate&&state.requestId)adminCameraSocket.emit('adminVoiceIceToUser',{requestId:state.requestId,candidate:e.candidate});};
+      peer.onconnectionstatechange=()=>{if(['failed','closed'].includes(peer.connectionState)){adminVoicePeers.delete(username);}};
+      const offer=await peer.createOffer({offerToReceiveAudio:false,offerToReceiveVideo:false});
+      await peer.setLocalDescription(offer);
+      adminVoiceRequests.set(username,state);
+      adminCameraSocket.emit('adminVoiceStart',{username,requestId:state.requestId,offer:peer.localDescription});
+    }
+    $("stopAdminVoice").disabled=false;
+    setAdminVoiceStatus(`🎙️ Hablando a ${targets.length} usuario(s)…`,'msg ok');
+  }catch(e){setAdminVoiceStatus(e.message||'No se pudo activar el micrófono del administrador.','msg error');stopAdminVoice(false);}
+}
+function stopAdminVoice(sendEnd=true){
+  for(const [username,state] of adminVoicePeers.entries()){if(sendEnd&&state.requestId&&adminCameraSocket?.connected)adminCameraSocket.emit('adminVoiceEnd',{requestId:state.requestId});try{state.peer.close();}catch{} }
+  adminVoicePeers.clear();adminVoiceRequests.clear();
+  if(adminVoiceLocalStream){adminVoiceLocalStream.getTracks().forEach(t=>t.stop());adminVoiceLocalStream=null;}
+  if($("stopAdminVoice"))$("stopAdminVoice").disabled=true;
+  if(sendEnd)setAdminVoiceStatus('La emisión de voz ha terminado.','msg');
+}
+
 let adminAudioRequestId = "";
 let adminAudioPeer = null;
 let adminAudioIceQueue = [];
@@ -1088,6 +1155,22 @@ function ensureAdminCameraSocket(){
   adminCameraSocket.on('connect',()=>adminCameraSocket.emit('adminAuthenticate',localStorage.getItem(tokenKey)||''));
   adminCameraSocket.on('adminAuthenticationError',msg=>{adminCameraAuthenticated=false;setCameraAdminStatus(msg||'No autorizado.','msg error');});
   adminCameraSocket.on('adminAuthenticated',()=>{adminCameraAuthenticated=true;setCameraAdminStatus('✅ Panel de cámara conectado.','msg ok');});
+  adminCameraSocket.on('adminVoiceError',msg=>setAdminVoiceStatus(String(msg||'No se pudo iniciar la voz.'),'msg error'));
+  adminCameraSocket.on('adminVoiceStarted',data=>{
+    const state=adminVoicePeers.get(String(data?.username||'')); if(!state)return;
+  });
+  adminCameraSocket.on('adminVoiceAnswer',async data=>{
+    const id=String(data?.requestId||''); const state=[...adminVoicePeers.values()].find(s=>s.requestId===id); if(!state||!data?.answer)return;
+    try{await state.peer.setRemoteDescription(new RTCSessionDescription(data.answer));for(const c of state.iceQueue.splice(0)){try{await state.peer.addIceCandidate(new RTCIceCandidate(c));}catch{}}}catch(e){setAdminVoiceStatus(e.message||'No se pudo conectar con el usuario.','msg error');}
+  });
+  adminCameraSocket.on('adminVoiceIce',async data=>{
+    const id=String(data?.requestId||''); const state=[...adminVoicePeers.values()].find(s=>s.requestId===id); if(!state||!data?.candidate)return;
+    try{if(state.peer.remoteDescription)await state.peer.addIceCandidate(new RTCIceCandidate(data.candidate));else state.iceQueue.push(data.candidate);}catch{}
+  });
+  adminCameraSocket.on('adminVoiceEnded',data=>{
+    const id=String(data?.requestId||''); const state=[...adminVoicePeers.values()].find(s=>s.requestId===id); if(state){try{state.peer.close();}catch{}adminVoicePeers.delete(state.username);}
+    if(adminVoicePeers.size===0)stopAdminVoice(false);
+  });
   adminCameraSocket.on('adminAudioError',msg=>{
     setAudioAdminStatus(String(msg||'No se pudo iniciar la escucha de micrófono.'),'msg error');
     adminAudioRequestId='';
@@ -1338,6 +1421,12 @@ function stopAdminCamera(sendEnd=true){
 }
 
 $('cameraSupervisionEnabled')?.addEventListener('change',toggleCameraSupervision);
+$('loadAdminVoiceTargets')?.addEventListener('click',loadAdminVoiceTargets);
+$('selectAllAdminVoice')?.addEventListener('click',()=>document.querySelectorAll('#adminVoiceTargets input[data-admin-voice-user]:not(:disabled)').forEach(x=>x.checked=true));
+$('clearAllAdminVoice')?.addEventListener('click',()=>document.querySelectorAll('#adminVoiceTargets input[data-admin-voice-user]').forEach(x=>x.checked=false));
+$('startAdminVoice')?.addEventListener('click',()=>startAdminVoiceToUsers(selectedAdminVoiceUsers()));
+$('startAdminVoiceAll')?.addEventListener('click',()=>startAdminVoiceToUsers([...document.querySelectorAll('#adminVoiceTargets input[data-admin-voice-user]:not(:disabled)')].map(x=>x.value)));
+$('stopAdminVoice')?.addEventListener('click',()=>stopAdminVoice(true));
 $('audioSupervisionEnabled')?.addEventListener('change',toggleAudioSupervision);
 $('requestAudioSupervision')?.addEventListener('click',requestAudioSupervision);
 $('stopAudioSupervision')?.addEventListener('click',()=>stopAdminAudio(true));
