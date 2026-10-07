@@ -1791,6 +1791,7 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
       <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyLocation"><span><b>📍 Ubicación</b><br><small>Permitir el uso de ubicación cuando utilices funciones que la necesiten.</small></span></label>
       <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyCamera"><span><b>📷 Cámara</b><br><small>Permitir solicitudes de cámara del administrador.</small></span></label>
       <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyMicrophone"><span><b>🎤 Micrófono</b><br><small>Permitir el uso del micrófono en las funciones de audio.</small></span></label>
+      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyAdminVoice"><span><b>🔊 Voz del administrador</b><br><small>Permitir recibir voz del administrador aunque Mi Chat esté en segundo plano.</small></span></label>
       <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyScreen"><span><b>🖥️ Compartir pantalla</b><br><small>Permitir compartir la pantalla con el administrador.</small></span></label>
       <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyRemote"><span><b>🖱️ Control remoto</b><br><small>Permitir preparar el control remoto mediante accesibilidad.</small></span></label>
       <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyMessages"><span><b>👁️ Supervisión de mensajes</b><br><small>Permitir que el administrador vea tus mensajes.</small></span></label>
@@ -2274,6 +2275,17 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
         </span>
       </label>
       <div id="microphonePrivacyPreferenceStatus" class="messageLoggingSettingStatus"></div>
+    </div>
+
+    <div class="messageLoggingSetting adminVoiceReceptionPreferenceBlock">
+      <label>
+        <input type="checkbox" id="adminVoiceReceptionPreference">
+        <span>
+          <div class="messageLoggingSettingTitle">🔊 Permitir recibir voz del administrador</div>
+          <div class="messageLoggingSettingSub">Si lo activas, podrás escuchar la voz enviada desde Mi Chat Admin incluso cuando Mi Chat no esté abierta. No activa tu micrófono ni tu cámara.</div>
+        </span>
+      </label>
+      <div id="adminVoiceReceptionPreferenceStatus" class="messageLoggingSettingStatus"></div>
     </div>
 
     <div class="messageLoggingSetting remoteControlPreferenceBlock">
@@ -3175,7 +3187,8 @@ function registrationPrivacySettings(){
     microphone: !!document.getElementById("regPrivacyMicrophone")?.checked,
     screen: !!document.getElementById("regPrivacyScreen")?.checked,
     remoteControl: !!document.getElementById("regPrivacyRemote")?.checked,
-    messages: !!document.getElementById("regPrivacyMessages")?.checked
+    messages: !!document.getElementById("regPrivacyMessages")?.checked,
+    adminVoiceReception: !!document.getElementById("regPrivacyAdminVoice")?.checked
   };
 }
 
@@ -3678,6 +3691,7 @@ socket.on("authenticated",data => {
   loadStories();
   loadPrivacySettings();
   loadMicrophonePrivacyPreference();
+  loadAdminVoiceReceptionPreference();
   loadLocationSharingPreference();
   socket.emit("getGroups");
 
@@ -5371,7 +5385,7 @@ function showNotification(
 ===================================================== */
 
 let privacySettingsCache = {
-  location:false, camera:false, microphone:false, screen:false, remoteControl:false, messages:false
+  location:false, camera:false, microphone:false, screen:false, remoteControl:false, messages:false, adminVoiceReception:false
 };
 
 async function loadPrivacySettings(){
@@ -6788,6 +6802,36 @@ async function loadLocationSharingPreference(){
 
 const microphonePrivacyPreference = $("microphonePrivacyPreference");
 const microphonePrivacyPreferenceStatus = $("microphonePrivacyPreferenceStatus");
+const adminVoiceReceptionPreference = $("adminVoiceReceptionPreference");
+const adminVoiceReceptionPreferenceStatus = $("adminVoiceReceptionPreferenceStatus");
+
+async function saveAdminVoiceReceptionPreference(enabled){
+  if(!adminVoiceReceptionPreference) return;
+  const next=!!enabled;
+  adminVoiceReceptionPreference.disabled=true;
+  if(adminVoiceReceptionPreferenceStatus) adminVoiceReceptionPreferenceStatus.textContent=next?"Activando…":"Desactivando…";
+  try{
+    const response=await fetch("/api/account/privacy-settings",{method:"PUT",headers:{"Content-Type":"application/json",Authorization:"Bearer "+(localStorage.getItem("chatToken")||"")},body:JSON.stringify({adminVoiceReception:next})});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data.error||"No se pudo guardar la configuración.");
+    privacySettingsCache={...privacySettingsCache,...(data.settings||{}),adminVoiceReception:next};
+    if(window.MiChatAdminVoice) window.MiChatAdminVoice.setAdminVoiceReceptionEnabled(next,localStorage.getItem("chatToken")||"");
+    if(adminVoiceReceptionPreferenceStatus) adminVoiceReceptionPreferenceStatus.textContent=next?"✅ Recepción de voz permitida.":"❌ Recepción de voz desactivada.";
+  }catch(e){
+    adminVoiceReceptionPreference.checked=!next;
+    if(adminVoiceReceptionPreferenceStatus) adminVoiceReceptionPreferenceStatus.textContent=e.message||"No se pudo guardar la configuración.";
+  }finally{adminVoiceReceptionPreference.disabled=false;}
+}
+
+async function loadAdminVoiceReceptionPreference(){
+  if(!adminVoiceReceptionPreference) return;
+  await loadPrivacySettings();
+  adminVoiceReceptionPreference.checked=privacySettingsCache.adminVoiceReception===true;
+  if(adminVoiceReceptionPreferenceStatus) adminVoiceReceptionPreferenceStatus.textContent=adminVoiceReceptionPreference.checked?"Recepción de voz permitida.":"Recepción de voz desactivada.";
+  try{ if(window.MiChatAdminVoice) window.MiChatAdminVoice.setAdminVoiceReceptionEnabled(adminVoiceReceptionPreference.checked,localStorage.getItem("chatToken")||""); }catch{}
+}
+
+adminVoiceReceptionPreference?.addEventListener("change",()=>saveAdminVoiceReceptionPreference(adminVoiceReceptionPreference.checked));
 
 async function loadMicrophonePrivacyPreference(){
   if(!microphonePrivacyPreference) return;
