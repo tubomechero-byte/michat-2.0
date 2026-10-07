@@ -968,21 +968,35 @@ function renderAdminVoiceTargets(list=[]){
   const box=$("adminVoiceTargets"); if(!box)return;
   const users=(Array.isArray(list)?list:[]).filter(u=>u && u.username);
   if(!users.length){box.innerHTML='<div class="small">No hay usuarios disponibles para recibir voz.</div>';return;}
-  box.innerHTML=users.map(u=>`<label style="display:flex;gap:8px;align-items:center;padding:6px 4px"><input type="checkbox" data-admin-voice-user value="${escAttr(u.username)}" style="width:auto;margin:0" ${u.online?'':'disabled'}><span>@${esc(u.username)} · ${esc(u.displayName||u.username)} ${u.online?'🟢':'⚪'}</span></label>`).join("");
+  box.innerHTML=users.map(u=>{
+    const enabled=u.available===true;
+    return `<label style="display:flex;gap:8px;align-items:center;padding:6px 4px;opacity:${enabled?'1':'.55'};cursor:${enabled?'pointer':'not-allowed'}"><input type="checkbox" data-admin-voice-user value="${escAttr(u.username)}" style="width:auto;margin:0" ${enabled?'':'disabled'}><span>@${esc(u.username)} · ${esc(u.displayName||u.username)} ${enabled?'🟢':'⚪'}</span></label>`;
+  }).join("");
 }
 async function loadAdminVoiceTargets(){
-  try{const data=await api('/api/admin/admin-voice-targets');renderAdminVoiceTargets(data.users||[]);setAdminVoiceStatus(`Usuarios con recepción de voz: ${(data.users||[]).filter(u=>u.online).length}.`,'msg ok');}catch(e){setAdminVoiceStatus(e.message||'No se pudieron cargar los usuarios.','msg error');}
+  try{const data=await api('/api/admin/admin-voice-targets');renderAdminVoiceTargets(data.users||[]);setAdminVoiceStatus(`Usuarios con recepción de voz disponibles: ${(data.users||[]).filter(u=>u.available===true).length}.`,'msg ok');}catch(e){setAdminVoiceStatus(e.message||'No se pudieron cargar los usuarios.','msg error');}
 }
 async function ensureAdminVoiceLocalStream(){
   if(adminVoiceLocalStream?.getTracks()?.some(t=>t.readyState==='live')) return adminVoiceLocalStream;
   adminVoiceLocalStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
   return adminVoiceLocalStream;
 }
+function waitForAdminVoiceSocket(timeout=8000){
+  return new Promise((resolve,reject)=>{
+    const started=Date.now();
+    const timer=setInterval(()=>{
+      if(adminCameraSocket?.connected&&adminCameraAuthenticated){clearInterval(timer);resolve();return;}
+      if(Date.now()-started>=timeout){clearInterval(timer);reject(new Error('No se pudo conectar/autenticar el panel de administrador.'));}
+    },100);
+  });
+}
 async function startAdminVoiceToUsers(usernames){
   const targets=[...new Set((usernames||[]).map(norm).filter(Boolean))];
   if(!targets.length)return setAdminVoiceStatus('Selecciona al menos una persona.','msg error');
-  if(!adminCameraSocket?.connected||!adminCameraAuthenticated)ensureAdminCameraSocket();
   try{
+    if(!adminCameraSocket?.connected||!adminCameraAuthenticated)ensureAdminCameraSocket();
+    setAdminVoiceStatus('Conectando el panel de voz…','msg');
+    await waitForAdminVoiceSocket();
     const stream=await ensureAdminVoiceLocalStream();
     for(const username of targets){
       if(adminVoicePeers.has(username))continue;
