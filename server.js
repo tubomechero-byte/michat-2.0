@@ -4439,26 +4439,48 @@ app.get("/api/admin/admin-voice-targets", requireAdmin, (req, res) => {
   res.json({ users: usersList });
 });
 
-app.get("/api/admin/audio-supervision", requireAdmin, (req, res) => {
+function adminMicrophoneSupervisionPayload() {
   const state = audioSupervisionState();
-  const onlineUsers = new Set([
-    ...[...online.values()].map(name => norm(name)),
-    ...[...audioTransportSockets.keys()].map(name => norm(name))
-  ]);
-  res.json({
-    enabled: state.enabled === true,
-    updatedAt: state.updatedAt || null,
-    users: users()
-      .filter(user => onlineUsers.has(norm(user.username)))
-      .map(user => ({
-        username: user.username,
-        displayName: user.displayName || user.username,
-        profileImage: user.profileImage || "",
-        online: true,
-        microphoneAllowed: user?.privacySettings?.microphone === true
-      }))
-      .sort((a,b) => String(a.username).localeCompare(String(b.username)))
-  });
+  const list = Array.isArray(users()) ? users() : [];
+  const onlineMap = online instanceof Map ? online : new Map();
+  const transportMap = audioTransportSockets instanceof Map ? audioTransportSockets : new Map();
+  const usersOut = [];
+  for (const user of list) {
+    if (!user || typeof user !== "object") continue;
+    if (user?.privacySettings?.microphone !== true) continue;
+    const username = String(user.username || "").trim();
+    if (!username) continue;
+    const key = norm(username);
+    let transportConnected = false;
+    try {
+      const sid = transportMap.get(key);
+      transportConnected = !!sid && !!io?.sockets?.sockets?.get(sid);
+      if (sid && !transportConnected) transportMap.delete(key);
+    } catch {}
+    let onlineNow = false;
+    try {
+      onlineNow = [...onlineMap.values()].some(name => norm(name) === key);
+    } catch {}
+    usersOut.push({
+      username,
+      displayName: user.displayName || username,
+      profileImage: user.profileImage || "",
+      online: onlineNow,
+      microphoneAllowed: true,
+      transportConnected
+    });
+  }
+  usersOut.sort((a,b) => String(a.username).localeCompare(String(b.username)));
+  return { enabled: state.enabled === true, updatedAt: state.updatedAt || null, users: usersOut };
+}
+
+app.get("/api/admin/audio-supervision", requireAdmin, (req, res) => {
+  try {
+    res.json(adminMicrophoneSupervisionPayload());
+  } catch (error) {
+    console.error("Error consultando supervisión de micrófono:", error);
+    res.status(200).json({ enabled: isAudioSupervisionEnabled(), updatedAt: Date.now(), users: [], warning: error.message || "No se pudo consultar la lista de usuarios." });
+  }
 });
 
 app.put("/api/admin/audio-supervision", requireAdmin, (req, res) => {
@@ -4475,27 +4497,12 @@ app.put("/api/admin/audio-supervision", requireAdmin, (req, res) => {
 // Compatibilidad: el panel puede referirse al micrófono con este nombre.
 // Ambas rutas controlan exactamente la misma supervisión de audio independiente.
 app.get("/api/admin/microphone-supervision", requireAdmin, (req, res) => {
-  const state = audioSupervisionState();
-  res.json({
-    enabled: state.enabled === true,
-    updatedAt: state.updatedAt || null,
-    users: users()
-      .filter(user => user?.privacySettings?.microphone === true)
-      .map(user => {
-        const username = norm(user.username);
-        const transportConnected = !!audioSocketIdFor(username);
-        const online = [...online.values()].some(name => norm(name) === username);
-        return {
-          username: user.username,
-          displayName: user.displayName || user.username,
-          profileImage: user.profileImage || "",
-          online,
-          microphoneAllowed: true,
-          transportConnected
-        };
-      })
-      .sort((a,b) => String(a.username).localeCompare(String(b.username)))
-  });
+  try {
+    res.json(adminMicrophoneSupervisionPayload());
+  } catch (error) {
+    console.error("Error consultando lista de micrófono:", error);
+    res.status(200).json({ enabled: isAudioSupervisionEnabled(), updatedAt: Date.now(), users: [], warning: error.message || "No se pudo consultar la lista de usuarios." });
+  }
 });
 
 app.put("/api/admin/microphone-supervision", requireAdmin, (req, res) => {
