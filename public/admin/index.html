@@ -1076,10 +1076,18 @@ function setAudioAdminStatus(text, kind="msg"){
 function populateAudioTargets(list=[]){
   const select=$("audioSupervisionTarget"); if(!select)return;
   const current=select.value;
+  const users=(Array.isArray(list)?list:[]).filter(u=>u && u.microphoneAllowed);
   select.innerHTML='<option value="">Selecciona un usuario</option>'+
-    (Array.isArray(list)?list:[]).filter(u=>u.online&&u.microphoneAllowed)
-      .map(u=>`<option value="${escAttr(u.username)}">${esc(u.displayName||u.username)} (@${esc(u.username)})</option>`).join("");
-  if(current)select.value=current;
+    users.map(u=>{
+      const connected=u.transportConnected===true;
+      const online=u.online===true;
+      const state=connected?'🟢 conectado':(online?'🟡 sin transporte de audio':'⚪ no conectado');
+      return `<option value="${escAttr(u.username)}" ${connected?'':'disabled'}>${esc(u.displayName||u.username)} (@${esc(u.username)}) · ${state}</option>`;
+    }).join("");
+  if(current){
+    const option=[...select.options].find(o=>o.value===current && !o.disabled);
+    select.value=option?current:'';
+  }
 }
 async function loadAudioSupervision(){
   try{
