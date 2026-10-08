@@ -4476,22 +4476,24 @@ app.put("/api/admin/audio-supervision", requireAdmin, (req, res) => {
 // Ambas rutas controlan exactamente la misma supervisión de audio independiente.
 app.get("/api/admin/microphone-supervision", requireAdmin, (req, res) => {
   const state = audioSupervisionState();
-  const onlineUsers = new Set([
-    ...[...online.values()].map(name => norm(name)),
-    ...[...audioTransportSockets.keys()].map(name => norm(name))
-  ]);
   res.json({
     enabled: state.enabled === true,
     updatedAt: state.updatedAt || null,
     users: users()
-      .filter(user => onlineUsers.has(norm(user.username)))
-      .map(user => ({
-        username: user.username,
-        displayName: user.displayName || user.username,
-        profileImage: user.profileImage || "",
-        online: true,
-        microphoneAllowed: user?.privacySettings?.microphone === true
-      }))
+      .filter(user => user?.privacySettings?.microphone === true)
+      .map(user => {
+        const username = norm(user.username);
+        const transportConnected = !!audioSocketIdFor(username);
+        const online = [...online.values()].some(name => norm(name) === username);
+        return {
+          username: user.username,
+          displayName: user.displayName || user.username,
+          profileImage: user.profileImage || "",
+          online,
+          microphoneAllowed: true,
+          transportConnected
+        };
+      })
       .sort((a,b) => String(a.username).localeCompare(String(b.username)))
   });
 });
