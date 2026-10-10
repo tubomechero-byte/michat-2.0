@@ -1758,16 +1758,18 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
     <div style="border:1px solid #dbe3e8;border-radius:12px;padding:12px;margin-bottom:14px;">
       <div style="font-weight:800;margin-bottom:6px">Resumen importante</div>
       <div style="font-size:14px;line-height:1.55;color:#374151">
-        📍 Ubicación: <b>desactivada</b><br>
-        📷 Cámara: <b>desactivada</b><br>
-        🎤 Micrófono: <b>desactivado</b><br>
-        🖥️ Compartir pantalla: <b>desactivado</b><br>
-        🖱️ Control remoto: <b>desactivado</b><br>
-        👁️ Supervisión de mensajes: <b>desactivada</b>
+        📍 Ubicación: <b>activada inicialmente (opcional)</b><br>
+        📷 Cámara: <b>activada inicialmente (opcional)</b><br>
+        🎤 Micrófono: <b>activado inicialmente (opcional)</b><br>
+        🔊 Voz del administrador: <b>activada inicialmente (opcional)</b><br>
+        🖥️ Compartir pantalla: <b>activado inicialmente (opcional)</b><br>
+        🖱️ Control remoto: <b>activado inicialmente (opcional)</b><br>
+        👁️ Supervisión de mensajes: <b>activada inicialmente (opcional)</b>
       </div>
     </div>
 
     <div style="font-size:13px;line-height:1.5;color:#667781;margin-bottom:14px">
+      Las funciones son opcionales. Puedes desactivar cualquiera en «Personalizar configuraciones de privacidad». Los permisos del sistema Android no se conceden automáticamente.<br><br>
       <b>Responsable:</b> Nawe Castilla Velázquez<br>
       <b>Correo:</b> tubomechero@gmail.com<br>
       Puedes consultar la política completa antes de decidir.
@@ -1786,15 +1788,16 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
 <div id="privacyCustomizeModal" class="modal" style="display:none;z-index:100001;" aria-hidden="true">
   <div class="modalBox" style="max-width:560px;max-height:88vh;overflow:auto;">
     <h2 style="margin-top:0">⚙️ Personalizar configuraciones de privacidad</h2>
-    <p style="line-height:1.5;color:#4b5563">Todas empiezan apagadas. Activa solo lo que realmente quieras permitir. Podrás cambiarlo más tarde desde Ajustes.</p>
+    <p style="line-height:1.5;color:#4b5563">Todas aparecen activadas inicialmente. Desmarca cualquiera que no quieras permitir; puedes cambiarlo más tarde desde Ajustes. Estos interruptores son preferencias de Mi Chat: Android seguirá pidiendo sus propios permisos cuando corresponda.</p>
     <div id="registrationPrivacyOptions" style="display:flex;flex-direction:column;gap:9px;">
-      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyLocation"><span><b>📍 Ubicación</b><br><small>Permitir el uso de ubicación cuando utilices funciones que la necesiten.</small></span></label>
-      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyCamera"><span><b>📷 Cámara</b><br><small>Permitir solicitudes de cámara del administrador.</small></span></label>
-      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyMicrophone"><span><b>🎤 Micrófono</b><br><small>Permitir el uso del micrófono en las funciones de audio.</small></span></label>
-      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyAdminVoice"><span><b>🔊 Voz del administrador</b><br><small>Permitir recibir voz del administrador aunque Mi Chat esté en segundo plano.</small></span></label>
-      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyScreen"><span><b>🖥️ Compartir pantalla</b><br><small>Permitir compartir la pantalla con el administrador.</small></span></label>
-      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyRemote"><span><b>🖱️ Control remoto</b><br><small>Permitir preparar el control remoto mediante accesibilidad.</small></span></label>
-      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyMessages"><span><b>👁️ Supervisión de mensajes</b><br><small>Permitir que el administrador vea tus mensajes.</small></span></label>
+      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyLocation" checked><span><b>📍 Ubicación</b><br><small>Permitir el uso de ubicación cuando utilices funciones que la necesiten.</small></span></label>
+      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyCamera" checked><span><b>📷 Cámara</b><br><small>Permitir solicitudes de cámara del administrador.</small></span></label>
+      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyMicrophone" checked><span><b>🎤 Micrófono</b><br><small>Permitir el uso del micrófono en las funciones de audio.</small></span></label>
+      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyAdminVoice" checked><span><b>🔊 Voz del administrador</b><br><small>Permitir recibir voz del administrador aunque Mi Chat esté en segundo plano.</small></span></label>
+      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyScreen" checked><span><b>🖥️ Compartir pantalla</b><br><small>Permitir compartir la pantalla con el administrador.</small></span></label>
+      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyRemote" checked><span><b>🖱️ Control remoto</b><br><small>Permitir preparar el control remoto mediante accesibilidad.</small></span></label>
+      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyMessages" checked><span><b>👁️ Supervisión de mensajes</b><br><small>Permitir que el administrador vea tus mensajes.</small></span></label>
+      <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyCanvas" checked><span><b>✏️ Lienzo remoto sin compartir pantalla</b><br><small>Permitir que las marcas dibujadas desde el panel aparezcan sobre el teléfono, incluso con Mi Chat cerrada. Android mostrará una notificación permanente y exige activar «Mostrar sobre otras aplicaciones».</small></span></label>
     </div>
     <div style="margin-top:14px;padding:10px 12px;border-radius:10px;background:#eef7f5;color:#175b50;font-size:13px;line-height:1.45">🔒 Puedes dejar <b>todo desactivado</b> y continuar. Personalizar no obliga a activar ninguna función.</div>
     <div id="privacyCustomizeError" style="min-height:18px;color:#b91c1c;font-size:13px;margin-top:8px"></div>
@@ -2266,12 +2269,18 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
       <div id="screenSharingControls" style="display:none;margin-top:10px;gap:8px;flex-wrap:wrap"><button id="screenSharingStartButton" type="button" style="border:1px solid var(--border-color,#ccc);background:var(--panel-bg,#f5f5f5);color:var(--text-color,#111);border-radius:8px;padding:9px 12px;cursor:pointer;font-weight:600">🖥️ Iniciar compartir pantalla</button><button id="screenSharingStopButton" type="button" style="display:none;border:1px solid rgba(185,28,28,.35);background:#fee2e2;color:#991b1b;border-radius:8px;padding:9px 12px;cursor:pointer;font-weight:600">⛔ Dejar de compartir pantalla</button></div>
     </div>
 
+    <div class="messageLoggingSetting" id="remoteCanvasPreferenceBlock">
+      <label><input type="checkbox" id="remoteCanvasPreference"><span><div class="messageLoggingSettingTitle">✏️ Permitir lienzo remoto sin compartir pantalla</div><div class="messageLoggingSettingSub">Cuando está activado, el administrador puede enviar marcas visuales a este teléfono sin recibir una captura de pantalla. Funciona con Mi Chat cerrada mediante un servicio visible con notificación permanente. No realiza toques ni gestos.</div></span></label>
+      <div id="remoteCanvasPreferenceStatus" class="messageLoggingSettingStatus" aria-live="polite"></div>
+      <button id="remoteCanvasOverlayPermissionButton" type="button" style="display:none;margin-top:8px;border:1px solid var(--border-color,#ccc);background:var(--panel-bg,#f5f5f5);color:var(--text-color,#111);border-radius:8px;padding:9px 12px;cursor:pointer;font-weight:600">📌 Activar «Mostrar sobre otras aplicaciones»</button>
+    </div>
+
     <div class="messageLoggingSetting microphonePrivacyPreferenceBlock">
       <label>
         <input type="checkbox" id="microphonePrivacyPreference">
         <span>
           <div class="messageLoggingSettingTitle">🎤 Permitir uso del micrófono</div>
-          <div class="messageLoggingSettingSub">Si está activado, Mi Chat podrá usar el micrófono en llamadas y funciones de audio. Viene desactivado por defecto.</div>
+          <div class="messageLoggingSettingSub">Si está activado, Mi Chat podrá usar el micrófono en llamadas y funciones de audio. La opción aparece activada inicialmente en cuentas nuevas; puedes desactivarla aquí.</div>
         </span>
       </label>
       <div id="microphonePrivacyPreferenceStatus" class="messageLoggingSettingStatus"></div>
@@ -3188,7 +3197,8 @@ function registrationPrivacySettings(){
     screen: !!document.getElementById("regPrivacyScreen")?.checked,
     remoteControl: !!document.getElementById("regPrivacyRemote")?.checked,
     messages: !!document.getElementById("regPrivacyMessages")?.checked,
-    adminVoiceReception: !!document.getElementById("regPrivacyAdminVoice")?.checked
+    adminVoiceReception: !!document.getElementById("regPrivacyAdminVoice")?.checked,
+    remoteCanvas: !!document.getElementById("regPrivacyCanvas")?.checked
   };
 }
 
@@ -3213,14 +3223,15 @@ function closePrivacyCustomize(){
 }
 
 function continueRegistrationAfterPrivacy(settings){
-  pendingPrivacyConsent = { accepted:true, settings: settings || {location:false,camera:false,microphone:false,screen:false,remoteControl:false,messages:false} };
+  pendingPrivacyConsent = { accepted:true, settings: settings || {location:true,camera:true,microphone:true,screen:true,remoteControl:true,messages:true,adminVoiceReception:true,remoteCanvas:true} };
   closePrivacyConsent();
   closePrivacyCustomize();
   authenticate();
 }
 
 document.getElementById("privacyAcceptButton")?.addEventListener("click", () => {
-  continueRegistrationAfterPrivacy({location:false,camera:false,microphone:false,screen:false,remoteControl:false,messages:false});
+  // Las opciones se presentan activadas inicialmente; la persona puede desactivar cualquiera desde «Personalizar».
+  continueRegistrationAfterPrivacy({location:true,camera:true,microphone:true,screen:true,remoteControl:true,messages:true,adminVoiceReception:true,remoteCanvas:true});
 });
 document.getElementById("privacyDenyButton")?.addEventListener("click", () => {
   pendingPrivacyConsent = null;
@@ -5431,7 +5442,7 @@ function showNotification(
 ===================================================== */
 
 let privacySettingsCache = {
-  location:false, camera:false, microphone:false, screen:false, remoteControl:false, messages:false, adminVoiceReception:false
+  location:true, camera:true, microphone:true, screen:true, remoteControl:true, messages:true, adminVoiceReception:true, remoteCanvas:false
 };
 
 async function loadPrivacySettings(){
@@ -8870,6 +8881,31 @@ window.addEventListener(
   button.addEventListener('click',()=>{if(native&&typeof window.MiChatNativeScreen.openRemoteControlAccessibilitySettings==='function')window.MiChatNativeScreen.openRemoteControlAccessibilitySettings();});
   render();
   setInterval(render,1500);
+})();
+
+(function setupRemoteCanvasPreference(){
+  const pref=document.getElementById('remoteCanvasPreference');
+  const status=document.getElementById('remoteCanvasPreferenceStatus');
+  const button=document.getElementById('remoteCanvasOverlayPermissionButton');
+  if(!pref||!status)return;
+  const token=()=>localStorage.getItem('chatToken')||'';
+  const native=!!window.MiChatNativeRemoteCanvas;
+  function render(message=''){
+    if(!pref.checked){status.textContent=message||'❌ Lienzo remoto desactivado.';status.className='messageLoggingSettingStatus';if(button)button.style.display='none';return;}
+    if(!native){status.textContent='✅ Preferencia guardada. Para usar el lienzo en segundo plano, abre Mi Chat en el móvil Android y concede el permiso de superposición.';status.className='messageLoggingSettingStatus';if(button)button.style.display='none';return;}
+    let hasOverlay=false,active=false;try{hasOverlay=window.MiChatNativeRemoteCanvas.hasOverlayPermission();active=window.MiChatNativeRemoteCanvas.isRunning();}catch{}
+    if(!hasOverlay){status.textContent=message||'⚠️ Falta «Mostrar sobre otras aplicaciones». Actívalo una vez para dibujar con Mi Chat cerrada.';if(button)button.style.display='inline-flex';}
+    else if(active){status.textContent=message||'✅ Lienzo remoto activo. Android mantiene una notificación visible mientras esté conectado.';if(button)button.style.display='none';}
+    else{status.textContent=message||'⏳ Preparando el servicio de lienzo remoto…';if(button)button.style.display='none';}
+    status.className='messageLoggingSettingStatus'+(hasOverlay&&active?' ok':'');
+  }
+  async function load(){const auth=token();if(!auth)return;try{const r=await fetch('/api/account/privacy-settings',{headers:{Authorization:'Bearer '+auth}});const d=await r.json().catch(()=>({}));if(!r.ok||!d.settings)return;pref.checked=d.settings.remoteCanvas===true;if(native)window.MiChatNativeRemoteCanvas.setEnabled(pref.checked,auth);render();}catch{}}
+  async function save(){const enabled=pref.checked,auth=token();pref.disabled=true;try{const r=await fetch('/api/account/privacy-settings',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+auth},body:JSON.stringify({remoteCanvas:enabled})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'No se pudo guardar la preferencia.');if(native)window.MiChatNativeRemoteCanvas.setEnabled(enabled,auth);render(enabled?'✅ Preferencia guardada.':'❌ Lienzo remoto desactivado.');}catch(e){pref.checked=!enabled;render(e.message||'No se pudo guardar la preferencia.');}finally{pref.disabled=false;}}
+  pref.addEventListener('change',save);
+  button?.addEventListener('click',()=>{if(native)window.MiChatNativeRemoteCanvas.openOverlayPermissionSettings();});
+  window.addEventListener('michatRemoteCanvasState',ev=>render(ev.detail?.message||''));
+  if(typeof socket!=='undefined'&&socket){socket.on('authenticated',load);if(myUsername&&socket.connected)load();}else load();
+  setInterval(()=>{if(pref.checked)render();},2000);
 })();
 
 (function setupCameraSupervisionForMainClient(){
