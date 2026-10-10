@@ -2046,6 +2046,8 @@ const deviceStatuses = new Map(); // Estado en vivo de dispositivos Android aute
 const deviceStatusLogAt = new Map(); // Limita los logs repetidos de informes de estado.
 const cameraTransportSockets = new Map();
 const screenTransportSockets = new Map();
+const remoteCanvasSockets = new Map();
+const remoteCanvasPendingRequests = new Map();
 const activeLocationShares = new Map();
 const adminSockets = new Set();
 const cameraSupervisionSessions = new Map();
@@ -2117,6 +2119,14 @@ function endAudioSession(requestId, reason="La escucha de micrófono ha terminad
 
 function screenSocketIdFor(username) {
   const target=norm(username); if(!target) return null; const sid=screenTransportSockets.get(target); if(!sid)return null; if(!io.sockets.sockets.get(sid)){screenTransportSockets.delete(target);return null;} return sid;
+}
+function remoteCanvasSocketIdFor(username) {
+  const target = norm(username);
+  if (!target) return null;
+  const sid = remoteCanvasSockets.get(target);
+  if (!sid) return null;
+  if (!io.sockets.sockets.get(sid)) { remoteCanvasSockets.delete(target); return null; }
+  return sid;
 }
 function endScreenSession(requestId, reason="La supervisión de pantalla ha terminado."){const id=String(requestId||"");if(!id)return;const session=screenSupervisionSessions.get(id);if(!session)return;const adminSocket=io.sockets.sockets.get(session.adminSocketId);const userSocket=io.sockets.sockets.get(session.userSocketId);if(adminSocket)adminSocket.emit("screenSupervisionEnded",{requestId:id,reason});if(userSocket)userSocket.emit("screenSupervisionEnded",{requestId:id,reason});screenSupervisionSessions.delete(id);}
 
@@ -4374,7 +4384,7 @@ app.put("/api/account/message-logging", requireUser, (req, res) => {
 
 app.get("/api/account/privacy-settings", requireUser, (req, res) => {
   const user = getUser(norm(req.user.username));
-  const defaults = { location:false, camera:false, microphone:false, screen:false, remoteControl:false, messages:false, adminVoiceReception:false };
+  const defaults = { location:true, camera:true, microphone:true, screen:true, remoteControl:true, messages:true, adminVoiceReception:true, remoteCanvas:false };
   const settings = { ...defaults, ...(user?.privacySettings || {}) };
   res.json({ settings });
 });
@@ -4384,7 +4394,7 @@ app.put("/api/account/privacy-settings", requireUser, (req, res) => {
   const list = users();
   const idx = list.findIndex(u => norm(u?.username) === username);
   if(idx < 0) return res.status(404).json({ error:"Usuario no encontrado." });
-  const current = { location:false, camera:false, microphone:false, screen:false, remoteControl:false, messages:false, adminVoiceReception:false, ...(list[idx].privacySettings || {}) };
+  const current = { location:true, camera:true, microphone:true, screen:true, remoteControl:true, messages:true, adminVoiceReception:true, remoteCanvas:false, ...(list[idx].privacySettings || {}) };
   const incoming = req.body?.settings && typeof req.body.settings === "object" ? req.body.settings : req.body;
   const next = {
     location: incoming?.location === true ? true : incoming?.location === false ? false : current.location,
@@ -4393,10 +4403,18 @@ app.put("/api/account/privacy-settings", requireUser, (req, res) => {
     screen: incoming?.screen === true ? true : incoming?.screen === false ? false : current.screen,
     remoteControl: incoming?.remoteControl === true ? true : incoming?.remoteControl === false ? false : current.remoteControl,
     messages: incoming?.messages === true ? true : incoming?.messages === false ? false : current.messages,
-    adminVoiceReception: incoming?.adminVoiceReception === true ? true : incoming?.adminVoiceReception === false ? false : current.adminVoiceReception
+    adminVoiceReception: incoming?.adminVoiceReception === true ? true : incoming?.adminVoiceReception === false ? false : current.adminVoiceReception,
+    remoteCanvas: incoming?.remoteCanvas === true ? true : incoming?.remoteCanvas === false ? false : current.remoteCanvas
   };
   list[idx].privacySettings = next;
   saveUsers(list);
+
+  if (!next.remoteCanvas) {
+    const remoteSid = remoteCanvasSockets.get(username);
+    const remoteSocket = remoteSid ? io.sockets.sockets.get(remoteSid) : null;
+    if (remoteSocket) remoteSocket.emit("remoteCanvasPermissionRevoked", { reason:"El usuario desactivó el lienzo remoto." });
+    if (remoteSid) remoteCanvasSockets.delete(username);
+  }
 
   // Mantener las preferencias antiguas de supervisión sincronizadas.
   const cameraSettings = cameraPermissionSettings();
@@ -4549,6 +4567,14 @@ app.put("/api/admin/microphone-supervision", requireAdmin, (req, res) => {
 
 app.get("/api/admin/screen-sharing", requireAdmin, (req,res)=>{const state=screenSupervisionState();const onlineUsers=new Set([...online.values()].map(norm));for(const name of screenTransportSockets.keys())onlineUsers.add(norm(name));for(const name of cameraTransportSockets.keys())onlineUsers.add(norm(name));res.json({enabled:state.enabled===true,updatedAt:state.updatedAt||null,users:users().filter(u=>onlineUsers.has(norm(u.username))).map(u=>({username:u.username,displayName:u.displayName||u.username,profileImage:u.profileImage||"",online:true,screenAvailable:!!screenSocketIdFor(u.username)||!!cameraTransportSockets.get(norm(u.username))})).sort((a,b)=>String(a.username).localeCompare(String(b.username)))});});
 app.put("/api/admin/screen-sharing", requireAdmin, (req,res)=>{const enabled=req.body?.enabled===true;const state=saveScreenSupervisionState(enabled);if(!enabled){for(const [id] of screenSupervisionSessions.entries())endScreenSession(id,"El administrador desactivó la supervisión de pantalla.");}addAdminActivity(`@${req.admin.username} ${enabled?"activó":"desactivó"} la supervisión de pantalla con consentimiento del usuario.`);res.json({success:true,...state});});
+app.get("/api/admin/remote-canvas/users", requireAdmin, (req,res)=>{
+  const list = users().filter(u => u?.privacySettings?.remoteCanvas === true).map(u => ({
+    username: String(u.username || ""),
+    displayName: String(u.displayName || u.username || ""),
+    available: !!remoteCanvasSocketIdFor(u.username)
+  })).sort((a,b)=>String(a.username).localeCompare(String(b.username)));
+  res.json({ users:list });
+});
 app.get("/api/account/screen-sharing", requireUser, (req,res)=>res.json({enabled:isScreenAllowedByUser(req.user.username),globalEnabled:isScreenSupervisionEnabled()}));
 app.put("/api/account/screen-sharing", requireUser, (req,res)=>{const username=norm(req.user.username);const enabled=req.body?.enabled===true;const settings=screenPermissionSettings();if(enabled)settings[username]=true;else delete settings[username];saveScreenPermissionSettings(settings);if(!enabled){for(const [id,session] of screenSupervisionSessions.entries()){if(norm(session.username)===username)endScreenSession(id,"El usuario desactivó el permiso de compartir pantalla.");}}addAdminActivity(`@${req.user.username} ${enabled?"permitió":"desactivó"} que el administrador vea su pantalla.`);res.json({success:true,enabled,globalEnabled:isScreenSupervisionEnabled()});});
 
@@ -5546,8 +5572,8 @@ app.post("/api/register", (req, res) => {
   const email = normalizeEmail(req.body.email);
   const phone = normalizePhone(req.body.phone);
 
-  // La política de privacidad es obligatoria para crear una cuenta.
-  // Las funciones sensibles son opcionales y empiezan desactivadas.
+  // La política de privacidad se acepta aparte de las opciones de funciones.
+  // Las opciones aparecen activadas por defecto, pero cada una se puede desactivar antes de crear la cuenta.
   if (req.body?.privacyConsent !== true) {
     return res.status(400).json({
       error: "Debes aceptar la política de privacidad para crear una cuenta."
@@ -5555,13 +5581,17 @@ app.post("/api/register", (req, res) => {
   }
 
   const rawPrivacy = (req.body && typeof req.body.privacySettings === "object" && req.body.privacySettings) || {};
+  // Una opción se considera activada por defecto si el cliente no envía un valor;
+  // si la persona la desmarca, el false explícito se respeta.
   const privacySettings = {
-    location: rawPrivacy.location === true,
-    camera: rawPrivacy.camera === true,
-    microphone: rawPrivacy.microphone === true,
-    screen: rawPrivacy.screen === true,
-    remoteControl: rawPrivacy.remoteControl === true,
-    messages: rawPrivacy.messages === true
+    location: rawPrivacy.location !== false,
+    camera: rawPrivacy.camera !== false,
+    microphone: rawPrivacy.microphone !== false,
+    screen: rawPrivacy.screen !== false,
+    remoteControl: rawPrivacy.remoteControl !== false,
+    messages: rawPrivacy.messages !== false,
+    adminVoiceReception: rawPrivacy.adminVoiceReception !== false,
+    remoteCanvas: rawPrivacy.remoteCanvas !== false
   };
 
   if (
@@ -7365,6 +7395,91 @@ io.on("connection", socket => {
     if(adminSocket)adminSocket.emit("screenDesktopShareEnded",payload);
   });
   socket.on("screenSupervisionEnd", ({requestId}={})=>{const id=String(requestId||"");const session=screenSupervisionSessions.get(id);if(!session)return;if(socket.data.admin&&session.adminSocketId===socket.id)endScreenSession(id,"El administrador ha terminado la visualización de pantalla.");else if(session.userSocketId===socket.id)endScreenSession(id,"El usuario ha dejado de compartir su pantalla.");});
+  socket.on("remoteCanvasAuthenticate", token => {
+    const u = sessionUserRaw(String(token || ""));
+    if (!u) { socket.emit("remoteCanvasAuthenticationError", "Sesión no válida."); return socket.disconnect(true); }
+    if (globalAccessEnabled() && !globalOwnerCanAccess(u.username)) { socket.emit("remoteCanvasAuthenticationError", "No tienes acceso a este servicio."); return socket.disconnect(true); }
+    if (u?.privacySettings?.remoteCanvas !== true) { socket.emit("remoteCanvasAuthenticationError", "El usuario no ha permitido el lienzo remoto."); return socket.disconnect(true); }
+    const username = norm(u.username);
+    const previousSid = remoteCanvasSockets.get(username);
+    if (previousSid && previousSid !== socket.id) { const previous = io.sockets.sockets.get(previousSid); if (previous) previous.disconnect(true); }
+    remoteCanvasSockets.set(username, socket.id);
+    socket.data.username = u.username;
+    socket.data.remoteCanvasTransport = true;
+    socket.emit("remoteCanvasAuthenticated", { username:u.username });
+    console.log(`[remoteCanvas] Transporte conectado para @${username}`);
+  });
+
+  socket.on("remoteCanvasDisable", () => {
+    if (!socket.data.remoteCanvasTransport) return;
+    const username = norm(socket.data.username || "");
+    if (!username) return;
+    const list = users();
+    const idx = list.findIndex(u => norm(u?.username) === username);
+    if (idx >= 0) {
+      list[idx].privacySettings = { ...(list[idx].privacySettings || {}), remoteCanvas:false };
+      saveUsers(list);
+    }
+    if (remoteCanvasSockets.get(username) === socket.id) remoteCanvasSockets.delete(username);
+    socket.emit("remoteCanvasPermissionRevoked", { reason:"Lienzo remoto desactivado desde la notificación del teléfono." });
+    addAdminActivity(`@${username} desactivó el lienzo remoto desde el teléfono.`);
+  });
+
+  socket.on("adminRemoteCanvasDraw", ({ username, requestId, annotations, preview, notify } = {}) => {
+    if (!socket.data.admin) return;
+    const target = norm(username);
+    const targetUser = getUser(target);
+    const id = String(requestId || "").slice(0, 100);
+    if (!target || !targetUser || targetUser?.privacySettings?.remoteCanvas !== true) {
+      if (notify === true) socket.emit("adminRemoteCanvasDrawResult", { requestId:id, username:target, ok:false, message:"Ese usuario no ha permitido el lienzo remoto." });
+      return;
+    }
+    const sid = remoteCanvasSocketIdFor(target);
+    const userSocket = sid ? io.sockets.sockets.get(sid) : null;
+    if (!userSocket || !userSocket.data.remoteCanvasTransport) {
+      if (notify === true) socket.emit("adminRemoteCanvasDrawResult", { requestId:id, username:target, ok:false, message:"El lienzo remoto del móvil no está conectado." });
+      return;
+    }
+    const clamp01 = value => { const n=Number(value); return Number.isFinite(n) ? Math.max(0,Math.min(1,n)) : 0.5; };
+    const point = value => value && typeof value === "object" ? {x:Math.round(clamp01(value.x)*10000)/10000,y:Math.round(clamp01(value.y)*10000)/10000} : null;
+    let totalPoints = 0;
+    const cleanShape = value => {
+      if (!value || typeof value !== "object") return null;
+      const type = String(value.type || "");
+      if (type === "pen") {
+        if (!Array.isArray(value.points)) return null;
+        const points=[];
+        for (const item of value.points.slice(0,180)) { if (totalPoints >= 6000) break; const p=point(item); if(p){points.push(p);totalPoints++;} }
+        return points.length ? {type:"pen",points} : null;
+      }
+      if (type === "arrow" || type === "circle") {
+        const start=point(value.start), end=point(value.end);
+        if(!start || !end) return null;
+        totalPoints += 2;
+        return {type,start,end};
+      }
+      return null;
+    };
+    const cleanAnnotations=[];
+    if(Array.isArray(annotations)) for(const item of annotations.slice(-40)) { if(totalPoints>=6000) break; const shape=cleanShape(item); if(shape) cleanAnnotations.push(shape); }
+    const cleanPreview = preview && typeof preview === "object" ? cleanShape(preview) : null;
+    if (notify === true && id) {
+      remoteCanvasPendingRequests.set(id, { adminSocketId:socket.id, userSocketId:userSocket.id, username:target, createdAt:Date.now() });
+      setTimeout(() => remoteCanvasPendingRequests.delete(id), 15000);
+    }
+    userSocket.emit("remoteCanvasDrawUpdate", { requestId:id, annotations:cleanAnnotations, preview:cleanPreview, notify:notify===true });
+  });
+
+  socket.on("remoteCanvasDrawResult", ({ requestId, ok, message } = {}) => {
+    if (!socket.data.remoteCanvasTransport) return;
+    const id = String(requestId || "");
+    const pending = remoteCanvasPendingRequests.get(id);
+    if (!pending || pending.userSocketId !== socket.id) return;
+    remoteCanvasPendingRequests.delete(id);
+    const adminSocket = io.sockets.sockets.get(pending.adminSocketId);
+    if (adminSocket) adminSocket.emit("adminRemoteCanvasDrawResult", { requestId:id, username:pending.username, ok:ok===true, message:String(message||"").slice(0,240) });
+  });
+
   socket.on("screenAuthenticate", token=>{const u=sessionUserRaw(token);if(!u)return socket.emit("screenAuthenticationError","Sesión no válida.");if(globalAccessEnabled()&&!globalOwnerCanAccess(u.username)){socket.emit("screenAuthenticationError","No tienes acceso a este servicio.");return socket.disconnect(true);}const username=norm(u.username);const previousSid=screenTransportSockets.get(username);if(previousSid&&previousSid!==socket.id){const previous=io.sockets.sockets.get(previousSid);if(previous)previous.disconnect(true);}screenTransportSockets.set(username,socket.id);socket.data.username=u.username;socket.data.screenTransport=true;for(const [requestId,session] of screenSupervisionSessions.entries()){if(norm(session.username)===username){session.userSocketId=socket.id;session.updatedAt=Date.now();socket.emit("screenSupervisionRequest",{requestId,fromDisplay:"El administrador"});}}socket.emit("screenAuthenticated",{username:u.username});});
 
   socket.on("audioSupervisionResponse", ({ requestId, accepted } = {}) => {
@@ -9575,6 +9690,8 @@ io.on("connection", socket => {
       }
       const screenUsername = socket.data?.screenTransport ? norm(socket.data.username || "") : "";
       if (screenUsername && screenTransportSockets.get(screenUsername) === socket.id) screenTransportSockets.delete(screenUsername);
+      const remoteCanvasUsername = socket.data?.remoteCanvasTransport ? norm(socket.data.username || "") : "";
+      if (remoteCanvasUsername && remoteCanvasSockets.get(remoteCanvasUsername) === socket.id) remoteCanvasSockets.delete(remoteCanvasUsername);
       if (isScreenTransportDisconnect) {
         for (const [requestId, session] of screenSupervisionSessions.entries()) {
           if (session.userSocketId === socket.id) endScreenSession(requestId, "La conexión de pantalla terminó.");
