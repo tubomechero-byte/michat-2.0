@@ -7242,6 +7242,45 @@ io.on("connection", socket => {
     const adminSocket=io.sockets.sockets.get(session.adminSocketId);
     if(adminSocket)adminSocket.emit("screenGuideResult",{requestId:id,type:String(type||"tap")==="swipe"?"swipe":"tap",ok:ok===true,message:String(message||"").slice(0,240)});
   });
+  socket.on("screenDrawUpdate", ({requestId,annotations,preview,notify}={})=>{
+    if(!socket.data.admin)return;
+    const id=String(requestId||"");
+    const session=screenSupervisionSessions.get(id);
+    if(!session||session.adminSocketId!==socket.id||!isScreenSupervisionEnabled())return;
+    const clamp01=value=>{const n=Number(value);return Number.isFinite(n)?Math.max(0,Math.min(1,n)):0.5;};
+    const point=value=>value&&typeof value==="object"?{x:Math.round(clamp01(value.x)*10000)/10000,y:Math.round(clamp01(value.y)*10000)/10000}:null;
+    let totalPoints=0;
+    const shape=value=>{
+      if(!value||typeof value!=="object")return null;
+      const type=String(value.type||"");
+      if(type==="pen"){
+        if(!Array.isArray(value.points))return null;
+        const points=[];
+        for(const item of value.points.slice(0,180)){if(totalPoints>=6000)break;const p=point(item);if(p){points.push(p);totalPoints++;}}
+        return points.length?{type:"pen",points}:null;
+      }
+      if(type==="arrow"||type==="circle"){
+        const start=point(value.start),end=point(value.end);
+        if(!start||!end)return null;
+        totalPoints+=2;
+        return {type,start,end};
+      }
+      return null;
+    };
+    const cleanAnnotations=[];
+    if(Array.isArray(annotations))for(const item of annotations.slice(-40)){if(totalPoints>=6000)break;const clean=shape(item);if(clean)cleanAnnotations.push(clean);}
+    const cleanPreview=preview&&typeof preview==="object"?shape(preview):null;
+    const userSocket=io.sockets.sockets.get(session.userSocketId);
+    if(!userSocket){if(notify===true)socket.emit("screenDrawResult",{requestId:id,ok:false,message:"El móvil ya no está conectado a la sesión de pantalla."});return;}
+    userSocket.emit("screenDrawUpdate",{requestId:id,annotations:cleanAnnotations,preview:cleanPreview,notify:notify===true});
+  });
+  socket.on("screenDrawResult", ({requestId,ok,message}={})=>{
+    const id=String(requestId||"");
+    const session=screenSupervisionSessions.get(id);
+    if(!session||session.userSocketId!==socket.id||!isScreenSupervisionEnabled())return;
+    const adminSocket=io.sockets.sockets.get(session.adminSocketId);
+    if(adminSocket)adminSocket.emit("screenDrawResult",{requestId:id,ok:ok===true,message:String(message||"").slice(0,240)});
+  });
   socket.on("screenControl", ({requestId,action,x,y,x1,y1,x2,y2,durationMs}={})=>{
     if(!socket.data.admin)return;
     const id=String(requestId||"");
