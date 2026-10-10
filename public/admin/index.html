@@ -194,7 +194,14 @@ body.admin-dark #adminVoiceTargets label{background:#0b1220!important;border-col
 <div id="screenSupervisionStatus" class="msg" style="margin-top:10px"></div>
 <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><label style="display:flex;align-items:center;gap:8px"><input id="screenGuideModeEnabled" type="checkbox" style="width:auto;margin:0" disabled> 📍 Indicar dónde tocar</label><label style="display:flex;align-items:center;gap:8px"><input id="screenGuideSwipeEnabled" type="checkbox" style="width:auto;margin:0" disabled> ↔ Indicar deslizar</label><label style="display:flex;align-items:center;gap:8px"><input id="screenRemoteControlEnabled" type="checkbox" style="width:auto;margin:0" disabled> 🖱️ Activar control remoto</label><button id="screenBackControl" type="button" class="secondary" disabled>← Atrás</button><button id="screenHomeControl" type="button" class="secondary" disabled>⌂ Inicio</button><button id="screenRecentsControl" type="button" class="secondary" disabled>▣ Recientes</button><span id="screenRemoteControlStatus" class="small"></span></div>
 <div style="font-size:12px;opacity:.78;margin-top:6px">«Indicar dónde tocar»: haz clic en un punto para mostrar «TOCA AQUÍ». «Indicar deslizar»: arrastra desde el inicio hasta el final del recorrido para mostrar una flecha animada «DESLIZA» en el móvil. Ambos modos solo orientan a la persona: no tocan ni deslizan por ella. El control remoto se mantiene separado.</div>
-<div style="font-size:12px;opacity:.78;margin-top:4px">El control remoto, si se activa por separado, envía toques y desplazamientos al dispositivo. El usuario debe haber activado manualmente la accesibilidad de Mi Chat.</div>
+<div style="font-size:12px;opacity:.78;margin-top:4px">El control remoto, si se activa por separado, envía toques y desplazamientos al dispositivo. El usuario debe haber activado manualmente la accesibilidad de Mi Chat. Al mover el ratón con el control remoto activo, también aparecerá un cursor visual en el móvil.</div>
+<div id="adminPcWindowToolbar" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;padding:10px;border:1px solid #d6dee9;border-radius:10px;background:rgba(127,127,127,.06)">
+  <button id="screenPcWindowStart" type="button" disabled>🪟 Mostrar ventana/pantalla del PC en el móvil</button>
+  <button id="screenPcWindowStop" type="button" class="danger" disabled>✖ Cerrar ventana del PC</button>
+  <span id="screenPcWindowStatus" class="small" aria-live="polite">Conecta una pantalla del móvil para enviar una ventana del PC.</span>
+  <video id="screenPcWindowLocalPreview" autoplay playsinline muted style="display:none;width:180px;max-height:110px;object-fit:contain;background:#000;border-radius:6px"></video>
+</div>
+<div style="font-size:12px;opacity:.78;margin-top:4px">El navegador pedirá elegir una ventana o pantalla. En el móvil se mostrará como una ventana flotante con título y botón para cerrarla. Para ver cómo se mueven varias ventanas del ordenador, elige la pantalla completa. Esto transmite la imagen; no convierte todavía el móvil en un monitor extendido de Windows.</div>
 <div id="adminScreenDrawingToolbar" style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:12px;padding:10px;border:1px solid #d6dee9;border-radius:10px;background:rgba(127,127,127,.06)">
   <label style="display:flex;align-items:center;gap:7px;font-weight:700"><input id="screenDrawModeEnabled" type="checkbox" style="width:auto;margin:0" disabled> ✏️ Dibujar en el teléfono</label>
   <button type="button" class="secondary" data-screen-draw-tool="pen" disabled>✏️ Lápiz</button>
@@ -969,6 +976,7 @@ async function loadSupabaseUsage(){
 }
 
 let adminScreenSocket=null,adminScreenPeer=null,adminScreenRequestId="",adminScreenIceQueue=[],adminScreenAuthenticated=false;
+let adminPcWindowStream=null,adminPcWindowPeer=null,adminPcWindowIceQueue=[],adminScreenPointerLastSentAt=0;
 function setScreenAdminStatus(text,kind='msg'){const el=$("screenSupervisionStatus");if(el){el.className=kind;el.textContent=text||'';}}
 function populateScreenTargets(list=[]){const select=$("screenSupervisionTarget");if(!select)return;const current=select.value;const online=(Array.isArray(list)?list:[]).filter(u=>u.online&&u.screenAvailable);select.innerHTML='<option value="">Selecciona un usuario</option>'+online.map(u=>`<option value="${escAttr(u.username)}">@${esc(u.username)} · ${esc(u.displayName||u.username)} · 🖥️ Disponible</option>`).join('');if(online.some(u=>u.username===current))select.value=current;}
 async function loadScreenSupervision(){try{const d=await api('/api/admin/screen-sharing');const c=$("screenSupervisionEnabled");if(c)c.checked=d.enabled===true;populateScreenTargets(d.users||[]);const m=$("screenSupervisionMsg");if(m){m.className=d.enabled?'msg ok':'msg';m.textContent=d.enabled?'✅ Acceso a pantallas habilitado.':'❌ Acceso a pantallas desactivado.';}}catch(e){const m=$("screenSupervisionMsg");if(m){m.className='msg error';m.textContent=e.message||'No se pudo consultar la supervisión de pantalla.';}}}
@@ -988,6 +996,10 @@ adminScreenSocket.on('screenIceFromUser',async d=>{if(String(d?.requestId||'')!=
 adminScreenSocket.on('screenControlResult',d=>{if(String(d?.requestId||'')!==adminScreenRequestId)return;const s=$('screenRemoteControlStatus');if(s)s.textContent=d?.ok?'✅ Orden enviada.':(d?.accessibilityEnabled?'❌ El dispositivo rechazó la orden.':'⚠️ Accesibilidad no activada en el móvil.');});
 adminScreenSocket.on('screenGuideResult',d=>{if(String(d?.requestId||'')!==adminScreenRequestId)return;const s=$('screenRemoteControlStatus');const label=d?.type==='swipe'?'«DESLIZA»':'«TOCA AQUÍ»';if(s)s.textContent=d?.ok?('📍 Indicador '+label+' enviado al móvil.'):('⚠️ '+String(d?.message||'No se pudo mostrar el indicador en el móvil.'));});
 adminScreenSocket.on('screenDrawResult',d=>{if(String(d?.requestId||'')!==adminScreenRequestId)return;const s=$('screenDrawStatus');if(s)s.textContent=d?.ok?'✅ Dibujo mostrado en la pantalla del teléfono.':'⚠️ '+String(d?.message||'No se pudo mostrar el dibujo en el teléfono.');});
+adminScreenSocket.on('screenDesktopAnswerFromUser',async d=>{if(String(d?.requestId||'')!==adminScreenRequestId||!d?.answer||!adminPcWindowPeer)return;try{await adminPcWindowPeer.setRemoteDescription(new RTCSessionDescription(d.answer));for(const c of adminPcWindowIceQueue.splice(0)){try{await adminPcWindowPeer.addIceCandidate(new RTCIceCandidate(c));}catch{}}const st=$('screenPcWindowStatus');if(st)st.textContent='🪟 Conectando la ventana del PC con el móvil…';}catch(e){const st=$('screenPcWindowStatus');if(st)st.textContent='⚠️ '+(e.message||'No se pudo conectar la ventana del PC.');}});
+adminScreenSocket.on('screenDesktopIceFromUser',async d=>{if(String(d?.requestId||'')!==adminScreenRequestId||!d?.candidate)return;try{if(adminPcWindowPeer?.remoteDescription)await adminPcWindowPeer.addIceCandidate(new RTCIceCandidate(d.candidate));else adminPcWindowIceQueue.push(d.candidate);}catch{}});
+adminScreenSocket.on('screenDesktopShareResult',d=>{if(String(d?.requestId||'')!==adminScreenRequestId)return;const st=$('screenPcWindowStatus');if(st)st.textContent=d?.ok?'✅ La ventana del PC se muestra en el móvil.':'⚠️ '+String(d?.message||'No se pudo mostrar la ventana del PC en el móvil.');if(d?.ok!==true)stopPcWindowShare(false);});
+adminScreenSocket.on('screenDesktopShareEnded',d=>{if(String(d?.requestId||'')!==adminScreenRequestId)return;stopPcWindowShare(false);const st=$('screenPcWindowStatus');if(st)st.textContent=String(d?.reason||'La ventana del PC se ha cerrado.');});
 adminScreenSocket.on('screenSupervisionEnded',d=>{setScreenAdminStatus(d?.reason||'La pantalla dejó de compartirse.','msg');stopAdminScreen(false);});
 }
 const adminScreenAnnotations=[];
@@ -1058,6 +1070,7 @@ function eraseScreenAnnotationAt(p){const m=screenAnnotationMetrics();if(!m)retu
 function setScreenDrawTool(tool){adminScreenDrawTool=tool;document.querySelectorAll('[data-screen-draw-tool]').forEach(b=>{const active=b.dataset.screenDrawTool===tool;b.style.outline=active?'2px solid #f59e0b':'none';b.style.fontWeight=active?'800':'400';});const label={pen:'Lápiz',arrow:'Flecha',circle:'Círculo',eraser:'Borrador'}[tool]||'Lápiz';const s=$('screenDrawStatus');if(s)s.textContent='Herramienta: '+label+'. '+(tool==='eraser'?'Arrastra sobre las marcas del teléfono para borrarlas.':'Activa «Dibujar en el teléfono» y arrastra; las marcas aparecerán en el móvil.');}
 function enableScreenControlUi(active){
   const v=$('adminScreenPreview'),stage=$('adminScreenStage'),surface=$('adminScreenControlSurface'),g=$('screenGuideModeEnabled'),gs=$('screenGuideSwipeEnabled'),t=$('screenRemoteControlEnabled'),draw=$('screenDrawModeEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl'),undo=$('screenDrawUndo'),clear=$('screenDrawClear');
+  const pcStart=$('screenPcWindowStart'),pcStop=$('screenPcWindowStop');if(pcStart)pcStart.disabled=!active;if(pcStop)pcStop.disabled=!active||!adminPcWindowStream;
   [g,gs,t,draw,b,h,r,undo,clear,...document.querySelectorAll('[data-screen-draw-tool]')].forEach(el=>{if(el)el.disabled=!active;});
   if(stage)stage.style.display=active?'block':'none';
   if(surface)surface.style.cursor=active?'crosshair':'default';
@@ -1090,6 +1103,45 @@ function screenVideoPoint(ev,strict=false){
   if(strict&&(rawX<0||rawX>1||rawY<0||rawY>1))return null;
   return {x:Math.max(0,Math.min(1,rawX)),y:Math.max(0,Math.min(1,rawY))};
 }
+function sendScreenRemotePointer(ev,visible=true,force=false){
+  if(!adminScreenSocket?.connected||!adminScreenRequestId||$('screenRemoteControlEnabled')?.checked!==true)return;
+  const now=performance.now();if(!force&&now-adminScreenPointerLastSentAt<45)return;
+  adminScreenPointerLastSentAt=now;
+  const p=visible?screenVideoPoint(ev,true):null;
+  adminScreenSocket.emit('screenRemotePointer',{requestId:adminScreenRequestId,visible:Boolean(visible&&p),x:p?.x??0.5,y:p?.y??0.5});
+}
+async function startPcWindowShare(){
+  const status=$('screenPcWindowStatus'),start=$('screenPcWindowStart'),stop=$('screenPcWindowStop');
+  if(!adminScreenSocket?.connected||!adminScreenRequestId||!adminScreenPeer){if(status)status.textContent='⚠️ Primero conecta la pantalla del móvil.';return;}
+  if(!navigator.mediaDevices?.getDisplayMedia){if(status)status.textContent='⚠️ Este navegador no permite compartir ventanas. Usa Chrome o Edge actualizado.';return;}
+  try{
+    if(status)status.textContent='Elige en el selector del navegador la ventana o la pantalla que quieres mostrar en el móvil…';
+    const stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:15,max:24}},audio:false});
+    if(!stream.getVideoTracks().length){stream.getTracks().forEach(t=>t.stop());throw new Error('No se ha seleccionado una fuente de vídeo.');}
+    adminPcWindowStream=stream;adminPcWindowIceQueue=[];
+    const preview=$('screenPcWindowLocalPreview');if(preview){preview.srcObject=stream;preview.style.display='block';preview.play().catch(()=>{});}
+    adminPcWindowPeer=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
+    stream.getTracks().forEach(track=>adminPcWindowPeer.addTrack(track,stream));
+    adminPcWindowPeer.onicecandidate=e=>{if(e.candidate&&adminScreenSocket?.connected&&adminScreenRequestId)adminScreenSocket.emit('screenDesktopIceToUser',{requestId:adminScreenRequestId,candidate:{candidate:e.candidate.candidate,sdpMid:e.candidate.sdpMid,sdpMLineIndex:e.candidate.sdpMLineIndex}});};
+    adminPcWindowPeer.onconnectionstatechange=()=>{const st=$('screenPcWindowStatus');if(!st)return;if(adminPcWindowPeer?.connectionState==='connected')st.textContent='✅ Ventana del PC conectada; debería aparecer en el móvil.';else if(['failed','disconnected','closed'].includes(adminPcWindowPeer?.connectionState))st.textContent='⚠️ La conexión de la ventana del PC se ha interrumpido.';};
+    const offer=await adminPcWindowPeer.createOffer();await adminPcWindowPeer.setLocalDescription(offer);
+    adminScreenSocket.emit('screenDesktopOfferToUser',{requestId:adminScreenRequestId,offer:{type:adminPcWindowPeer.localDescription.type,sdp:adminPcWindowPeer.localDescription.sdp}});
+    if(start)start.disabled=true;if(stop)stop.disabled=false;
+    stream.getVideoTracks()[0].addEventListener('ended',()=>stopPcWindowShare(true),{once:true});
+    if(status)status.textContent='⏳ Enviando la ventana del PC al teléfono…';
+  }catch(e){stopPcWindowShare(false);if(status)status.textContent='⚠️ '+(e?.name==='NotAllowedError'?'No has autorizado compartir la ventana o pantalla.':(e.message||'No se pudo compartir la ventana del PC.'));}
+}
+function stopPcWindowShare(notify=true){
+  const oldRequest=adminScreenRequestId;
+  const peer=adminPcWindowPeer;adminPcWindowPeer=null;adminPcWindowIceQueue=[];
+  if(peer){try{peer.onicecandidate=null;peer.close();}catch{}}
+  const stream=adminPcWindowStream;adminPcWindowStream=null;if(stream)stream.getTracks().forEach(t=>{try{t.stop();}catch{}});
+  const preview=$('screenPcWindowLocalPreview');if(preview){preview.pause?.();preview.srcObject=null;preview.style.display='none';}
+  const start=$('screenPcWindowStart'),stop=$('screenPcWindowStop');if(start)start.disabled=!adminScreenRequestId;if(stop)stop.disabled=true;
+  if(notify&&oldRequest&&adminScreenSocket?.connected)adminScreenSocket.emit('screenDesktopShareEnd',{requestId:oldRequest,reason:'La ventana del PC se ha cerrado desde Render.'});
+}
+$('screenPcWindowStart')?.addEventListener('click',startPcWindowShare);
+$('screenPcWindowStop')?.addEventListener('click',()=>{stopPcWindowShare(true);const st=$('screenPcWindowStatus');if(st)st.textContent='Ventana del PC cerrada.';});
 (function setupScreenRemoteControlUi(){
   const v=$('adminScreenPreview'),stage=$('adminScreenStage'),surface=$('adminScreenControlSurface'),t=$('screenRemoteControlEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl'),g=$('screenGuideModeEnabled'),gs=$('screenGuideSwipeEnabled'),drawMode=$('screenDrawModeEnabled'),undo=$('screenDrawUndo'),clear=$('screenDrawClear');
   if(!v||!t||!stage||!surface)return;
@@ -1098,12 +1150,13 @@ function screenVideoPoint(ev,strict=false){
   target.addEventListener('contextmenu',ev=>ev.preventDefault());
   target.addEventListener('pointerdown',ev=>{
     if((t.checked!==true&&g?.checked!==true&&gs?.checked!==true&&drawMode?.checked!==true)||stage.style.display==='none')return;
-    ev.preventDefault();const isDraw=drawMode?.checked===true;const p=screenVideoPoint(ev,isDraw);if(!p)return;
+    ev.preventDefault();const isDraw=drawMode?.checked===true;const p=screenVideoPoint(ev,isDraw);if(!p)return;if(t?.checked===true)sendScreenRemotePointer(ev,true,true);
     down={x:p.x,y:p.y,time:performance.now(),pointerId:ev.pointerId,tool:isDraw?adminScreenDrawTool:null,points:[p]};drawPreview=null;
     if(down.tool==='eraser'){adminScreenDrawSnapshotTaken=false;eraseScreenAnnotationAt(p);}
     try{target.setPointerCapture(ev.pointerId);}catch{}
   });
   target.addEventListener('pointermove',ev=>{
+    if(t?.checked===true)sendScreenRemotePointer(ev,true);
     if(!down)return;const p=screenVideoPoint(ev,Boolean(down.tool));if(!p)return;
     if(down.tool==='pen'){const last=down.points[down.points.length-1];if(!last||Math.hypot((p.x-last.x)*Math.max(1,v.videoWidth),(p.y-last.y)*Math.max(1,v.videoHeight))>=2)down.points.push(p);drawPreview={type:'pen',points:down.points};renderScreenAnnotations(drawPreview);queueScreenDrawingState(drawPreview);}
     else if(down.tool==='arrow'||down.tool==='circle'){drawPreview={type:down.tool,start:{x:down.x,y:down.y},end:p};renderScreenAnnotations(drawPreview);queueScreenDrawingState(drawPreview);}
@@ -1125,9 +1178,10 @@ function screenVideoPoint(ev,strict=false){
     if(t.checked!==true)return;
     if(dist<0.02)sendScreenControl({action:dt>450?'longPress':'tap',x:p.x,y:p.y});else sendScreenControl({action:'swipe',x1:start.x,y1:start.y,x2:p.x,y2:p.y,durationMs:Math.max(150,Math.min(1000,Math.round(dt||350)))})
   });
-  target.addEventListener('pointercancel',ev=>{down=null;drawPreview=null;renderScreenAnnotations();sendScreenDrawingState(null,true);try{target.releasePointerCapture(ev.pointerId);}catch{}});
+  target.addEventListener('pointerleave',ev=>{if(!down&&t?.checked===true)sendScreenRemotePointer(ev,false,true);});
+  target.addEventListener('pointercancel',ev=>{down=null;drawPreview=null;renderScreenAnnotations();sendScreenDrawingState(null,true);if(t?.checked===true)sendScreenRemotePointer(ev,false,true);try{target.releasePointerCapture(ev.pointerId);}catch{}});
   b?.addEventListener('click',()=>sendScreenControl({action:'back'}));h?.addEventListener('click',()=>sendScreenControl({action:'home'}));r?.addEventListener('click',()=>sendScreenControl({action:'recents'}));
-  t?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(t.checked){if(g)g.checked=false;if(gs)gs.checked=false;if(drawMode)drawMode.checked=false;}if(s)s.textContent=t.checked?'🖱️ Control remoto activado.':'Control remoto desactivado.';if(surface)surface.style.cursor=(t.checked||g?.checked||gs?.checked||drawMode?.checked)?'crosshair':'default';});
+  t?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(t.checked){if(g)g.checked=false;if(gs)gs.checked=false;if(drawMode)drawMode.checked=false;}else if(adminScreenSocket?.connected&&adminScreenRequestId)adminScreenSocket.emit('screenRemotePointer',{requestId:adminScreenRequestId,visible:false});if(s)s.textContent=t.checked?'🖱️ Control remoto activado: el cursor aparecerá en el móvil y los clics se enviarán si la accesibilidad está habilitada.':'Control remoto desactivado.';if(surface)surface.style.cursor=(t.checked||g?.checked||gs?.checked||drawMode?.checked)?'crosshair':'default';});
   g?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(g.checked){if(t)t.checked=false;if(gs)gs.checked=false;if(drawMode)drawMode.checked=false;}if(s)s.textContent=g.checked?'📍 Indicación de toque activada: haz clic en el punto que quieres señalar.':(gs?.checked?'↔ Indicación de deslizamiento activada.':'Modo guía desactivado.');if(surface)surface.style.cursor=(t?.checked||g.checked||gs?.checked||drawMode?.checked)?'crosshair':'default';});
   gs?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(gs.checked){if(t)t.checked=false;if(g)g.checked=false;if(drawMode)drawMode.checked=false;}if(s)s.textContent=gs.checked?'↔ Indicar deslizar activado: arrastra desde el inicio hasta el final.':(g?.checked?'📍 Indicación de toque activada.':'Modo guía desactivado.');if(surface)surface.style.cursor=(t?.checked||g?.checked||gs.checked||drawMode?.checked)?'crosshair':'default';});
   drawMode?.addEventListener('change',()=>{const ds=$('screenDrawStatus');if(drawMode.checked){if(t)t.checked=false;if(g)g.checked=false;if(gs)gs.checked=false;if(ds)ds.textContent='Dibujo activado · '+({pen:'Lápiz',arrow:'Flecha',circle:'Círculo',eraser:'Borrador'}[adminScreenDrawTool]||'Lápiz')+'. Arrastra sobre la pantalla; el trazo se mostrará en el móvil.';}else if(ds)ds.textContent='Dibujo desactivado. Las marcas siguen visibles en el teléfono hasta que las borres.';if(surface)surface.style.cursor=(drawMode.checked||t?.checked||g?.checked||gs?.checked)?'crosshair':'default';});
@@ -1139,7 +1193,7 @@ function screenVideoPoint(ev,strict=false){
 })();
 
 function requestScreenSupervision(){const username=$("screenSupervisionTarget")?.value||'',enabled=$("screenSupervisionEnabled")?.checked===true;if(!enabled)return setScreenAdminStatus('Activa primero el acceso a pantallas.','msg error');if(!username)return setScreenAdminStatus('Selecciona un usuario con pantalla disponible.','msg error');ensureAdminScreenSocket();if(!adminScreenSocket?.connected||!adminScreenAuthenticated)return setScreenAdminStatus('Conectando el panel de pantalla… vuelve a pulsar.','msg');stopAdminScreen(false);adminScreenSocket.emit('adminScreenRequest',{username});setScreenAdminStatus(`Solicitando pantalla a @${username}…`,'msg');}
-function stopAdminScreen(sendEnd=true){if(sendEnd&&adminScreenSocket?.connected&&adminScreenRequestId)adminScreenSocket.emit('adminScreenEnd',{requestId:adminScreenRequestId});if(adminScreenPeer){try{adminScreenPeer.close();}catch{}}adminScreenPeer=null;adminScreenIceQueue=[];const v=$("adminScreenPreview"),stage=$("adminScreenStage");if(v){v.srcObject=null;v.style.display='block';}if(stage)stage.style.display='none';if($("stopScreenSupervision"))$("stopScreenSupervision").disabled=true;adminScreenRequestId='';resetScreenControlUi();}
+function stopAdminScreen(sendEnd=true){const oldRequest=adminScreenRequestId;if(oldRequest&&adminScreenSocket?.connected)adminScreenSocket.emit('screenRemotePointer',{requestId:oldRequest,visible:false});stopPcWindowShare(false);if(sendEnd&&adminScreenSocket?.connected&&oldRequest)adminScreenSocket.emit('adminScreenEnd',{requestId:oldRequest});if(adminScreenPeer){try{adminScreenPeer.close();}catch{}}adminScreenPeer=null;adminScreenIceQueue=[];const v=$("adminScreenPreview"),stage=$("adminScreenStage");if(v){v.srcObject=null;v.style.display='block';}if(stage)stage.style.display='none';if($("stopScreenSupervision"))$("stopScreenSupervision").disabled=true;adminScreenRequestId='';const pcStart=$("screenPcWindowStart"),pcStop=$("screenPcWindowStop");if(pcStart)pcStart.disabled=true;if(pcStop)pcStop.disabled=true;resetScreenControlUi();}
 $("screenSupervisionEnabled")?.addEventListener('change',toggleScreenSupervision);$("requestScreenSupervision")?.addEventListener('click',requestScreenSupervision);$("stopScreenSupervision")?.addEventListener('click',()=>stopAdminScreen(true));
 loadScreenSupervision();setInterval(loadScreenSupervision,5000);
 
