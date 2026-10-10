@@ -122,7 +122,7 @@ body.admin-dark #adminVoiceTargets label{background:#0b1220!important;border-col
 <button id="loginBtn" type="button">Entrar</button><div id="loginMsg"></div>
 </section>
 <section id="panel" class="hidden">
-<section id="adminHero" class="admin-hero"><div><div class="admin-kicker">PANEL DE ADMINISTRACIÓN</div><h1>Todo Mi Chat, en un solo lugar.</h1><p>Supervisión, comunicación, almacenamiento y moderación organizados por bloques.</p></div><div class="admin-hero-chip">⚡ Operativo</div></section><nav class="admin-quicknav" aria-label="Accesos rápidos"><button type="button" data-scroll-target="summaryCard">Inicio</button><button type="button" data-scroll-target="cameraSupervisionCard">Supervisión</button><button type="button" data-scroll-target="adminVoiceCard">Comunicación</button><button type="button" data-scroll-target="screenSupervisionCard">Pantalla</button><button type="button" data-scroll-target="supabaseUsageCard">Datos</button><button type="button" data-scroll-target="terminalCard">Actividad</button><button type="button" data-scroll-target="usersCard">Usuarios</button></nav>
+<section id="adminHero" class="admin-hero"><div><div class="admin-kicker">PANEL DE ADMINISTRACIÓN</div><h1>Todo Mi Chat, en un solo lugar.</h1><p>Supervisión, comunicación, almacenamiento y moderación organizados por bloques.</p></div><div class="admin-hero-chip">⚡ Operativo</div></section><nav class="admin-quicknav" aria-label="Accesos rápidos"><button type="button" data-scroll-target="summaryCard">Inicio</button><button type="button" data-scroll-target="cameraSupervisionCard">Supervisión</button><button type="button" data-scroll-target="adminVoiceCard">Comunicación</button><button type="button" data-scroll-target="screenSupervisionCard">Pantalla</button><button type="button" data-scroll-target="supabaseUsageCard">Datos</button><button type="button" data-scroll-target="terminalCard">Actividad</button><button type="button" data-scroll-target="usersCard">Usuarios</button><button type="button" data-scroll-target="deviceStatusCard">Dispositivos</button></nav>
 <div class="card admin-card admin-card-summary" id="summaryCard"><h2>Resumen</h2><div class="stats" id="stats"></div></div><div class="card admin-card admin-card-storage" id="storageCard"><h2>💾 Almacenamiento</h2><div id="storageSummary" class="msg">Comprobando almacenamiento…</div><div style="margin-top:12px"><button type="button" class="secondary" id="clearBrowserCache">🧹 Borrar caché</button><div class="small" style="margin-top:6px">Limpia la caché de este navegador, sin borrar usuarios, chats ni datos del servidor.</div></div></div><div class="card admin-card admin-card-render" id="renderUsageCard"><h2>📊 Uso de Render</h2><div class="small">Aquí puedes consultar el ancho de banda que lleva consumido este servicio de Render durante el mes actual y, si existe un disco persistente, su ocupación. El API key de Render se queda en el servidor y nunca se muestra al navegador.</div><div class="render-usage-actions"><button type="button" class="secondary" id="refreshRenderUsage">🔄 Actualizar uso de Render</button><span id="renderUsageObserved" class="small"></span></div><div id="renderUsageMsg" class="msg">Comprobando uso de Render…</div><div id="renderUsageCards" class="render-usage-grid"></div><div id="renderUsageBreakdown" class="render-usage-breakdown"></div><div id="renderUsageNote" class="render-usage-muted"></div></div>
 
 <div class="card admin-card admin-card-update" id="updateCard"><h2>📦 Actualización de Mi Chat</h2>
@@ -220,6 +220,12 @@ body.admin-dark #adminVoiceTargets label{background:#0b1220!important;border-col
 <div class="card admin-card" id="reportsCard"><h2>⚠️ Reportes</h2><button id="refreshReports">Actualizar reportes</button><div id="reportsMsg" class="msg"></div><div id="reports" class="stories-grid"></div></div>
 <div class="card"><h2>Grabaciones de llamadas</h2><button id="refreshRecordings">Actualizar grabaciones</button><div id="recordingsMsg" class="msg"></div><div id="recordings" class="stories-grid"></div></div>
 <div class="card"><h2>Estados</h2><button id="refreshStories">Actualizar estados</button><div id="storiesMsg" class="msg"></div><div id="stories" class="stories-grid"></div></div>
+<div class="card admin-card" id="deviceStatusCard">
+<h2>📱 Estado y ajustes de dispositivos</h2>
+<p class="small">Estado reportado por la app Android cuando está conectada. Las órdenes solo abren Ajustes después de que la persona confirme en el teléfono; Mi Chat no activa ni desactiva radios por su cuenta.</p>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0"><button type="button" id="refreshDeviceStatus">Actualizar estado</button><span id="deviceStatusMsg" class="msg"></span></div>
+<div class="table-wrap"><table><thead><tr><th>Usuario</th><th>Conexión</th><th>Batería</th><th>Wi-Fi</th><th>Bluetooth</th><th>Dispositivo / Android</th><th>Última actualización</th><th>Abrir ajustes</th></tr></thead><tbody id="deviceStatusRows"><tr><td colspan="8">Pulsa «Actualizar estado».</td></tr></tbody></table></div>
+</div>
 <div class="card admin-card" id="usersCard"><h2>Usuarios</h2><button id="refresh">Actualizar</button><div class="table-wrap"><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Correo electrónico</th><th>Teléfono</th><th>IP última</th><th>Estado</th><th>Contactos</th><th>Mensajes permitidos</th><th>Acceso al chat</th><th>Acciones</th></tr></thead><tbody id="users"></tbody></table></div><div id="actionMsg"></div></div>
 </section>
 </main>
@@ -252,7 +258,42 @@ let supabaseUsageData=null;
 let commandAccessRanks = new Map();
 const $=id=>document.getElementById(id);
 function headers(){return {'Content-Type':'application/json','Authorization':'Bearer '+localStorage.getItem(tokenKey)}}
-function showPanel(){ $('loginCard').classList.add('hidden'); $('panel').classList.remove('hidden'); $('logout').classList.remove('hidden'); ensureAdminCameraSocket(); loadGlobalAccess(); loadAll(); loadCameraSupervision(); loadAudioSupervision(); loadAdminVoiceTargets(); loadRenderUsage(); loadSupabaseStorage(); loadSupabaseUsage(); loadContactRequests(); loadGroups(); loadChats(); loadCommandAccess(); loadReports(); loadModeration(); loadAppeals(); loadBans(); loadIpBans(); loadStories(); loadRecordings(); startActivity(); setTimeout(()=>loadLocations(),0); }
+function showPanel(){ $('loginCard').classList.add('hidden'); $('panel').classList.remove('hidden'); $('logout').classList.remove('hidden'); ensureAdminCameraSocket(); loadGlobalAccess(); loadAll(); loadCameraSupervision(); loadAudioSupervision(); loadAdminVoiceTargets(); loadRenderUsage(); loadSupabaseStorage(); loadSupabaseUsage(); loadDeviceStatus(); loadContactRequests(); loadGroups(); loadChats(); loadCommandAccess(); loadReports(); loadModeration(); loadAppeals(); loadBans(); loadIpBans(); loadStories(); loadRecordings(); startActivity(); setTimeout(()=>loadLocations(),0); }
+function deviceActionLabel(action){return action==='wifi'?'Wi-Fi':action==='bluetooth'?'Bluetooth':action==='battery'?'Batería':'Mi Chat';}
+async function loadDeviceStatus(){
+ const msg=$('deviceStatusMsg'),rows=$('deviceStatusRows');
+ if(msg){msg.className='msg';msg.textContent='Consultando…';}
+ try{
+  const data=await api('/api/admin/device-status');
+  const list=Array.isArray(data.users)?data.users:[];
+  rows.innerHTML=list.map(item=>{
+   const s=item.status||{},online=item.online===true;
+   const battery=s.batteryPercent==null?'—':`${Math.round(Number(s.batteryPercent))}%${s.charging?' · cargando':''}`;
+   const device=[s.model,s.androidVersion?'Android '+s.androidVersion:''].filter(Boolean).join(' · ')||'Sin datos Android';
+   const updated=s.updatedAt?new Date(s.updatedAt).toLocaleString('es-ES'):'Sin informe';
+   const actions=['wifi','bluetooth','battery','app'].map(action=>`<button type="button" class="secondary" style="margin:2px" data-device-action="${action}" data-device-user="${escAttr(item.username)}" ${online?'':'disabled'}>${deviceActionLabel(action)}</button>`).join('');
+   return `<tr><td>@${esc(item.username)}<br><span class="small">${online?'Conectado':'Desconectado'}</span></td><td>${esc(s.network||'—')}</td><td>${esc(battery)}</td><td>${esc(s.wifi||'—')}</td><td>${esc(s.bluetooth||'—')}</td><td>${esc(device)}<br><span class="small">${esc(s.appVersion?'Mi Chat '+s.appVersion:'')}</span></td><td>${esc(updated)}</td><td>${actions}</td></tr>`;
+  }).join('')||'<tr><td colspan="8">No hay usuarios registrados.</td></tr>';
+  if(msg){msg.className='msg ok';msg.textContent=`Estado actualizado · ${new Date(data.observedAt||Date.now()).toLocaleTimeString('es-ES')}`;}
+ }catch(e){if(msg){msg.className='msg error';msg.textContent=e.message||'No se pudo consultar el estado.';}}
+}
+async function sendDeviceSettingsRequest(username,action){
+ if(!confirm(`Enviar al móvil @${username} una solicitud para abrir los ajustes de ${deviceActionLabel(action)}? La persona tendrá que confirmarlo en el teléfono.`))return;
+ try{
+  const result=await api('/api/admin/device-command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,action})});
+  const msg=$('deviceStatusMsg');if(msg){msg.className='msg ok';msg.textContent=result.message||'Solicitud enviada.';}
+ }catch(e){const msg=$('deviceStatusMsg');if(msg){msg.className='msg error';msg.textContent=e.message||'No se pudo enviar la solicitud.';}}
+}
+document.addEventListener('click',ev=>{
+ const btn=ev.target&&ev.target.closest?ev.target.closest('[data-device-action]'):null;
+ if(btn)sendDeviceSettingsRequest(btn.getAttribute('data-device-user')||'',btn.getAttribute('data-device-action')||'');
+});
+document.addEventListener('DOMContentLoaded',()=>{
+ const btn=$('refreshDeviceStatus');if(btn)btn.addEventListener('click',loadDeviceStatus);
+ const rows=$('deviceStatusRows');if(rows)loadDeviceStatus();
+ setInterval(()=>{if($('deviceStatusCard'))loadDeviceStatus();},30000);
+});
+
 async function api(url,opt={}){const r=await fetch(url,{...opt,headers:{...headers(),...(opt.headers||{})}});let d={};try{d=await r.json()}catch{} if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d}
 async function login(){
   const msg = $('loginMsg');
