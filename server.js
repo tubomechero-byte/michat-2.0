@@ -7221,23 +7221,26 @@ io.on("connection", socket => {
   socket.on("screenIceToAdmin", ({requestId,candidate}={})=>{const id=String(requestId||"");const session=screenSupervisionSessions.get(id);if(!session||session.userSocketId!==socket.id||!isScreenSupervisionEnabled())return;const adminSocket=io.sockets.sockets.get(session.adminSocketId);if(adminSocket)adminSocket.emit("screenIceFromUser",{requestId:id,candidate});});
   socket.on("screenControlResult", ({requestId,action,ok,accessibilityEnabled}={})=>{const id=String(requestId||"");const session=screenSupervisionSessions.get(id);if(!session||session.userSocketId!==socket.id||!isScreenSupervisionEnabled())return;const adminSocket=io.sockets.sockets.get(session.adminSocketId);if(adminSocket)adminSocket.emit("screenControlResult",{requestId:id,action,ok:ok===true,accessibilityEnabled:accessibilityEnabled===true});});
   socket.on("screenIceToUser", ({requestId,candidate}={})=>{if(!socket.data.admin)return;const id=String(requestId||"");const session=screenSupervisionSessions.get(id);if(!session||session.adminSocketId!==socket.id||!isScreenSupervisionEnabled())return;const userSocket=io.sockets.sockets.get(session.userSocketId);if(userSocket)userSocket.emit("screenIceFromAdmin",{requestId:id,candidate});});
-  socket.on("screenGuideMarker", ({requestId,x,y,durationMs}={})=>{
+  socket.on("screenGuideMarker", ({requestId,type,x,y,x1,y1,x2,y2,durationMs}={})=>{
     if(!socket.data.admin)return;
     const id=String(requestId||"");
     const session=screenSupervisionSessions.get(id);
     if(!session||session.adminSocketId!==socket.id||!isScreenSupervisionEnabled())return;
     const normalise=value=>{const n=Number(value);return Number.isFinite(n)?Math.max(0,Math.min(1,n)):0.5;};
-    const payload={requestId:id,x:normalise(x),y:normalise(y),durationMs:Math.max(1500,Math.min(12000,Number(durationMs)||7000))};
+    const swipe=String(type||"tap")==="swipe";
+    const payload=swipe
+      ? {requestId:id,type:"swipe",x1:normalise(x1),y1:normalise(y1),x2:normalise(x2),y2:normalise(y2),durationMs:Math.max(1500,Math.min(12000,Number(durationMs)||7000))}
+      : {requestId:id,type:"tap",x:normalise(x),y:normalise(y),durationMs:Math.max(1500,Math.min(12000,Number(durationMs)||7000))};
     const userSocket=io.sockets.sockets.get(session.userSocketId);
     if(userSocket)userSocket.emit("screenGuideMarker",payload);
-    else socket.emit("screenGuideResult",{requestId:id,ok:false,message:"El móvil se ha desconectado de la sesión de pantalla."});
+    else socket.emit("screenGuideResult",{requestId:id,type:payload.type,ok:false,message:"El móvil se ha desconectado de la sesión de pantalla."});
   });
-  socket.on("screenGuideResult", ({requestId,ok,message}={})=>{
+  socket.on("screenGuideResult", ({requestId,type,ok,message}={})=>{
     const id=String(requestId||"");
     const session=screenSupervisionSessions.get(id);
     if(!session||session.userSocketId!==socket.id||!isScreenSupervisionEnabled())return;
     const adminSocket=io.sockets.sockets.get(session.adminSocketId);
-    if(adminSocket)adminSocket.emit("screenGuideResult",{requestId:id,ok:ok===true,message:String(message||"").slice(0,240)});
+    if(adminSocket)adminSocket.emit("screenGuideResult",{requestId:id,type:String(type||"tap")==="swipe"?"swipe":"tap",ok:ok===true,message:String(message||"").slice(0,240)});
   });
   socket.on("screenControl", ({requestId,action,x,y,x1,y1,x2,y2,durationMs}={})=>{
     if(!socket.data.admin)return;
