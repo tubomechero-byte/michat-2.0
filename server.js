@@ -7587,9 +7587,20 @@ io.on("connection", socket => {
   });
 
   // Estado del dispositivo: solo se acepta desde un socket de usuario autenticado.
-  socket.on("deviceStatusUpdate", payload => {
+  // La confirmación permite diagnosticar informes que antes se descartaban silenciosamente.
+  socket.on("deviceStatusUpdate", (payload, acknowledge) => {
+    const reply = typeof acknowledge === "function" ? acknowledge : () => {};
     const username = online.get(socket.id);
-    if (!username || !payload || typeof payload !== "object") return;
+    if (!username) {
+      console.warn(`[deviceStatusUpdate] Informe rechazado: socket no autenticado (${socket.id}).`);
+      reply({ ok: false, reason: "not_authenticated" });
+      return;
+    }
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      console.warn(`[deviceStatusUpdate] Informe inválido de @${username}.`);
+      reply({ ok: false, reason: "invalid_payload" });
+      return;
+    }
     const safeText = (value, max = 80) => String(value == null ? "" : value).replace(/[<>]/g, "").slice(0, max);
     const status = {
       username,
@@ -7604,6 +7615,7 @@ io.on("connection", socket => {
       updatedAt: Date.now()
     };
     deviceStatuses.set(norm(username), status);
+    reply({ ok: true, updatedAt: status.updatedAt });
   });
 
   socket.on("remoteSettingsResult", payload => {
