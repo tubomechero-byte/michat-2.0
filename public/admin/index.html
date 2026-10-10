@@ -195,9 +195,21 @@ body.admin-dark #adminVoiceTargets label{background:#0b1220!important;border-col
 <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><label style="display:flex;align-items:center;gap:8px"><input id="screenGuideModeEnabled" type="checkbox" style="width:auto;margin:0" disabled> 📍 Indicar dónde tocar</label><label style="display:flex;align-items:center;gap:8px"><input id="screenGuideSwipeEnabled" type="checkbox" style="width:auto;margin:0" disabled> ↔ Indicar deslizar</label><label style="display:flex;align-items:center;gap:8px"><input id="screenRemoteControlEnabled" type="checkbox" style="width:auto;margin:0" disabled> 🖱️ Activar control remoto</label><button id="screenBackControl" type="button" class="secondary" disabled>← Atrás</button><button id="screenHomeControl" type="button" class="secondary" disabled>⌂ Inicio</button><button id="screenRecentsControl" type="button" class="secondary" disabled>▣ Recientes</button><span id="screenRemoteControlStatus" class="small"></span></div>
 <div style="font-size:12px;opacity:.78;margin-top:6px">«Indicar dónde tocar»: haz clic en un punto para mostrar «TOCA AQUÍ». «Indicar deslizar»: arrastra desde el inicio hasta el final del recorrido para mostrar una flecha animada «DESLIZA» en el móvil. Ambos modos solo orientan a la persona: no tocan ni deslizan por ella. El control remoto se mantiene separado.</div>
 <div style="font-size:12px;opacity:.78;margin-top:4px">El control remoto, si se activa por separado, envía toques y desplazamientos al dispositivo. El usuario debe haber activado manualmente la accesibilidad de Mi Chat.</div>
+<div id="adminScreenDrawingToolbar" style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:12px;padding:10px;border:1px solid #d6dee9;border-radius:10px;background:rgba(127,127,127,.06)">
+  <label style="display:flex;align-items:center;gap:7px;font-weight:700"><input id="screenDrawModeEnabled" type="checkbox" style="width:auto;margin:0" disabled> ✏️ Dibujar sobre la vista</label>
+  <button type="button" class="secondary" data-screen-draw-tool="pen" disabled>✏️ Lápiz</button>
+  <button type="button" class="secondary" data-screen-draw-tool="arrow" disabled>➡️ Flecha</button>
+  <button type="button" class="secondary" data-screen-draw-tool="circle" disabled>⭕ Círculo</button>
+  <button type="button" class="secondary" data-screen-draw-tool="eraser" disabled>🩹 Borrador</button>
+  <button id="screenDrawUndo" type="button" class="secondary" disabled>↶ Deshacer</button>
+  <button id="screenDrawClear" type="button" class="secondary" disabled>🧹 Limpiar</button>
+  <span id="screenDrawStatus" class="small" aria-live="polite">Conecta una pantalla para dibujar.</span>
+</div>
+<div style="font-size:12px;opacity:.78;margin-top:4px">Los dibujos aparecen solo encima de tu vista en Render; no se envían al móvil ni realizan toques. No hace falta confirmar cada trazo. Para que la otra persona vea una marca en su teléfono se necesita una función visible en el propio dispositivo.</div>
 <div id="adminScreenStage" style="position:relative;display:none;width:100%;height:650px;max-height:75vh;margin-top:12px;border-radius:12px;background:#000;overflow:hidden;">
   <video id="adminScreenPreview" autoplay playsinline muted preload="auto" controlslist="nodownload noplaybackrate noremoteplayback" disablepictureinpicture style="display:block;width:100%;height:100%;border:0;border-radius:12px;background:#000;object-fit:contain;object-position:center;pointer-events:none;"></video>
-  <div id="adminScreenControlSurface" aria-label="Superficie de control remoto" style="position:absolute;inset:0;z-index:2;background:transparent;cursor:default;touch-action:none;"></div>
+  <div id="adminScreenControlSurface" aria-label="Superficie de guía y control remoto" style="position:absolute;inset:0;z-index:2;background:transparent;cursor:default;touch-action:none;"></div>
+  <canvas id="adminScreenAnnotationCanvas" aria-hidden="true" style="position:absolute;inset:0;z-index:3;width:100%;height:100%;pointer-events:none;"></canvas>
 </div>
 </div>
 <div class="card admin-card admin-card-supabase" id="supabaseUsageCard"><h2>🗄️ Almacenamiento real de Supabase</h2><div class="small">Aquí se separan tres cosas: el tamaño real de la base de datos que reporta Supabase, el contenido que Mi Chat guarda en <code>michat_state</code> y los archivos de Supabase Storage.</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><button type="button" class="secondary" id="refreshSupabaseUsage">🔄 Actualizar almacenamiento</button><span id="supabaseUsageObserved" class="small"></span></div><div id="supabaseUsageMsg" class="msg">Comprobando almacenamiento real de Supabase…</div><div id="supabaseUsageCards" class="supabase-usage-grid"></div><div id="supabaseUsageBreakdown"></div></div>
@@ -977,16 +989,71 @@ adminScreenSocket.on('screenControlResult',d=>{if(String(d?.requestId||'')!==adm
 adminScreenSocket.on('screenGuideResult',d=>{if(String(d?.requestId||'')!==adminScreenRequestId)return;const s=$('screenRemoteControlStatus');const label=d?.type==='swipe'?'«DESLIZA»':'«TOCA AQUÍ»';if(s)s.textContent=d?.ok?('📍 Indicador '+label+' enviado al móvil.'):('⚠️ '+String(d?.message||'No se pudo mostrar el indicador en el móvil.'));});
 adminScreenSocket.on('screenSupervisionEnded',d=>{setScreenAdminStatus(d?.reason||'La pantalla dejó de compartirse.','msg');stopAdminScreen(false);});
 }
+const adminScreenAnnotations=[];
+const adminScreenAnnotationHistory=[];
+let adminScreenDrawTool='pen';
+let adminScreenDrawSnapshotTaken=false;
+function cloneScreenAnnotations(){return adminScreenAnnotations.map(a=>({...a,points:Array.isArray(a.points)?a.points.map(p=>({...p})):undefined,start:a.start?{...a.start}:undefined,end:a.end?{...a.end}:undefined}));}
+function saveScreenAnnotationHistory(){adminScreenAnnotationHistory.push(cloneScreenAnnotations());if(adminScreenAnnotationHistory.length>50)adminScreenAnnotationHistory.shift();}
+function screenAnnotationMetrics(){
+  const stage=$('adminScreenStage'),v=$('adminScreenPreview'),canvas=$('adminScreenAnnotationCanvas');
+  if(!stage||!v||!canvas)return null;
+  const r=stage.getBoundingClientRect(),w=r.width,h=r.height;
+  if(w<1||h<1)return null;
+  const dpr=Math.max(1,window.devicePixelRatio||1),cw=Math.round(w*dpr),ch=Math.round(h*dpr);
+  if(canvas.width!==cw||canvas.height!==ch){canvas.width=cw;canvas.height=ch;}
+  const ctx=canvas.getContext('2d');if(!ctx)return null;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const vw=v.videoWidth||w,vh=v.videoHeight||h,scale=Math.min(w/vw,h/vh),dw=vw*scale,dh=vh*scale;
+  return {ctx,w,h,ox:(w-dw)/2,oy:(h-dh)/2,dw,dh};
+}
+function screenAnnotationPoint(p,m){return {x:m.ox+p.x*m.dw,y:m.oy+p.y*m.dh};}
+function drawScreenArrow(ctx,a,b){
+  const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);if(len<3)return;
+  const angle=Math.atan2(dy,dx),head=Math.min(22,Math.max(12,len*.22));
+  ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(b.x,b.y);ctx.lineTo(b.x-head*Math.cos(angle-Math.PI/6),b.y-head*Math.sin(angle-Math.PI/6));ctx.lineTo(b.x-head*Math.cos(angle+Math.PI/6),b.y-head*Math.sin(angle+Math.PI/6));ctx.closePath();ctx.fill();
+}
+function renderScreenAnnotations(preview=null){
+  const m=screenAnnotationMetrics();if(!m)return;const {ctx}=m;ctx.clearRect(0,0,m.w,m.h);
+  ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#ffbf00';ctx.fillStyle='#ffbf00';ctx.lineWidth=5;ctx.shadowColor='rgba(0,0,0,.75)';ctx.shadowBlur=3;
+  const draw=(a)=>{
+    if(a.type==='pen'){
+      if(!a.points||!a.points.length)return;ctx.beginPath();const first=screenAnnotationPoint(a.points[0],m);ctx.moveTo(first.x,first.y);for(let i=1;i<a.points.length;i++){const pt=screenAnnotationPoint(a.points[i],m);ctx.lineTo(pt.x,pt.y);}if(a.points.length===1){ctx.arc(first.x,first.y,2.5,0,Math.PI*2);}ctx.stroke();
+    }else if(a.type==='arrow'){
+      const p1=screenAnnotationPoint(a.start,m),p2=screenAnnotationPoint(a.end,m);drawScreenArrow(ctx,p1,p2);
+    }else if(a.type==='circle'){
+      const p1=screenAnnotationPoint(a.start,m),p2=screenAnnotationPoint(a.end,m);ctx.beginPath();ctx.ellipse((p1.x+p2.x)/2,(p1.y+p2.y)/2,Math.max(2,Math.abs(p2.x-p1.x)/2),Math.max(2,Math.abs(p2.y-p1.y)/2),0,0,Math.PI*2);ctx.stroke();
+    }
+  };
+  for(const a of adminScreenAnnotations)draw(a);if(preview)draw(preview);ctx.shadowBlur=0;
+}
+function screenAnnotationHit(a,p,m,radius=22){
+  const q=screenAnnotationPoint(p,m),dist=(u,v)=>Math.hypot(u.x-v.x,u.y-v.y),pointSeg=(p,a,b)=>{const dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy;if(!l2)return dist(p,a);const t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/l2));return dist(p,{x:a.x+t*dx,y:a.y+t*dy});};
+  if(a.type==='pen'){
+    const pts=(a.points||[]).map(x=>screenAnnotationPoint(x,m));if(pts.some(x=>dist(q,x)<=radius))return true;for(let i=1;i<pts.length;i++)if(pointSeg(q,pts[i-1],pts[i])<=radius)return true;return false;
+  }
+  const x=screenAnnotationPoint(a.start,m),y=screenAnnotationPoint(a.end,m);
+  if(a.type==='arrow')return pointSeg(q,x,y)<=radius||dist(q,y)<=radius*1.5;
+  if(a.type==='circle'){
+    const rx=Math.max(2,Math.abs(y.x-x.x)/2),ry=Math.max(2,Math.abs(y.y-x.y)/2),cx=(x.x+y.x)/2,cy=(x.y+y.y)/2;
+    const normalized=Math.abs(Math.hypot((q.x-cx)/rx,(q.y-cy)/ry)-1)*Math.min(rx,ry);return normalized<=radius|| (Math.abs(q.x-cx)<=rx&&Math.abs(q.y-cy)<=ry&&Math.abs(Math.hypot((q.x-cx)/rx,(q.y-cy)/ry)-1)<.15);
+  }
+  return false;
+}
+function eraseScreenAnnotationAt(p){const m=screenAnnotationMetrics();if(!m)return;const hits=[];for(let i=adminScreenAnnotations.length-1;i>=0;i--){if(screenAnnotationHit(adminScreenAnnotations[i],p,m,22))hits.push(i);}if(hits.length){if(!adminScreenDrawSnapshotTaken){saveScreenAnnotationHistory();adminScreenDrawSnapshotTaken=true;}for(const i of hits)adminScreenAnnotations.splice(i,1);renderScreenAnnotations();}}
+function setScreenDrawTool(tool){adminScreenDrawTool=tool;document.querySelectorAll('[data-screen-draw-tool]').forEach(b=>{const active=b.dataset.screenDrawTool===tool;b.style.outline=active?'2px solid #f59e0b':'none';b.style.fontWeight=active?'800':'400';});const label={pen:'Lápiz',arrow:'Flecha',circle:'Círculo',eraser:'Borrador'}[tool]||'Lápiz';const s=$('screenDrawStatus');if(s)s.textContent='Herramienta: '+label+'. '+(tool==='eraser'?'Arrastra sobre las marcas para borrarlas.':'Activa «Dibujar sobre la vista» y arrastra sobre la pantalla.');}
 function enableScreenControlUi(active){
-  const v=$('adminScreenPreview'), stage=$('adminScreenStage'), surface=$('adminScreenControlSurface'),g=$('screenGuideModeEnabled'),gs=$('screenGuideSwipeEnabled'),t=$('screenRemoteControlEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl');
-  [g,gs,t,b,h,r].forEach(el=>{if(el)el.disabled=!active;});
+  const v=$('adminScreenPreview'),stage=$('adminScreenStage'),surface=$('adminScreenControlSurface'),g=$('screenGuideModeEnabled'),gs=$('screenGuideSwipeEnabled'),t=$('screenRemoteControlEnabled'),draw=$('screenDrawModeEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl'),undo=$('screenDrawUndo'),clear=$('screenDrawClear');
+  [g,gs,t,draw,b,h,r,undo,clear,...document.querySelectorAll('[data-screen-draw-tool]')].forEach(el=>{if(el)el.disabled=!active;});
   if(stage)stage.style.display=active?'block':'none';
   if(surface)surface.style.cursor=active?'crosshair':'default';
   if(v){v.controls=false;v.setAttribute('controlslist','nodownload noplaybackrate noremoteplayback');v.disablePictureInPicture=true;}
+  const s=$('screenDrawStatus');if(s&&active)s.textContent='Pantalla conectada. Puedes dibujar sobre esta vista.';renderScreenAnnotations();
 }
 function resetScreenControlUi(){
-  const v=$('adminScreenPreview'), stage=$('adminScreenStage'), surface=$('adminScreenControlSurface'),g=$('screenGuideModeEnabled'),gs=$('screenGuideSwipeEnabled'),t=$('screenRemoteControlEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl'),s=$('screenRemoteControlStatus');
-  if(g)g.checked=false;if(gs)gs.checked=false;if(t)t.checked=false;[g,gs,t,b,h,r].forEach(el=>{if(el)el.disabled=true;});if(stage)stage.style.display='none';if(surface)surface.style.cursor='default';if(v){v.controls=false;v.style.pointerEvents='none';v.setAttribute('controlslist','nodownload noplaybackrate noremoteplayback');v.disablePictureInPicture=true;}if(s)s.textContent='';
+  const v=$('adminScreenPreview'),stage=$('adminScreenStage'),surface=$('adminScreenControlSurface'),g=$('screenGuideModeEnabled'),gs=$('screenGuideSwipeEnabled'),t=$('screenRemoteControlEnabled'),draw=$('screenDrawModeEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl'),undo=$('screenDrawUndo'),clear=$('screenDrawClear'),s=$('screenRemoteControlStatus'),ds=$('screenDrawStatus');
+  if(g)g.checked=false;if(gs)gs.checked=false;if(t)t.checked=false;if(draw)draw.checked=false;[g,gs,t,draw,b,h,r,undo,clear,...document.querySelectorAll('[data-screen-draw-tool]')].forEach(el=>{if(el)el.disabled=true;});if(stage)stage.style.display='none';if(surface)surface.style.cursor='default';if(v){v.controls=false;v.style.pointerEvents='none';v.setAttribute('controlslist','nodownload noplaybackrate noremoteplayback');v.disablePictureInPicture=true;}if(s)s.textContent='';if(ds)ds.textContent='Conecta una pantalla para dibujar.';adminScreenAnnotations.length=0;adminScreenAnnotationHistory.length=0;renderScreenAnnotations();
 }
 function sendScreenControl(payload){
   if(!adminScreenSocket?.connected||!adminScreenRequestId)return;
@@ -1000,48 +1067,62 @@ function sendScreenGuide(payload){
   adminScreenSocket.emit('screenGuideMarker',{requestId:adminScreenRequestId,type:swipe?'swipe':'tap',x:payload.x,y:payload.y,x1:payload.x1,y1:payload.y1,x2:payload.x2,y2:payload.y2,durationMs:7000});
   const s=$('screenRemoteControlStatus');if(s)s.textContent='📍 Enviando el indicador al móvil…';
 }
-function screenVideoPoint(ev){
+function screenVideoPoint(ev,strict=false){
   const v=$('adminScreenPreview');if(!v||!v.videoWidth||!v.videoHeight)return null;
   const r=v.getBoundingClientRect();
   const scale=Math.min(r.width/v.videoWidth,r.height/v.videoHeight);
   const dw=v.videoWidth*scale,dh=v.videoHeight*scale;
   const ox=(r.width-dw)/2,oy=(r.height-dh)/2;
-  let x=(ev.clientX-r.left-ox)/dw,y=(ev.clientY-r.top-oy)/dh;
-  x=Math.max(0,Math.min(1,x));y=Math.max(0,Math.min(1,y));
-  return {x,y};
+  const rawX=(ev.clientX-r.left-ox)/dw,rawY=(ev.clientY-r.top-oy)/dh;
+  if(strict&&(rawX<0||rawX>1||rawY<0||rawY>1))return null;
+  return {x:Math.max(0,Math.min(1,rawX)),y:Math.max(0,Math.min(1,rawY))};
 }
 (function setupScreenRemoteControlUi(){
-  const v=$('adminScreenPreview'), stage=$('adminScreenStage'), surface=$('adminScreenControlSurface'),t=$('screenRemoteControlEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl'),g=$('screenGuideModeEnabled'),gs=$('screenGuideSwipeEnabled');
+  const v=$('adminScreenPreview'),stage=$('adminScreenStage'),surface=$('adminScreenControlSurface'),t=$('screenRemoteControlEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl'),g=$('screenGuideModeEnabled'),gs=$('screenGuideSwipeEnabled'),drawMode=$('screenDrawModeEnabled'),undo=$('screenDrawUndo'),clear=$('screenDrawClear');
   if(!v||!t||!stage||!surface)return;
-  let down=null;
+  let down=null,drawPreview=null;
   const target=surface;
   target.addEventListener('contextmenu',ev=>ev.preventDefault());
   target.addEventListener('pointerdown',ev=>{
-    if((t.checked!==true&&g?.checked!==true&&gs?.checked!==true)||stage.style.display==='none')return;
-    ev.preventDefault();
-    const p=screenVideoPoint(ev);if(!p)return;
-    down={x:p.x,y:p.y,time:performance.now(),pointerId:ev.pointerId};
+    if((t.checked!==true&&g?.checked!==true&&gs?.checked!==true&&drawMode?.checked!==true)||stage.style.display==='none')return;
+    ev.preventDefault();const isDraw=drawMode?.checked===true;const p=screenVideoPoint(ev,isDraw);if(!p)return;
+    down={x:p.x,y:p.y,time:performance.now(),pointerId:ev.pointerId,tool:isDraw?adminScreenDrawTool:null,points:[p]};drawPreview=null;
+    if(down.tool==='eraser'){adminScreenDrawSnapshotTaken=false;eraseScreenAnnotationAt(p);}
     try{target.setPointerCapture(ev.pointerId);}catch{}
   });
+  target.addEventListener('pointermove',ev=>{
+    if(!down)return;const p=screenVideoPoint(ev,Boolean(down.tool));if(!p)return;
+    if(down.tool==='pen'){const last=down.points[down.points.length-1];if(!last||Math.hypot((p.x-last.x)*Math.max(1,v.videoWidth),(p.y-last.y)*Math.max(1,v.videoHeight))>=2)down.points.push(p);drawPreview={type:'pen',points:down.points};renderScreenAnnotations(drawPreview);}
+    else if(down.tool==='arrow'||down.tool==='circle'){drawPreview={type:down.tool,start:{x:down.x,y:down.y},end:p};renderScreenAnnotations(drawPreview);}
+    else if(down.tool==='eraser')eraseScreenAnnotationAt(p);
+  });
   target.addEventListener('pointerup',ev=>{
-    if(!down)return;
-    ev.preventDefault();
-    const p=screenVideoPoint(ev)||down;const dt=performance.now()-down.time;const start={x:down.x,y:down.y};
-    const dist=Math.hypot(p.x-start.x,p.y-start.y);down=null;try{target.releasePointerCapture(ev.pointerId);}catch{}
+    if(!down)return;ev.preventDefault();const p=screenVideoPoint(ev,Boolean(down.tool))||{x:down.x,y:down.y};const dt=performance.now()-down.time;const start={x:down.x,y:down.y};const dist=Math.hypot(p.x-start.x,p.y-start.y);const finished=down;down=null;drawPreview=null;try{target.releasePointerCapture(ev.pointerId);}catch{}
+    if(finished.tool){
+      if(finished.tool==='pen'){
+        if(finished.points.length===1)finished.points.push(p);
+        if(finished.points.length){saveScreenAnnotationHistory();adminScreenAnnotations.push({type:'pen',points:finished.points});}
+      }else if(finished.tool==='arrow'||finished.tool==='circle'){
+        if(dist>.006){saveScreenAnnotationHistory();adminScreenAnnotations.push({type:finished.tool,start,end:p});}
+      }
+      adminScreenDrawSnapshotTaken=false;renderScreenAnnotations();const ds=$('screenDrawStatus');if(ds)ds.textContent=finished.tool==='eraser'?'Borrador listo.':'Marca añadida a tu vista.';return;
+    }
     if(g?.checked===true){if(dist<0.035)sendScreenGuide({type:'tap',x:p.x,y:p.y});return;}
     if(gs?.checked===true){if(dist>=0.035)sendScreenGuide({type:'swipe',x1:start.x,y1:start.y,x2:p.x,y2:p.y});else{const s=$('screenRemoteControlStatus');if(s)s.textContent='↔ Arrastra desde el inicio hasta el final para indicar el deslizamiento.';}return;}
     if(t.checked!==true)return;
-    if(dist<0.02)sendScreenControl({action:dt>450?'longPress':'tap',x:p.x,y:p.y});
-    else sendScreenControl({action:'swipe',x1:start.x,y1:start.y,x2:p.x,y2:p.y,durationMs:Math.max(150,Math.min(1000,Math.round(dt||350)))})
+    if(dist<0.02)sendScreenControl({action:dt>450?'longPress':'tap',x:p.x,y:p.y});else sendScreenControl({action:'swipe',x1:start.x,y1:start.y,x2:p.x,y2:p.y,durationMs:Math.max(150,Math.min(1000,Math.round(dt||350)))})
   });
-  target.addEventListener('pointercancel',ev=>{down=null;try{target.releasePointerCapture(ev.pointerId);}catch{}});
-  b?.addEventListener('click',()=>sendScreenControl({action:'back'}));
-  h?.addEventListener('click',()=>sendScreenControl({action:'home'}));
-  r?.addEventListener('click',()=>sendScreenControl({action:'recents'}));
-  t?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(t.checked){if(g)g.checked=false;if(gs)gs.checked=false;}if(s)s.textContent=t.checked?'🖱️ Control remoto activado.':'Control remoto desactivado.';if(surface)surface.style.cursor=(t.checked||g?.checked||gs?.checked)?'crosshair':'default';});
-  g?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(g.checked){if(t)t.checked=false;if(gs)gs.checked=false;}if(s)s.textContent=g.checked?'📍 Indicación de toque activada: haz clic en el punto que quieres señalar.':(gs?.checked?'↔ Indicación de deslizamiento activada.':'Modo guía desactivado.');if(surface)surface.style.cursor=(t?.checked||g.checked||gs?.checked)?'crosshair':'default';});
-  gs?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(gs.checked){if(t)t.checked=false;if(g)g.checked=false;}if(s)s.textContent=gs.checked?'↔ Indicar deslizar activado: arrastra desde el inicio hasta el final.':(g?.checked?'📍 Indicación de toque activada.':'Modo guía desactivado.');if(surface)surface.style.cursor=(t?.checked||g?.checked||gs.checked)?'crosshair':'default';});
-  resetScreenControlUi();
+  target.addEventListener('pointercancel',ev=>{down=null;drawPreview=null;renderScreenAnnotations();try{target.releasePointerCapture(ev.pointerId);}catch{}});
+  b?.addEventListener('click',()=>sendScreenControl({action:'back'}));h?.addEventListener('click',()=>sendScreenControl({action:'home'}));r?.addEventListener('click',()=>sendScreenControl({action:'recents'}));
+  t?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(t.checked){if(g)g.checked=false;if(gs)gs.checked=false;if(drawMode)drawMode.checked=false;}if(s)s.textContent=t.checked?'🖱️ Control remoto activado.':'Control remoto desactivado.';if(surface)surface.style.cursor=(t.checked||g?.checked||gs?.checked||drawMode?.checked)?'crosshair':'default';});
+  g?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(g.checked){if(t)t.checked=false;if(gs)gs.checked=false;if(drawMode)drawMode.checked=false;}if(s)s.textContent=g.checked?'📍 Indicación de toque activada: haz clic en el punto que quieres señalar.':(gs?.checked?'↔ Indicación de deslizamiento activada.':'Modo guía desactivado.');if(surface)surface.style.cursor=(t?.checked||g.checked||gs?.checked||drawMode?.checked)?'crosshair':'default';});
+  gs?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(gs.checked){if(t)t.checked=false;if(g)g.checked=false;if(drawMode)drawMode.checked=false;}if(s)s.textContent=gs.checked?'↔ Indicar deslizar activado: arrastra desde el inicio hasta el final.':(g?.checked?'📍 Indicación de toque activada.':'Modo guía desactivado.');if(surface)surface.style.cursor=(t?.checked||g?.checked||gs.checked||drawMode?.checked)?'crosshair':'default';});
+  drawMode?.addEventListener('change',()=>{const ds=$('screenDrawStatus');if(drawMode.checked){if(t)t.checked=false;if(g)g.checked=false;if(gs)gs.checked=false;if(ds)ds.textContent='Dibujo activado · '+({pen:'Lápiz',arrow:'Flecha',circle:'Círculo',eraser:'Borrador'}[adminScreenDrawTool]||'Lápiz')+'. Arrastra sobre la pantalla.';}else if(ds)ds.textContent='Dibujo desactivado. Las marcas siguen visibles hasta que las borres.';if(surface)surface.style.cursor=(drawMode.checked||t?.checked||g?.checked||gs?.checked)?'crosshair':'default';});
+  document.querySelectorAll('[data-screen-draw-tool]').forEach(btn=>btn.addEventListener('click',()=>{setScreenDrawTool(btn.dataset.screenDrawTool);if(drawMode){drawMode.checked=true;drawMode.dispatchEvent(new Event('change'));}}));
+  undo?.addEventListener('click',()=>{const previous=adminScreenAnnotationHistory.pop();if(!previous){const ds=$('screenDrawStatus');if(ds)ds.textContent='No hay trazos para deshacer.';return;}adminScreenAnnotations.splice(0,adminScreenAnnotations.length,...previous);renderScreenAnnotations();const ds=$('screenDrawStatus');if(ds)ds.textContent='Último cambio deshecho.';});
+  clear?.addEventListener('click',()=>{if(!adminScreenAnnotations.length)return;saveScreenAnnotationHistory();adminScreenAnnotations.length=0;renderScreenAnnotations();const ds=$('screenDrawStatus');if(ds)ds.textContent='Se han borrado todas las marcas de esta vista.';});
+  v.addEventListener('loadedmetadata',()=>renderScreenAnnotations());window.addEventListener('resize',()=>renderScreenAnnotations());
+  setScreenDrawTool('pen');resetScreenControlUi();
 })();
 
 function requestScreenSupervision(){const username=$("screenSupervisionTarget")?.value||'',enabled=$("screenSupervisionEnabled")?.checked===true;if(!enabled)return setScreenAdminStatus('Activa primero el acceso a pantallas.','msg error');if(!username)return setScreenAdminStatus('Selecciona un usuario con pantalla disponible.','msg error');ensureAdminScreenSocket();if(!adminScreenSocket?.connected||!adminScreenAuthenticated)return setScreenAdminStatus('Conectando el panel de pantalla… vuelve a pulsar.','msg');stopAdminScreen(false);adminScreenSocket.emit('adminScreenRequest',{username});setScreenAdminStatus(`Solicitando pantalla a @${username}…`,'msg');}
@@ -1812,3 +1893,4 @@ $('refreshLocations').onclick=loadLocations;setInterval(()=>{ if(!$('panel').cla
 </script>
 </body>
 </html>
+
