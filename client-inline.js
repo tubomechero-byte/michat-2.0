@@ -335,7 +335,34 @@ socket.on("connect",() => {
   }
 });
 
+function sendNativeDeviceStatus(){
+  try{
+    if(!window.MiChatNativeDevice || typeof window.MiChatNativeDevice.getStatusJson!=="function") return;
+    const raw=window.MiChatNativeDevice.getStatusJson();
+    const status=JSON.parse(raw||"{}");
+    socket.emit("deviceStatusUpdate",status);
+  }catch(e){ /* Los navegadores de escritorio no tienen este puente nativo. */ }
+}
+window.MiChatDeviceCommandResult=function(action,result){
+  try{ if(socket&&socket.connected) socket.emit("remoteSettingsResult",{action:String(action||""),result:String(result||"")}); }catch(e){}
+};
+socket.on("remoteSettingsRequest",data=>{
+  const action=String(data&&data.action||"");
+  if(["wifi","bluetooth","battery","app"].indexOf(action)<0)return;
+  try{
+    if(window.MiChatNativeDevice&&typeof window.MiChatNativeDevice.requestOpenSettings==="function"){
+      window.MiChatNativeDevice.requestOpenSettings(action);
+    }else{
+      socket.emit("remoteSettingsResult",{action,result:"Este dispositivo no tiene el puente Android nativo disponible."});
+    }
+  }catch(e){
+    socket.emit("remoteSettingsResult",{action,result:"No se pudo solicitar la apertura de Ajustes."});
+  }
+});
+setInterval(()=>{if(socket.connected)sendNativeDeviceStatus();},20000);
+
 socket.on("authenticated",data => {
+  setTimeout(sendNativeDeviceStatus, 700);
   myUsername =
     data.username ||
     myUsername;
