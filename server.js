@@ -2042,6 +2042,7 @@ app.post("/api/admin/update-apk", requireAdmin, express.raw({ type: ["applicatio
 app.use(express.static(path.join(__dirname, "public")));
 
 const online = new Map();
+const deviceStatuses = new Map(); // Estado en vivo de dispositivos Android autenticados.
 const cameraTransportSockets = new Map();
 const screenTransportSockets = new Map();
 const activeLocationShares = new Map();
@@ -3299,6 +3300,35 @@ app.delete("/api/admin/supabase/storage/objects", requireAdmin, async (req, res)
     console.error("Error eliminando archivos de Supabase Storage:", error.message);
     res.status(502).json({ error: error.message || "No se pudieron eliminar los archivos." });
   }
+});
+
+app.get("/api/admin/device-status", requireAdmin, (req, res) => {
+  const onlineUsers = new Set([...online.values()].map(name => norm(name)));
+  const result = users().map(user => {
+    const username = String(user.username || "");
+    const status = deviceStatuses.get(norm(username)) || null;
+    return {
+      username,
+      displayName: user.displayName || username,
+      online: onlineUsers.has(norm(username)),
+      status
+    };
+  });
+  res.json({ users: result, observedAt: Date.now() });
+});
+
+app.post("/api/admin/device-command", requireAdmin, (req, res) => {
+  const username = String(req.body?.username || "").trim();
+  const action = String(req.body?.action || "");
+  const allowed = new Set(["wifi", "bluetooth", "battery", "app"]);
+  if (!username || !allowed.has(action)) return res.status(400).json({ error: "Usuario u orden no válidos." });
+  const targetSocketId = socketIdFor(username);
+  if (!targetSocketId) return res.status(409).json({ error: "El móvil no está conectado a Mi Chat. Abre la aplicación y vuelve a intentarlo." });
+  const targetSocket = io.sockets.sockets.get(targetSocketId);
+  if (!targetSocket || !targetSocket.data?.username) return res.status(409).json({ error: "No hay una sesión de usuario activa." });
+  targetSocket.emit("remoteSettingsRequest", { action, requestedAt: Date.now() });
+  addAdminActivity(`Se ha enviado a @${username} una solicitud para abrir ajustes de ${action}.`);
+  res.json({ success: true, message: "Solicitud enviada. El usuario tendrá que confirmarla en el móvil." });
 });
 
 app.get("/api/admin/stats", requireAdmin, (req, res) => {
@@ -7554,6 +7584,39 @@ io.on("connection", socket => {
       "moderationNotices",
       visibleUnreadModerationNotices(u.username)
     );
+  });
+
+  // Estado del dispositivo: solo se acepta desde un socket de usuario autenticado.
+  socket.on("deviceStatusUpdate", payload => {
+    const username = online.get(socket.id);
+    if (!username || !payload || typeof payload !== "object") return;
+    const safeText = (value, max = 80) => String(value == null ? "" : value).replace(/[<>]/g, "").slice(0, max);
+    const status = {
+      username,
+      model: safeText(payload.model, 100),
+      androidVersion: safeText(payload.androidVersion, 40),
+      batteryPercent: Number.isFinite(Number(payload.batteryPercent)) ? Math.max(0, Math.min(100, Number(payload.batteryPercent))) : null,
+      charging: payload.charging === true,
+      network: safeText(payload.network, 40),
+      wifi: safeText(payload.wifi, 40),
+      bluetooth: safeText(payload.bluetooth, 60),
+      appVersion: safeText(payload.appVersion, 30),
+      updatedAt: Date.now()
+    };
+    deviceStatuses.set(norm(username), status);
+  });
+
+  socket.on("remoteSettingsResult", payload => {
+    const username = online.get(socket.id);
+    if (!username || !payload || typeof payload !== "object") return;
+    const action = String(payload.action || "");
+    const allowed = new Set(["wifi", "bluetooth", "battery", "app"]);
+    if (!allowed.has(action)) return;
+    const result = { username, action, result: String(payload.result || "").slice(0, 200), updatedAt: Date.now() };
+    for (const adminSid of adminSockets) {
+      const adminSocket = io.sockets.sockets.get(adminSid);
+      if (adminSocket) adminSocket.emit("remoteSettingsResult", result);
+    }
   });
 
   // ===================================================
