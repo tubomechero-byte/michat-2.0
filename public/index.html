@@ -3683,7 +3683,53 @@ socket.on("connect",() => {
   }
 });
 
+// Estado del dispositivo Android. Este código debe estar en index.html,
+// que es la página que realmente entrega Express a la aplicación.
+function sendNativeDeviceStatus(){
+  try{
+    const bridge = window.MiChatNativeDevice;
+    if(!bridge || typeof bridge.getStatusJson !== "function") return;
+    if(!socket || !socket.connected) return;
+
+    const raw = bridge.getStatusJson();
+    const status = typeof raw === "string" ? JSON.parse(raw || "{}") : (raw || {});
+    if(!status || typeof status !== "object" || Array.isArray(status)){
+      console.warn("[Mi Chat estado] El puente Android devolvió un estado no válido.");
+      return;
+    }
+
+    socket.emit("deviceStatusUpdate", status, result => {
+      if(!result || result.ok !== true){
+        console.warn("[Mi Chat estado] Render no aceptó el informe:", result && result.reason ? result.reason : "sin confirmación");
+      }
+    });
+  }catch(error){
+    console.warn("[Mi Chat estado] No se pudo enviar el informe:", error && error.message ? error.message : error);
+  }
+}
+
+// Enviar al terminar la autenticación y renovar mientras haya conexión.
+setInterval(() => {
+  if(socket && socket.connected) sendNativeDeviceStatus();
+}, 20000);
+
+socket.on("remoteSettingsRequest", data => {
+  const action = String(data && data.action || "");
+  if(["wifi", "bluetooth", "battery", "app"].indexOf(action) < 0) return;
+  try{
+    const bridge = window.MiChatNativeDevice;
+    if(bridge && typeof bridge.requestOpenSettings === "function"){
+      bridge.requestOpenSettings(action);
+    }else{
+      socket.emit("remoteSettingsResult", { action, result: "Este dispositivo no tiene el puente Android nativo disponible." });
+    }
+  }catch(error){
+    socket.emit("remoteSettingsResult", { action, result: "No se pudo solicitar la apertura de Ajustes." });
+  }
+});
+
 socket.on("authenticated",data => {
+  setTimeout(sendNativeDeviceStatus, 700);
   myUsername =
     data.username ||
     myUsername;
