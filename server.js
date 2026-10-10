@@ -2043,6 +2043,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const online = new Map();
 const deviceStatuses = new Map(); // Estado en vivo de dispositivos Android autenticados.
+const deviceStatusLogAt = new Map(); // Limita los logs repetidos de informes de estado.
 const cameraTransportSockets = new Map();
 const screenTransportSockets = new Map();
 const activeLocationShares = new Map();
@@ -7614,7 +7615,13 @@ io.on("connection", socket => {
       appVersion: safeText(payload.appVersion, 30),
       updatedAt: Date.now()
     };
-    deviceStatuses.set(norm(username), status);
+    const normalizedUsername = norm(username);
+    deviceStatuses.set(normalizedUsername, status);
+    const lastLoggedAt = deviceStatusLogAt.get(normalizedUsername) || 0;
+    if (status.updatedAt - lastLoggedAt >= 5 * 60 * 1000) {
+      console.log(`[deviceStatusUpdate] Informe recibido de @${username}${status.model ? ` (${status.model})` : ""}.`);
+      deviceStatusLogAt.set(normalizedUsername, status.updatedAt);
+    }
     reply({ ok: true, updatedAt: status.updatedAt });
   });
 
