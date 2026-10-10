@@ -70,6 +70,42 @@ body.admin-dark .supabase-toolbar,body.admin-dark .appeal-actions{color:#e5e7eb}
 \n<style>
 .render-usage-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px}.render-usage-card{background:#f8fafc;border:1px solid #dbe4ee;border-radius:12px;padding:14px}.render-usage-card b{font-size:13px}.render-usage-big{font-size:25px;font-weight:800;margin-top:5px}.render-usage-muted{font-size:12px;color:#64748b;line-height:1.45;margin-top:3px}.render-usage-bar{height:12px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-top:9px}.render-usage-fill{height:100%;width:0;background:#2563eb;border-radius:999px;transition:width .25s ease}.render-usage-breakdown{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-top:12px}.render-usage-breakdown>div{padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff}.render-usage-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}.render-usage-warning{margin-top:10px;padding:10px 12px;border-radius:10px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412}.render-usage-ok{margin-top:10px;padding:10px 12px;border-radius:10px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
 body.admin-dark .render-usage-card{background:#111827;border-color:#334155;color:#e5e7eb}body.admin-dark .render-usage-muted{color:#94a3b8}body.admin-dark .render-usage-bar{background:#1e293b}body.admin-dark .render-usage-breakdown>div{background:#0f172a;border-color:#334155}body.admin-dark .render-usage-warning{background:#431407;border-color:#9a3412;color:#fed7aa}body.admin-dark .render-usage-ok{background:#052e16;border-color:#166534;color:#bbf7d0}
+
+/* Mi Chat Admin Desktop: navegación visual sin alterar controles ni APIs existentes */
+#panel.desktop-ready{max-width:none;min-height:calc(100vh - 110px)}
+body:has(#panel.desktop-ready:not(.hidden)){background:linear-gradient(145deg,#12234b 0%,#17517b 55%,#0b2948 100%);background-attachment:fixed}
+body:has(#panel.desktop-ready:not(.hidden)) main{max-width:none;margin:0;padding:0 12px 78px}
+#panel.desktop-ready #adminHero,#panel.desktop-ready .admin-quicknav{display:none!important}
+#mcDesktop{min-height:calc(100vh - 145px);padding:24px 18px;box-sizing:border-box}
+.mc-wall-title{font-size:23px;font-weight:750;color:white;text-shadow:0 2px 8px #0005;margin-bottom:4px}.mc-wall-sub{color:#dbeafe;font-size:13px;margin-bottom:24px}
+.mc-icon-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:18px;max-width:840px;align-content:start}
+.mc-app-icon{display:flex;flex-direction:column;align-items:center;gap:9px;min-height:110px;padding:14px 6px!important;border:1px solid transparent!important;background:transparent!important;color:white!important;box-shadow:none!important;border-radius:14px!important;margin:0!important;text-align:center;cursor:pointer}
+.mc-app-icon:hover,.mc-app-icon:focus-visible{background:#ffffff22!important;border-color:#ffffff55!important}
+.mc-app-symbol{display:grid;place-items:center;width:62px;height:62px;border-radius:17px;background:linear-gradient(145deg,#fff,#dbeafe);color:#172554;font-size:29px;box-shadow:0 8px 20px #0003}
+.mc-app-label{font-size:12px;line-height:1.25;text-shadow:0 1px 4px #0009;overflow-wrap:anywhere}
+#mcTaskbar{position:fixed;bottom:0;left:0;right:0;height:60px;z-index:3000;display:flex;align-items:center;gap:7px;padding:0 16px;background:#e9f2fcf2;backdrop-filter:blur(18px);border-top:1px solid #ffffff99;box-shadow:0 -4px 22px #0002}
+#mcStart{background:#fff!important;color:#1e3a8a!important;border:1px solid #cbd5e1!important;font-size:22px;padding:8px 14px!important}
+#mcTaskItems{display:flex;gap:5px;overflow:auto;min-width:0;flex:1}.mc-task{background:#ffffffaa!important;color:#1e293b!important;white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis;font-size:12px!important}.mc-task.mc-active{border-bottom:3px solid #2563eb!important}
+#mcClock{font-size:12px;color:#334155;white-space:nowrap}
+#mcStartMenu{position:fixed;z-index:2999;bottom:67px;left:16px;width:min(480px,calc(100vw - 32px));max-height:70vh;overflow:auto;padding:22px;border-radius:18px;background:#f6fafff5;box-shadow:0 16px 55px #0005;box-sizing:border-box}
+#mcStartMenu .mc-icon-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}#mcStartMenu .mc-app-icon{color:#1e293b!important;text-shadow:none}#mcStartMenu .mc-app-label{text-shadow:none}
+#panel.desktop-ready > .card{display:none!important}
+#panel.desktop-ready > .card.mc-open{display:block!important;position:fixed;z-index:1000;left:calc(50vw - 420px);top:95px;width:min(840px,calc(100vw - 48px));height:min(72vh,740px);max-height:calc(100vh - 165px);margin:0!important;padding:55px 20px 20px!important;overflow:auto;resize:both;box-sizing:border-box;box-shadow:0 24px 65px #0007;border:1px solid #cbd5e1;border-radius:13px}
+#panel.desktop-ready > .card.mc-max{left:8px!important;top:74px!important;width:calc(100vw - 16px)!important;height:calc(100vh - 145px)!important;max-height:none!important;resize:none}
+.mc-windowbar{position:sticky;top:-55px;z-index:25;display:flex;justify-content:space-between;align-items:center;gap:10px;height:45px;margin:-55px -20px 17px;padding:0 12px;background:#eaf0fa;color:#1e293b;border-bottom:1px solid #cbd5e1;cursor:move;user-select:none;font-size:13px;font-weight:700}
+.mc-windowactions{display:flex;gap:2px}.mc-windowactions button{margin:0!important;padding:5px 10px!important;background:transparent!important;color:#334155!important;border-radius:5px!important}.mc-windowactions button:hover{background:#cbd5e1!important}.mc-windowactions button:last-child:hover{background:#dc2626!important;color:white!important}
+body.admin-dark #mcTaskbar,body.admin-dark #mcStartMenu{background:#152238f2;color:#e2e8f0}body.admin-dark .mc-task{background:#263650!important;color:#e2e8f0!important}body.admin-dark #mcClock{color:#e2e8f0}body.admin-dark #mcStartMenu .mc-app-icon{color:#e2e8f0!important}body.admin-dark .mc-windowbar{background:#263650;color:#e2e8f0;border-color:#475569}body.admin-dark .mc-windowactions button{color:#e2e8f0!important}
+@media(max-width:760px){
+ body:has(#panel.desktop-ready:not(.hidden)) main{padding:0 0 75px}
+ #mcDesktop{padding:22px 15px;min-height:calc(100dvh - 155px)}
+ .mc-wall-title{font-size:21px}.mc-icon-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:13px 7px}
+ .mc-app-icon{min-height:100px;padding:9px 3px!important}.mc-app-symbol{width:59px;height:59px;border-radius:17px;font-size:27px}.mc-app-label{font-size:11px}
+ #mcTaskbar{height:58px;justify-content:center}#mcTaskItems,#mcClock{display:none}#mcStart{font-size:20px}
+ #mcStartMenu{left:8px;bottom:65px;width:calc(100vw - 16px)}
+ #panel.desktop-ready > .card.mc-open,#panel.desktop-ready > .card.mc-max{left:0!important;top:62px!important;width:100vw!important;height:calc(100dvh - 124px)!important;max-height:none!important;resize:none!important;border-radius:0!important;padding:55px 13px 20px!important}
+ .mc-windowbar{cursor:default;margin-left:-13px;margin-right:-13px}
+ body:has(#panel.desktop-ready > .card.mc-open) #mcDesktop{display:none}
+}
 </style>
 </style>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
@@ -2029,6 +2065,56 @@ $('refreshLocations').onclick=loadLocations;setInterval(()=>{ if(!$('panel').cla
       if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
     });
   });
+})();
+</script>
+
+<script>
+/* Capa de escritorio: conserva todos los IDs, nodos y listeners originales. */
+(function(){
+ const panel=document.getElementById('panel');
+ if(!panel)return;
+ const apps=[
+ ['summaryCard','📊','Resumen'],['usersCard','👥','Usuarios'],['deviceStatusCard','📱','Dispositivos'],
+ ['cameraSupervisionCard','📷','Cámaras'],['adminVoiceCard','🎙️','Voz'],['audioSupervisionCard','🎧','Micrófonos'],
+ ['screenSupervisionCard','🖥️','Pantallas'],['remoteCanvasCard','✏️','Pizarra remota'],
+ ['chatsCard','💬','Chats'],['groupsCard','👨‍👩‍👧','Grupos'],['locationsCard','📍','Ubicaciones'],
+ ['updateCard','📦','Actualizar APK'],['storageCard','💾','Almacenamiento'],['renderUsageCard','📈','Uso de Render'],
+ ['supabaseUsageCard','🗄️','Base de datos'],['supabaseFilesCard','📁','Archivos'],
+ ['terminalCard','⌨️','Actividad'],['reportsCard','⚠️','Reportes'],
+ ['contactRequestsCard','✉️','Solicitudes'],['globalAccessCard','🔒','Acceso global'],
+ ['commandRanksCard','🛡️','Rangos'],['moderationAlertsCard','📢','Avisos'],
+ ['appealsCard','📨','Apelaciones'],['bansCard','🔨','Baneos'],['ipBansCard','🌐','Baneos IP'],
+ ['recordingsCard','🎙️','Grabaciones'],['storiesCard','📰','Estados']
+ ];
+ const cards=Array.from(panel.children).filter(e=>e.classList&&e.classList.contains('card'));
+ const unused=apps.filter(a=>!document.getElementById(a[0]));
+ const noIds=cards.filter(e=>!e.id);
+ noIds.forEach((el,i)=>{const label=(el.querySelector('h2')?.textContent||'').toLowerCase();let entry=unused.find(a=>{
+  const t=a[2].toLowerCase();return label.includes(t)|| (a[0]==='contactRequestsCard'&&label.includes('solicitudes de contacto')) || (a[0]==='globalAccessCard'&&label.includes('bloqueo global')) || (a[0]==='commandRanksCard'&&label.includes('rangos de consola')) || (a[0]==='moderationAlertsCard'&&label.includes('avisos de moderación')) || (a[0]==='ipBansCard'&&label.includes('baneos de ip')) || (a[0]==='recordingsCard'&&label.includes('grabaciones'));
+ });if(entry){el.id=entry[0];unused.splice(unused.indexOf(entry),1)}else{el.id='mcExtra'+i;apps.push([el.id,'📂',el.querySelector('h2')?.textContent.trim()||'Herramienta'])}});
+ const available=apps.filter(a=>document.getElementById(a[0]));
+ const desktop=document.createElement('div');desktop.id='mcDesktop';
+ desktop.innerHTML='<div class="mc-wall-title">Mi Chat Admin</div><div class="mc-wall-sub">Selecciona una aplicación para abrirla</div><div id="mcDesktopIcons" class="mc-icon-grid"></div>';
+ panel.insertBefore(desktop,panel.firstChild);
+ const bar=document.createElement('div');bar.id='mcTaskbar';bar.innerHTML='<button type="button" id="mcStart" title="Inicio">⊞</button><div id="mcTaskItems"></div><span id="mcClock"></span>';
+ const menu=document.createElement('div');menu.id='mcStartMenu';menu.hidden=true;menu.innerHTML='<strong>Aplicaciones de Mi Chat</strong><div id="mcMenuIcons" class="mc-icon-grid" style="margin-top:15px"></div>';
+ document.body.append(menu,bar);
+ let z=1000;const active=new Set();
+ function focus(id){const card=document.getElementById(id);if(!card)return;card.style.zIndex=String(++z);document.querySelectorAll('.mc-task').forEach(t=>t.classList.toggle('mc-active',t.dataset.app===id));}
+ function syncTasks(){const target=document.getElementById('mcTaskItems');target.replaceChildren();available.filter(a=>active.has(a[0])).forEach(([id,icon,label])=>{const b=document.createElement('button');b.className='mc-task';b.dataset.app=id;b.textContent=icon+' '+label;b.onclick=()=>{const c=document.getElementById(id);if(c.classList.contains('mc-open')){c.classList.remove('mc-open')}else{c.classList.add('mc-open');focus(id);}};target.append(b)})}
+ function open(id){const card=document.getElementById(id);if(!card)return;if(matchMedia('(max-width:760px)').matches){cards.forEach(c=>c.classList.remove('mc-open'))}card.classList.add('mc-open');active.add(id);focus(id);syncTasks();menu.hidden=true;if(id==='locationsCard'&&window.locationMap)setTimeout(()=>window.locationMap.invalidateSize(),200);}
+ function close(id){document.getElementById(id)?.classList.remove('mc-open','mc-max');active.delete(id);syncTasks()}
+ function makeIcon([id,icon,label]){const b=document.createElement('button');b.type='button';b.className='mc-app-icon';b.innerHTML='<span class="mc-app-symbol"></span><span class="mc-app-label"></span>';b.querySelector('.mc-app-symbol').textContent=icon;b.querySelector('.mc-app-label').textContent=label;b.onclick=()=>open(id);return b}
+ available.forEach(app=>{document.getElementById('mcDesktopIcons').append(makeIcon(app));document.getElementById('mcMenuIcons').append(makeIcon(app));const [id,icon,label]=app;const card=document.getElementById(id);const head=document.createElement('div');head.className='mc-windowbar';head.innerHTML='<span></span><span class="mc-windowactions"><button type="button" aria-label="Minimizar">─</button><button type="button" aria-label="Maximizar">□</button><button type="button" aria-label="Cerrar">✕</button></span>';head.firstElementChild.textContent=icon+' '+label;const buttons=head.querySelectorAll('button');buttons[0].onclick=()=>{card.classList.remove('mc-open');syncTasks()};buttons[1].onclick=()=>card.classList.toggle('mc-max');buttons[2].onclick=()=>close(id);head.addEventListener('pointerdown',e=>{if(e.target.closest('button')||matchMedia('(max-width:760px)').matches||card.classList.contains('mc-max'))return;focus(id);const x=e.clientX,y=e.clientY,r=card.getBoundingClientRect();function move(ev){card.style.left=Math.max(0,r.left+ev.clientX-x)+'px';card.style.top=Math.max(65,r.top+ev.clientY-y)+'px'}function up(){window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up)}window.addEventListener('pointermove',move);window.addEventListener('pointerup',up)});card.prepend(head);card.addEventListener('pointerdown',()=>focus(id));});
+ document.getElementById('mcStart').onclick=()=>{if(matchMedia('(max-width:760px)').matches){cards.forEach(c=>c.classList.remove('mc-open'));menu.hidden=true}else{menu.hidden=!menu.hidden}};
+ document.addEventListener('keydown',e=>{if(e.key==='Escape')menu.hidden=true});
+ document.addEventListener('click',e=>{if(!menu.hidden&&!menu.contains(e.target)&&!document.getElementById('mcStart').contains(e.target))menu.hidden=true});
+ function clock(){document.getElementById('mcClock').textContent=new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}clock();setInterval(clock,30000);
+ const observer=new MutationObserver(()=>{const logged=!panel.classList.contains('hidden');bar.hidden=!logged;if(!logged){menu.hidden=true;cards.forEach(c=>c.classList.remove('mc-open'));active.clear();syncTasks()}});
+ observer.observe(panel,{attributes:true,attributeFilter:['class']});bar.hidden=panel.classList.contains('hidden');
+ panel.classList.add('desktop-ready');
+ // Compatibilidad con accesos antiguos basados en desplazamiento.
+ document.querySelectorAll('[data-scroll-target]').forEach(b=>b.addEventListener('click',()=>open(b.dataset.scrollTarget)));
 })();
 </script>
 </body>
