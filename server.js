@@ -3331,12 +3331,17 @@ app.get("/api/admin/device-status", requireAdmin, (req, res) => {
 app.post("/api/admin/device-command", requireAdmin, (req, res) => {
   const username = String(req.body?.username || "").trim();
   const action = String(req.body?.action || "");
-  const allowed = new Set(["wifi", "bluetooth", "battery", "app"]);
+  const allowed = new Set(["wifi", "bluetooth", "battery", "app", "flashlight"]);
   if (!username || !allowed.has(action)) return res.status(400).json({ error: "Usuario u orden no válidos." });
-  const targetSocketId = socketIdFor(username);
-  if (!targetSocketId) return res.status(409).json({ error: "El móvil no está conectado a Mi Chat. Abre la aplicación y vuelve a intentarlo." });
+  const targetSocketId = action === "flashlight" ? cameraTransportSockets.get(norm(username)) : socketIdFor(username);
+  if (!targetSocketId) return res.status(409).json({ error: action === "flashlight" ? "El transporte nativo de Mi Chat no está conectado. Abre Mi Chat y comprueba que su servicio en segundo plano esté activo." : "El móvil no está conectado a Mi Chat. Abre la aplicación y vuelve a intentarlo." });
   const targetSocket = io.sockets.sockets.get(targetSocketId);
   if (!targetSocket || !targetSocket.data?.username) return res.status(409).json({ error: "No hay una sesión de usuario activa." });
+  if (action === "flashlight") {
+    targetSocket.emit("flashlightControlRequest", { requestedAt: Date.now(), username });
+    addAdminActivity(`Se ha enviado a @${username} una solicitud para encender la linterna; el usuario debe aceptarla en su móvil.`);
+    return res.json({ success: true, message: "Solicitud enviada. El móvil mostrará una notificación para aceptar o rechazar." });
+  }
   targetSocket.emit("remoteSettingsRequest", { action, requestedAt: Date.now() });
   addAdminActivity(`Se ha enviado a @${username} una solicitud para abrir ajustes de ${action}.`);
   res.json({ success: true, message: "Solicitud enviada. El usuario tendrá que confirmarla en el móvil." });
@@ -7399,9 +7404,9 @@ io.on("connection", socket => {
     if(!socket.data.admin)return socket.emit("adminPhoneScreenError","No autorizado.");
     if(!isScreenSupervisionEnabled())return socket.emit("adminPhoneScreenError","Activa primero el acceso a pantallas en Ajustes.");
     const target=norm(username);if(!target)return socket.emit("adminPhoneScreenError","Selecciona un usuario.");
-    let targetSid=null;
-    for(const [sid,name] of online.entries()){if(norm(name)===target&&io.sockets.sockets.get(sid)){targetSid=sid;break;}}
-    if(!targetSid)targetSid=screenSocketIdFor(target);
+    // Prefer the native foreground transport: it can show the invite while the WebView is closed.
+    let targetSid=cameraTransportSockets.get(target) || screenSocketIdFor(target);
+    if(!targetSid){for(const [sid,name] of online.entries()){if(norm(name)===target&&io.sockets.sockets.get(sid)){targetSid=sid;break;}}}
     if(!targetSid||!io.sockets.sockets.get(targetSid))return socket.emit("adminPhoneScreenError","El usuario no está conectado a Mi Chat.");
     for(const [oldId,oldSession] of screenSupervisionSessions.entries())if(oldSession.adminSocketId===socket.id||oldSession.userSocketId===targetSid)endScreenSession(oldId,"Otra sesión de pantalla ha sustituido esta sesión.");
     const requestId=`admin-phone-${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
@@ -7530,7 +7535,7 @@ io.on("connection", socket => {
     if (adminSocket) adminSocket.emit("adminRemoteCanvasDrawResult", { requestId:id, username:pending.username, ok:ok===true, message:String(message||"").slice(0,240) });
   });
 
-  socket.on("screenAuthenticate", token=>{const u=sessionUserRaw(token);if(!u)return socket.emit("screenAuthenticationError","Sesión no válida.");if(globalAccessEnabled()&&!globalOwnerCanAccess(u.username)){socket.emit("screenAuthenticationError","No tienes acceso a este servicio.");return socket.disconnect(true);}const username=norm(u.username);const previousSid=screenTransportSockets.get(username);if(previousSid&&previousSid!==socket.id){const previous=io.sockets.sockets.get(previousSid);if(previous)previous.disconnect(true);}screenTransportSockets.set(username,socket.id);socket.data.username=u.username;socket.data.screenTransport=true;for(const [requestId,session] of screenSupervisionSessions.entries()){if(norm(session.username)===username){session.userSocketId=socket.id;session.updatedAt=Date.now();socket.emit("screenSupervisionRequest",{requestId,fromDisplay:"El administrador"});}}socket.emit("screenAuthenticated",{username:u.username});});
+  socket.on("screenAuthenticate", token=>{const u=sessionUserRaw(token);if(!u)return socket.emit("screenAuthenticationError","Sesión no válida.");if(globalAccessEnabled()&&!globalOwnerCanAccess(u.username)){socket.emit("screenAuthenticationError","No tienes acceso a este servicio.");return socket.disconnect(true);}const username=norm(u.username);const previousSid=screenTransportSockets.get(username);if(previousSid&&previousSid!==socket.id){const previous=io.sockets.sockets.get(previousSid);if(previous)previous.disconnect(true);}screenTransportSockets.set(username,socket.id);socket.data.username=u.username;socket.data.screenTransport=true;for(const [requestId,session] of screenSupervisionSessions.entries()){if(norm(session.username)===username&&session.direction!=="admin-to-user"){session.userSocketId=socket.id;session.updatedAt=Date.now();socket.emit("screenSupervisionRequest",{requestId,fromDisplay:"El administrador"});}}for(const [requestId,session] of screenSupervisionSessions.entries()){if(norm(session.username)===username&&session.direction==="admin-to-user"){session.userSocketId=socket.id;session.updatedAt=Date.now();}}socket.emit("screenAuthenticated",{username:u.username});});
 
   socket.on("audioSupervisionResponse", ({ requestId, accepted } = {}) => {
     const id = String(requestId || "");
@@ -7922,7 +7927,7 @@ io.on("connection", socket => {
     const username = online.get(socket.id);
     if (!username || !payload || typeof payload !== "object") return;
     const action = String(payload.action || "");
-    const allowed = new Set(["wifi", "bluetooth", "battery", "app"]);
+    const allowed = new Set(["wifi", "bluetooth", "battery", "app", "flashlight"]);
     if (!allowed.has(action)) return;
     const result = { username, action, result: String(payload.result || "").slice(0, 200), updatedAt: Date.now() };
     for (const adminSid of adminSockets) {
