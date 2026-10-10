@@ -337,11 +337,22 @@ socket.on("connect",() => {
 
 function sendNativeDeviceStatus(){
   try{
-    if(!window.MiChatNativeDevice || typeof window.MiChatNativeDevice.getStatusJson!=="function") return;
+    if(!window.MiChatNativeDevice || typeof window.MiChatNativeDevice.getStatusJson!=="function"){
+      console.warn("[MiChat estado] No está disponible el puente Android MiChatNativeDevice.");
+      return;
+    }
+    if(!socket || !socket.connected){
+      console.warn("[MiChat estado] Socket.IO no está conectado; se reintentará en el siguiente ciclo.");
+      return;
+    }
     const raw=window.MiChatNativeDevice.getStatusJson();
     const status=JSON.parse(raw||"{}");
-    socket.emit("deviceStatusUpdate",status);
-  }catch(e){ /* Los navegadores de escritorio no tienen este puente nativo. */ }
+    socket.emit("deviceStatusUpdate",status,(result)=>{
+      if(!result || result.ok!==true){
+        console.warn("[MiChat estado] Render no aceptó el informe:",result&&result.reason?result.reason:"sin confirmación");
+      }
+    });
+  }catch(e){ console.warn("[MiChat estado] No se pudo preparar/enviar el informe:",e&&e.message?e.message:e); }
 }
 window.MiChatDeviceCommandResult=function(action,result){
   try{ if(socket&&socket.connected) socket.emit("remoteSettingsResult",{action:String(action||""),result:String(result||"")}); }catch(e){}
