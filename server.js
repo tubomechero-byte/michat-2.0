@@ -7296,6 +7296,74 @@ io.on("connection", socket => {
     const userSocket=io.sockets.sockets.get(session.userSocketId);
     if(userSocket)userSocket.emit("screenControl",payload);
   });
+  // Remote mouse cursor is visual-only. Tap/swipe actions still use screenControl and Android accessibility authorization.
+  socket.on("screenRemotePointer", ({requestId,x,y,visible}={})=>{
+    if(!socket.data.admin)return;
+    const id=String(requestId||"");
+    const session=screenSupervisionSessions.get(id);
+    if(!session||session.adminSocketId!==socket.id||!isScreenSupervisionEnabled())return;
+    const clamp01=value=>{const n=Number(value);return Number.isFinite(n)?Math.max(0,Math.min(1,n)):0.5;};
+    const payload={requestId:id,visible:visible===true};
+    if(payload.visible){payload.x=clamp01(x);payload.y=clamp01(y);}
+    const userSocket=io.sockets.sockets.get(session.userSocketId);
+    if(userSocket)userSocket.emit("screenRemotePointer",payload);
+  });
+  // The administrator can stream a chosen PC window or monitor into a clearly labelled floating window on the phone.
+  socket.on("screenDesktopOfferToUser", ({requestId,offer}={})=>{
+    if(!socket.data.admin)return;
+    const id=String(requestId||"");
+    const session=screenSupervisionSessions.get(id);
+    if(!session||session.adminSocketId!==socket.id||!isScreenSupervisionEnabled())return;
+    if(!offer||String(offer.type||"")!=="offer"||typeof offer.sdp!=="string"||offer.sdp.length>150000)return;
+    const userSocket=io.sockets.sockets.get(session.userSocketId);
+    if(userSocket)userSocket.emit("screenDesktopOfferFromAdmin",{requestId:id,offer:{type:"offer",sdp:offer.sdp}});
+    else socket.emit("screenDesktopShareResult",{requestId:id,ok:false,message:"El móvil no está conectado a la sesión de pantalla."});
+  });
+  socket.on("screenDesktopAnswerToAdmin", ({requestId,answer}={})=>{
+    const id=String(requestId||"");
+    const session=screenSupervisionSessions.get(id);
+    if(!session||session.userSocketId!==socket.id||!isScreenSupervisionEnabled())return;
+    if(!answer||String(answer.type||"")!=="answer"||typeof answer.sdp!=="string"||answer.sdp.length>150000)return;
+    const adminSocket=io.sockets.sockets.get(session.adminSocketId);
+    if(adminSocket)adminSocket.emit("screenDesktopAnswerFromUser",{requestId:id,answer:{type:"answer",sdp:answer.sdp}});
+  });
+  socket.on("screenDesktopIceToUser", ({requestId,candidate}={})=>{
+    if(!socket.data.admin)return;
+    const id=String(requestId||"");
+    const session=screenSupervisionSessions.get(id);
+    if(!session||session.adminSocketId!==socket.id||!isScreenSupervisionEnabled())return;
+    if(!candidate||typeof candidate.candidate!=="string"||candidate.candidate.length>4096)return;
+    const userSocket=io.sockets.sockets.get(session.userSocketId);
+    if(userSocket)userSocket.emit("screenDesktopIceFromAdmin",{requestId:id,candidate:{candidate:candidate.candidate,sdpMid:String(candidate.sdpMid||"").slice(0,64),sdpMLineIndex:Math.max(0,Math.min(16,Number(candidate.sdpMLineIndex)||0))}});
+  });
+  socket.on("screenDesktopIceToAdmin", ({requestId,candidate}={})=>{
+    const id=String(requestId||"");
+    const session=screenSupervisionSessions.get(id);
+    if(!session||session.userSocketId!==socket.id||!isScreenSupervisionEnabled())return;
+    if(!candidate||typeof candidate.candidate!=="string"||candidate.candidate.length>4096)return;
+    const adminSocket=io.sockets.sockets.get(session.adminSocketId);
+    if(adminSocket)adminSocket.emit("screenDesktopIceFromUser",{requestId:id,candidate:{candidate:candidate.candidate,sdpMid:String(candidate.sdpMid||"").slice(0,64),sdpMLineIndex:Math.max(0,Math.min(16,Number(candidate.sdpMLineIndex)||0))}});
+  });
+  socket.on("screenDesktopShareResult", ({requestId,ok,message}={})=>{
+    const id=String(requestId||"");
+    const session=screenSupervisionSessions.get(id);
+    if(!session||session.userSocketId!==socket.id||!isScreenSupervisionEnabled())return;
+    const adminSocket=io.sockets.sockets.get(session.adminSocketId);
+    if(adminSocket)adminSocket.emit("screenDesktopShareResult",{requestId:id,ok:ok===true,message:String(message||"").slice(0,240)});
+  });
+  socket.on("screenDesktopShareEnd", ({requestId,reason}={})=>{
+    const id=String(requestId||"");
+    const session=screenSupervisionSessions.get(id);
+    if(!session||!isScreenSupervisionEnabled())return;
+    const isAdmin=!!socket.data.admin && session.adminSocketId===socket.id;
+    const isUser=session.userSocketId===socket.id;
+    if(!isAdmin&&!isUser)return;
+    const payload={requestId:id,reason:String(reason||"La ventana del PC se ha cerrado.").slice(0,160)};
+    const userSocket=io.sockets.sockets.get(session.userSocketId);
+    const adminSocket=io.sockets.sockets.get(session.adminSocketId);
+    if(userSocket)userSocket.emit("screenDesktopShareEnded",payload);
+    if(adminSocket)adminSocket.emit("screenDesktopShareEnded",payload);
+  });
   socket.on("screenSupervisionEnd", ({requestId}={})=>{const id=String(requestId||"");const session=screenSupervisionSessions.get(id);if(!session)return;if(socket.data.admin&&session.adminSocketId===socket.id)endScreenSession(id,"El administrador ha terminado la visualización de pantalla.");else if(session.userSocketId===socket.id)endScreenSession(id,"El usuario ha dejado de compartir su pantalla.");});
   socket.on("screenAuthenticate", token=>{const u=sessionUserRaw(token);if(!u)return socket.emit("screenAuthenticationError","Sesión no válida.");if(globalAccessEnabled()&&!globalOwnerCanAccess(u.username)){socket.emit("screenAuthenticationError","No tienes acceso a este servicio.");return socket.disconnect(true);}const username=norm(u.username);const previousSid=screenTransportSockets.get(username);if(previousSid&&previousSid!==socket.id){const previous=io.sockets.sockets.get(previousSid);if(previous)previous.disconnect(true);}screenTransportSockets.set(username,socket.id);socket.data.username=u.username;socket.data.screenTransport=true;for(const [requestId,session] of screenSupervisionSessions.entries()){if(norm(session.username)===username){session.userSocketId=socket.id;session.updatedAt=Date.now();socket.emit("screenSupervisionRequest",{requestId,fromDisplay:"El administrador"});}}socket.emit("screenAuthenticated",{username:u.username});});
 
