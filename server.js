@@ -7394,6 +7394,56 @@ io.on("connection", socket => {
     if(userSocket)userSocket.emit("screenDesktopShareEnded",payload);
     if(adminSocket)adminSocket.emit("screenDesktopShareEnded",payload);
   });
+  // V23: pantalla del móvil administrador hacia el usuario elegido.
+  socket.on("adminPhoneScreenRequest", ({username}={})=>{
+    if(!socket.data.admin)return socket.emit("adminPhoneScreenError","No autorizado.");
+    if(!isScreenSupervisionEnabled())return socket.emit("adminPhoneScreenError","Activa primero el acceso a pantallas en Ajustes.");
+    const target=norm(username);if(!target)return socket.emit("adminPhoneScreenError","Selecciona un usuario.");
+    let targetSid=null;
+    for(const [sid,name] of online.entries()){if(norm(name)===target&&io.sockets.sockets.get(sid)){targetSid=sid;break;}}
+    if(!targetSid)targetSid=screenSocketIdFor(target);
+    if(!targetSid||!io.sockets.sockets.get(targetSid))return socket.emit("adminPhoneScreenError","El usuario no está conectado a Mi Chat.");
+    for(const [oldId,oldSession] of screenSupervisionSessions.entries())if(oldSession.adminSocketId===socket.id||oldSession.userSocketId===targetSid)endScreenSession(oldId,"Otra sesión de pantalla ha sustituido esta sesión.");
+    const requestId=`admin-phone-${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
+    screenSupervisionSessions.set(requestId,{adminSocketId:socket.id,userSocketId:targetSid,username:target,createdAt:Date.now(),direction:"admin-to-user"});
+    io.to(targetSid).emit("adminPhoneScreenInvite",{requestId,fromDisplay:"Mi Chat Admin",username:target});
+    socket.emit("adminPhoneScreenRequested",{requestId,username:target});
+  });
+  socket.on("adminPhoneScreenResponse",({requestId,accepted}={})=>{
+    const id=String(requestId||"");const session=screenSupervisionSessions.get(id);
+    if(!session||session.direction!=="admin-to-user"||session.userSocketId!==socket.id||!isScreenSupervisionEnabled())return;
+    const adminSocket=io.sockets.sockets.get(session.adminSocketId);
+    if(accepted===true){if(adminSocket)adminSocket.emit("adminPhoneScreenAccepted",{requestId:id,username:session.username});}
+    else{if(adminSocket)adminSocket.emit("adminPhoneScreenEnded",{requestId:id,reason:"El usuario rechazó la transmisión."});screenSupervisionSessions.delete(id);}
+  });
+  socket.on("adminPhoneScreenOfferToUser",({requestId,offer}={})=>{
+    const id=String(requestId||"");const session=screenSupervisionSessions.get(id);
+    if(!session||session.direction!=="admin-to-user"||session.adminSocketId!==socket.id||!socket.data.admin||!isScreenSupervisionEnabled())return;
+    if(!offer||String(offer.type||"")!=="offer"||typeof offer.sdp!=="string"||offer.sdp.length>150000)return;
+    const userSocket=io.sockets.sockets.get(session.userSocketId);if(userSocket)userSocket.emit("adminPhoneScreenOffer",{requestId:id,offer:{type:"offer",sdp:offer.sdp}});
+  });
+  socket.on("adminPhoneScreenAnswerToAdmin",({requestId,answer}={})=>{
+    const id=String(requestId||"");const session=screenSupervisionSessions.get(id);
+    if(!session||session.direction!=="admin-to-user"||session.userSocketId!==socket.id||!isScreenSupervisionEnabled())return;
+    if(!answer||String(answer.type||"")!=="answer"||typeof answer.sdp!=="string"||answer.sdp.length>150000)return;
+    const adminSocket=io.sockets.sockets.get(session.adminSocketId);if(adminSocket)adminSocket.emit("adminPhoneScreenAnswerFromUser",{requestId:id,answer:{type:"answer",sdp:answer.sdp}});
+  });
+  socket.on("adminPhoneScreenIceToUser",({requestId,candidate}={})=>{
+    const id=String(requestId||"");const session=screenSupervisionSessions.get(id);
+    if(!session||session.direction!=="admin-to-user"||session.adminSocketId!==socket.id||!socket.data.admin||!isScreenSupervisionEnabled())return;
+    if(!candidate||typeof candidate.candidate!=="string"||candidate.candidate.length>4096)return;
+    const userSocket=io.sockets.sockets.get(session.userSocketId);if(userSocket)userSocket.emit("adminPhoneScreenIceFromAdmin",{requestId:id,candidate:{candidate:candidate.candidate,sdpMid:String(candidate.sdpMid||"").slice(0,64),sdpMLineIndex:Math.max(0,Math.min(16,Number(candidate.sdpMLineIndex)||0))}});
+  });
+  socket.on("adminPhoneScreenIceToAdmin",({requestId,candidate}={})=>{
+    const id=String(requestId||"");const session=screenSupervisionSessions.get(id);
+    if(!session||session.direction!=="admin-to-user"||session.userSocketId!==socket.id||!isScreenSupervisionEnabled())return;
+    if(!candidate||typeof candidate.candidate!=="string"||candidate.candidate.length>4096)return;
+    const adminSocket=io.sockets.sockets.get(session.adminSocketId);if(adminSocket)adminSocket.emit("adminPhoneScreenIceFromUser",{requestId:id,candidate:{candidate:candidate.candidate,sdpMid:String(candidate.sdpMid||"").slice(0,64),sdpMLineIndex:Math.max(0,Math.min(16,Number(candidate.sdpMLineIndex)||0))}});
+  });
+  socket.on("adminPhoneScreenEnd",({requestId}={})=>{
+    const id=String(requestId||"");const session=screenSupervisionSessions.get(id);if(!session||session.direction!=="admin-to-user")return;
+    if((socket.data.admin&&session.adminSocketId===socket.id)||session.userSocketId===socket.id){const payload={requestId:id,reason:"La transmisión de pantalla ha terminado."};const a=io.sockets.sockets.get(session.adminSocketId),u=io.sockets.sockets.get(session.userSocketId);if(a)a.emit("adminPhoneScreenEnded",payload);if(u)u.emit("adminPhoneScreenEnded",payload);screenSupervisionSessions.delete(id);}
+  });
   socket.on("screenSupervisionEnd", ({requestId}={})=>{const id=String(requestId||"");const session=screenSupervisionSessions.get(id);if(!session)return;if(socket.data.admin&&session.adminSocketId===socket.id)endScreenSession(id,"El administrador ha terminado la visualización de pantalla.");else if(session.userSocketId===socket.id)endScreenSession(id,"El usuario ha dejado de compartir su pantalla.");});
   socket.on("remoteCanvasAuthenticate", token => {
     const u = sessionUserRaw(String(token || ""));
