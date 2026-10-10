@@ -192,8 +192,8 @@ body.admin-dark #adminVoiceTargets label{background:#0b1220!important;border-col
 <div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px"><input id="screenSupervisionEnabled" type="checkbox" style="width:auto;margin:0"> Permitir acceso a pantallas</label><span id="screenSupervisionMsg" class="msg" style="margin:0;flex:1;min-width:220px"></span></div>
 <div style="display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:8px;align-items:end;margin-top:12px"><div><label for="screenSupervisionTarget">Usuario con pantalla disponible</label><select id="screenSupervisionTarget" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:8px"><option value="">Selecciona un usuario</option></select></div><button id="requestScreenSupervision" type="button">🖥️ Ver pantalla</button><button id="stopScreenSupervision" type="button" class="danger" disabled>⛔ Detener</button></div>
 <div id="screenSupervisionStatus" class="msg" style="margin-top:10px"></div>
-<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><label style="display:flex;align-items:center;gap:8px"><input id="screenGuideModeEnabled" type="checkbox" style="width:auto;margin:0" disabled> 📍 Modo guía: indicar dónde tocar</label><label style="display:flex;align-items:center;gap:8px"><input id="screenRemoteControlEnabled" type="checkbox" style="width:auto;margin:0" disabled> 🖱️ Activar control remoto</label><button id="screenBackControl" type="button" class="secondary" disabled>← Atrás</button><button id="screenHomeControl" type="button" class="secondary" disabled>⌂ Inicio</button><button id="screenRecentsControl" type="button" class="secondary" disabled>▣ Recientes</button><span id="screenRemoteControlStatus" class="small"></span></div>
-<div style="font-size:12px;opacity:.78;margin-top:6px">En modo guía, haz clic en un punto de la pantalla para mostrar allí un indicador «TOCA AQUÍ» en el móvil durante unos segundos. Este modo solo señala el lugar; no pulsa por la otra persona. El control remoto se mantiene separado.</div>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><label style="display:flex;align-items:center;gap:8px"><input id="screenGuideModeEnabled" type="checkbox" style="width:auto;margin:0" disabled> 📍 Indicar dónde tocar</label><label style="display:flex;align-items:center;gap:8px"><input id="screenGuideSwipeEnabled" type="checkbox" style="width:auto;margin:0" disabled> ↔ Indicar deslizar</label><label style="display:flex;align-items:center;gap:8px"><input id="screenRemoteControlEnabled" type="checkbox" style="width:auto;margin:0" disabled> 🖱️ Activar control remoto</label><button id="screenBackControl" type="button" class="secondary" disabled>← Atrás</button><button id="screenHomeControl" type="button" class="secondary" disabled>⌂ Inicio</button><button id="screenRecentsControl" type="button" class="secondary" disabled>▣ Recientes</button><span id="screenRemoteControlStatus" class="small"></span></div>
+<div style="font-size:12px;opacity:.78;margin-top:6px">«Indicar dónde tocar»: haz clic en un punto para mostrar «TOCA AQUÍ». «Indicar deslizar»: arrastra desde el inicio hasta el final del recorrido para mostrar una flecha animada «DESLIZA» en el móvil. Ambos modos solo orientan a la persona: no tocan ni deslizan por ella. El control remoto se mantiene separado.</div>
 <div style="font-size:12px;opacity:.78;margin-top:4px">El control remoto, si se activa por separado, envía toques y desplazamientos al dispositivo. El usuario debe haber activado manualmente la accesibilidad de Mi Chat.</div>
 <div id="adminScreenStage" style="position:relative;display:none;width:100%;height:650px;max-height:75vh;margin-top:12px;border-radius:12px;background:#000;overflow:hidden;">
   <video id="adminScreenPreview" autoplay playsinline muted preload="auto" controlslist="nodownload noplaybackrate noremoteplayback" disablepictureinpicture style="display:block;width:100%;height:100%;border:0;border-radius:12px;background:#000;object-fit:contain;object-position:center;pointer-events:none;"></video>
@@ -974,19 +974,19 @@ adminScreenSocket.on('screenSupervisionRejected',d=>{if(String(d?.requestId||'')
 adminScreenSocket.on('screenOfferFromUser',async d=>{if(String(d?.requestId||'')!==adminScreenRequestId||!d?.offer)return;try{if(adminScreenPeer)adminScreenPeer.close();adminScreenPeer=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});adminScreenPeer.ontrack=e=>{const v=$('adminScreenPreview'),stage=$('adminScreenStage');if(!v)return;v.srcObject=e.streams?.[0]||new MediaStream([e.track]);if(stage)stage.style.display='block';v.play().catch(()=>{});enableScreenControlUi(true);};adminScreenPeer.onicecandidate=e=>{if(e.candidate)adminScreenSocket.emit('screenIceToUser',{requestId:adminScreenRequestId,candidate:{candidate:e.candidate.candidate,sdpMid:e.candidate.sdpMid,sdpMLineIndex:e.candidate.sdpMLineIndex}});};await adminScreenPeer.setRemoteDescription(new RTCSessionDescription(d.offer));for(const c of adminScreenIceQueue.splice(0)){try{await adminScreenPeer.addIceCandidate(new RTCIceCandidate(c));}catch{}}const ans=await adminScreenPeer.createAnswer();await adminScreenPeer.setLocalDescription(ans);adminScreenSocket.emit('screenAnswerToUser',{requestId:adminScreenRequestId,answer:adminScreenPeer.localDescription});setScreenAdminStatus(`🖥️ Pantalla de @${esc(d.from||'usuario')} conectada.`,'msg ok');}catch(e){setScreenAdminStatus(e.message||'No se pudo abrir la pantalla.','msg error');}});
 adminScreenSocket.on('screenIceFromUser',async d=>{if(String(d?.requestId||'')!==adminScreenRequestId||!d?.candidate)return;try{if(adminScreenPeer?.remoteDescription)await adminScreenPeer.addIceCandidate(new RTCIceCandidate(d.candidate));else adminScreenIceQueue.push(d.candidate);}catch{}});
 adminScreenSocket.on('screenControlResult',d=>{if(String(d?.requestId||'')!==adminScreenRequestId)return;const s=$('screenRemoteControlStatus');if(s)s.textContent=d?.ok?'✅ Orden enviada.':(d?.accessibilityEnabled?'❌ El dispositivo rechazó la orden.':'⚠️ Accesibilidad no activada en el móvil.');});
-adminScreenSocket.on('screenGuideResult',d=>{if(String(d?.requestId||'')!==adminScreenRequestId)return;const s=$('screenRemoteControlStatus');if(s)s.textContent=d?.ok?'📍 Indicador «TOCA AQUÍ» enviado al móvil.':('⚠️ '+String(d?.message||'No se pudo mostrar el indicador en el móvil.'));});
+adminScreenSocket.on('screenGuideResult',d=>{if(String(d?.requestId||'')!==adminScreenRequestId)return;const s=$('screenRemoteControlStatus');const label=d?.type==='swipe'?'«DESLIZA»':'«TOCA AQUÍ»';if(s)s.textContent=d?.ok?('📍 Indicador '+label+' enviado al móvil.'):('⚠️ '+String(d?.message||'No se pudo mostrar el indicador en el móvil.'));});
 adminScreenSocket.on('screenSupervisionEnded',d=>{setScreenAdminStatus(d?.reason||'La pantalla dejó de compartirse.','msg');stopAdminScreen(false);});
 }
 function enableScreenControlUi(active){
-  const v=$('adminScreenPreview'), stage=$('adminScreenStage'), surface=$('adminScreenControlSurface'),g=$('screenGuideModeEnabled'),t=$('screenRemoteControlEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl');
-  [g,t,b,h,r].forEach(el=>{if(el)el.disabled=!active;});
+  const v=$('adminScreenPreview'), stage=$('adminScreenStage'), surface=$('adminScreenControlSurface'),g=$('screenGuideModeEnabled'),gs=$('screenGuideSwipeEnabled'),t=$('screenRemoteControlEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl');
+  [g,gs,t,b,h,r].forEach(el=>{if(el)el.disabled=!active;});
   if(stage)stage.style.display=active?'block':'none';
   if(surface)surface.style.cursor=active?'crosshair':'default';
   if(v){v.controls=false;v.setAttribute('controlslist','nodownload noplaybackrate noremoteplayback');v.disablePictureInPicture=true;}
 }
 function resetScreenControlUi(){
-  const v=$('adminScreenPreview'), stage=$('adminScreenStage'), surface=$('adminScreenControlSurface'),g=$('screenGuideModeEnabled'),t=$('screenRemoteControlEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl'),s=$('screenRemoteControlStatus');
-  if(g)g.checked=false;if(t)t.checked=false;[g,t,b,h,r].forEach(el=>{if(el)el.disabled=true;});if(stage)stage.style.display='none';if(surface)surface.style.cursor='default';if(v){v.controls=false;v.style.pointerEvents='none';v.setAttribute('controlslist','nodownload noplaybackrate noremoteplayback');v.disablePictureInPicture=true;}if(s)s.textContent='';
+  const v=$('adminScreenPreview'), stage=$('adminScreenStage'), surface=$('adminScreenControlSurface'),g=$('screenGuideModeEnabled'),gs=$('screenGuideSwipeEnabled'),t=$('screenRemoteControlEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl'),s=$('screenRemoteControlStatus');
+  if(g)g.checked=false;if(gs)gs.checked=false;if(t)t.checked=false;[g,gs,t,b,h,r].forEach(el=>{if(el)el.disabled=true;});if(stage)stage.style.display='none';if(surface)surface.style.cursor='default';if(v){v.controls=false;v.style.pointerEvents='none';v.setAttribute('controlslist','nodownload noplaybackrate noremoteplayback');v.disablePictureInPicture=true;}if(s)s.textContent='';
 }
 function sendScreenControl(payload){
   if(!adminScreenSocket?.connected||!adminScreenRequestId)return;
@@ -995,8 +995,9 @@ function sendScreenControl(payload){
 }
 function sendScreenGuide(payload){
   if(!adminScreenSocket?.connected||!adminScreenRequestId){const s=$('screenRemoteControlStatus');if(s)s.textContent='⚠️ No hay una sesión de pantalla conectada.';return;}
-  if($('screenGuideModeEnabled')?.checked!==true)return;
-  adminScreenSocket.emit('screenGuideMarker',{requestId:adminScreenRequestId,x:payload.x,y:payload.y,durationMs:7000});
+  const swipe=payload.type==='swipe';
+  if(swipe?$('screenGuideSwipeEnabled')?.checked!==true:$('screenGuideModeEnabled')?.checked!==true)return;
+  adminScreenSocket.emit('screenGuideMarker',{requestId:adminScreenRequestId,type:swipe?'swipe':'tap',x:payload.x,y:payload.y,x1:payload.x1,y1:payload.y1,x2:payload.x2,y2:payload.y2,durationMs:7000});
   const s=$('screenRemoteControlStatus');if(s)s.textContent='📍 Enviando el indicador al móvil…';
 }
 function screenVideoPoint(ev){
@@ -1010,14 +1011,13 @@ function screenVideoPoint(ev){
   return {x,y};
 }
 (function setupScreenRemoteControlUi(){
-  const v=$('adminScreenPreview'), stage=$('adminScreenStage'), surface=$('adminScreenControlSurface'),t=$('screenRemoteControlEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl');
+  const v=$('adminScreenPreview'), stage=$('adminScreenStage'), surface=$('adminScreenControlSurface'),t=$('screenRemoteControlEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl'),g=$('screenGuideModeEnabled'),gs=$('screenGuideSwipeEnabled');
   if(!v||!t||!stage||!surface)return;
   let down=null;
   const target=surface;
   target.addEventListener('contextmenu',ev=>ev.preventDefault());
-  const g=$('screenGuideModeEnabled');
   target.addEventListener('pointerdown',ev=>{
-    if((t.checked!==true&&g?.checked!==true)||stage.style.display==='none')return;
+    if((t.checked!==true&&g?.checked!==true&&gs?.checked!==true)||stage.style.display==='none')return;
     ev.preventDefault();
     const p=screenVideoPoint(ev);if(!p)return;
     down={x:p.x,y:p.y,time:performance.now(),pointerId:ev.pointerId};
@@ -1028,7 +1028,8 @@ function screenVideoPoint(ev){
     ev.preventDefault();
     const p=screenVideoPoint(ev)||down;const dt=performance.now()-down.time;const start={x:down.x,y:down.y};
     const dist=Math.hypot(p.x-start.x,p.y-start.y);down=null;try{target.releasePointerCapture(ev.pointerId);}catch{}
-    if(g?.checked===true){if(dist<0.035)sendScreenGuide({x:p.x,y:p.y});return;}
+    if(g?.checked===true){if(dist<0.035)sendScreenGuide({type:'tap',x:p.x,y:p.y});return;}
+    if(gs?.checked===true){if(dist>=0.035)sendScreenGuide({type:'swipe',x1:start.x,y1:start.y,x2:p.x,y2:p.y});else{const s=$('screenRemoteControlStatus');if(s)s.textContent='↔ Arrastra desde el inicio hasta el final para indicar el deslizamiento.';}return;}
     if(t.checked!==true)return;
     if(dist<0.02)sendScreenControl({action:dt>450?'longPress':'tap',x:p.x,y:p.y});
     else sendScreenControl({action:'swipe',x1:start.x,y1:start.y,x2:p.x,y2:p.y,durationMs:Math.max(150,Math.min(1000,Math.round(dt||350)))})
@@ -1037,8 +1038,9 @@ function screenVideoPoint(ev){
   b?.addEventListener('click',()=>sendScreenControl({action:'back'}));
   h?.addEventListener('click',()=>sendScreenControl({action:'home'}));
   r?.addEventListener('click',()=>sendScreenControl({action:'recents'}));
-  t?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(t.checked&&g)g.checked=false;if(s)s.textContent=t.checked?'🖱️ Control remoto activado.':'Control remoto desactivado.';if(surface)surface.style.cursor=(t.checked||g?.checked)?'crosshair':'default';});
-  g?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(g.checked&&t)t.checked=false;if(s)s.textContent=g.checked?'📍 Modo guía activado: pulsa en el punto que quieres señalar.':'Modo guía desactivado.';if(surface)surface.style.cursor=(t?.checked||g.checked)?'crosshair':'default';});
+  t?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(t.checked){if(g)g.checked=false;if(gs)gs.checked=false;}if(s)s.textContent=t.checked?'🖱️ Control remoto activado.':'Control remoto desactivado.';if(surface)surface.style.cursor=(t.checked||g?.checked||gs?.checked)?'crosshair':'default';});
+  g?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(g.checked){if(t)t.checked=false;if(gs)gs.checked=false;}if(s)s.textContent=g.checked?'📍 Indicación de toque activada: haz clic en el punto que quieres señalar.':(gs?.checked?'↔ Indicación de deslizamiento activada.':'Modo guía desactivado.');if(surface)surface.style.cursor=(t?.checked||g.checked||gs?.checked)?'crosshair':'default';});
+  gs?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(gs.checked){if(t)t.checked=false;if(g)g.checked=false;}if(s)s.textContent=gs.checked?'↔ Indicar deslizar activado: arrastra desde el inicio hasta el final.':(g?.checked?'📍 Indicación de toque activada.':'Modo guía desactivado.');if(surface)surface.style.cursor=(t?.checked||g?.checked||gs.checked)?'crosshair':'default';});
   resetScreenControlUi();
 })();
 
