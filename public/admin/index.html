@@ -196,16 +196,16 @@ body.admin-dark #adminVoiceTargets label{background:#0b1220!important;border-col
 <div style="font-size:12px;opacity:.78;margin-top:6px">«Indicar dónde tocar»: haz clic en un punto para mostrar «TOCA AQUÍ». «Indicar deslizar»: arrastra desde el inicio hasta el final del recorrido para mostrar una flecha animada «DESLIZA» en el móvil. Ambos modos solo orientan a la persona: no tocan ni deslizan por ella. El control remoto se mantiene separado.</div>
 <div style="font-size:12px;opacity:.78;margin-top:4px">El control remoto, si se activa por separado, envía toques y desplazamientos al dispositivo. El usuario debe haber activado manualmente la accesibilidad de Mi Chat.</div>
 <div id="adminScreenDrawingToolbar" style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:12px;padding:10px;border:1px solid #d6dee9;border-radius:10px;background:rgba(127,127,127,.06)">
-  <label style="display:flex;align-items:center;gap:7px;font-weight:700"><input id="screenDrawModeEnabled" type="checkbox" style="width:auto;margin:0" disabled> ✏️ Dibujar sobre la vista</label>
+  <label style="display:flex;align-items:center;gap:7px;font-weight:700"><input id="screenDrawModeEnabled" type="checkbox" style="width:auto;margin:0" disabled> ✏️ Dibujar en el teléfono</label>
   <button type="button" class="secondary" data-screen-draw-tool="pen" disabled>✏️ Lápiz</button>
   <button type="button" class="secondary" data-screen-draw-tool="arrow" disabled>➡️ Flecha</button>
   <button type="button" class="secondary" data-screen-draw-tool="circle" disabled>⭕ Círculo</button>
   <button type="button" class="secondary" data-screen-draw-tool="eraser" disabled>🩹 Borrador</button>
   <button id="screenDrawUndo" type="button" class="secondary" disabled>↶ Deshacer</button>
   <button id="screenDrawClear" type="button" class="secondary" disabled>🧹 Limpiar</button>
-  <span id="screenDrawStatus" class="small" aria-live="polite">Conecta una pantalla para dibujar.</span>
+  <span id="screenDrawStatus" class="small" aria-live="polite">Conecta una pantalla para dibujar en el teléfono.</span>
 </div>
-<div style="font-size:12px;opacity:.78;margin-top:4px">Los dibujos aparecen solo encima de tu vista en Render; no se envían al móvil ni realizan toques. No hace falta confirmar cada trazo. Para que la otra persona vea una marca en su teléfono se necesita una función visible en el propio dispositivo.</div>
+<div style="font-size:12px;opacity:.78;margin-top:4px">Los trazos se envían a la pantalla del teléfono durante esta sesión compartida; son marcas visuales, no toques. No hace falta confirmar cada trazo. Android debe tener concedido una vez el permiso «Mostrar sobre otras aplicaciones».</div>
 <div id="adminScreenStage" style="position:relative;display:none;width:100%;height:650px;max-height:75vh;margin-top:12px;border-radius:12px;background:#000;overflow:hidden;">
   <video id="adminScreenPreview" autoplay playsinline muted preload="auto" controlslist="nodownload noplaybackrate noremoteplayback" disablepictureinpicture style="display:block;width:100%;height:100%;border:0;border-radius:12px;background:#000;object-fit:contain;object-position:center;pointer-events:none;"></video>
   <div id="adminScreenControlSurface" aria-label="Superficie de guía y control remoto" style="position:absolute;inset:0;z-index:2;background:transparent;cursor:default;touch-action:none;"></div>
@@ -987,6 +987,7 @@ adminScreenSocket.on('screenOfferFromUser',async d=>{if(String(d?.requestId||'')
 adminScreenSocket.on('screenIceFromUser',async d=>{if(String(d?.requestId||'')!==adminScreenRequestId||!d?.candidate)return;try{if(adminScreenPeer?.remoteDescription)await adminScreenPeer.addIceCandidate(new RTCIceCandidate(d.candidate));else adminScreenIceQueue.push(d.candidate);}catch{}});
 adminScreenSocket.on('screenControlResult',d=>{if(String(d?.requestId||'')!==adminScreenRequestId)return;const s=$('screenRemoteControlStatus');if(s)s.textContent=d?.ok?'✅ Orden enviada.':(d?.accessibilityEnabled?'❌ El dispositivo rechazó la orden.':'⚠️ Accesibilidad no activada en el móvil.');});
 adminScreenSocket.on('screenGuideResult',d=>{if(String(d?.requestId||'')!==adminScreenRequestId)return;const s=$('screenRemoteControlStatus');const label=d?.type==='swipe'?'«DESLIZA»':'«TOCA AQUÍ»';if(s)s.textContent=d?.ok?('📍 Indicador '+label+' enviado al móvil.'):('⚠️ '+String(d?.message||'No se pudo mostrar el indicador en el móvil.'));});
+adminScreenSocket.on('screenDrawResult',d=>{if(String(d?.requestId||'')!==adminScreenRequestId)return;const s=$('screenDrawStatus');if(s)s.textContent=d?.ok?'✅ Dibujo mostrado en la pantalla del teléfono.':'⚠️ '+String(d?.message||'No se pudo mostrar el dibujo en el teléfono.');});
 adminScreenSocket.on('screenSupervisionEnded',d=>{setScreenAdminStatus(d?.reason||'La pantalla dejó de compartirse.','msg');stopAdminScreen(false);});
 }
 const adminScreenAnnotations=[];
@@ -994,6 +995,18 @@ const adminScreenAnnotationHistory=[];
 let adminScreenDrawTool='pen';
 let adminScreenDrawSnapshotTaken=false;
 function cloneScreenAnnotations(){return adminScreenAnnotations.map(a=>({...a,points:Array.isArray(a.points)?a.points.map(p=>({...p})):undefined,start:a.start?{...a.start}:undefined,end:a.end?{...a.end}:undefined}));}
+let adminScreenDrawLastSentAt=0;
+function sendScreenDrawingState(preview=null,notify=true){
+  if(!adminScreenSocket?.connected||!adminScreenRequestId)return;
+  adminScreenSocket.emit('screenDrawUpdate',{requestId:adminScreenRequestId,annotations:cloneScreenAnnotations(),preview:preview?JSON.parse(JSON.stringify(preview)):null,notify:notify===true});
+  if(notify!==true)adminScreenDrawLastSentAt=performance.now();
+}
+function queueScreenDrawingState(preview=null){
+  const now=performance.now();
+  if(now-adminScreenDrawLastSentAt<85)return;
+  adminScreenDrawLastSentAt=now;
+  sendScreenDrawingState(preview,false);
+}
 function saveScreenAnnotationHistory(){adminScreenAnnotationHistory.push(cloneScreenAnnotations());if(adminScreenAnnotationHistory.length>50)adminScreenAnnotationHistory.shift();}
 function screenAnnotationMetrics(){
   const stage=$('adminScreenStage'),v=$('adminScreenPreview'),canvas=$('adminScreenAnnotationCanvas');
@@ -1042,14 +1055,14 @@ function screenAnnotationHit(a,p,m,radius=22){
   return false;
 }
 function eraseScreenAnnotationAt(p){const m=screenAnnotationMetrics();if(!m)return;const hits=[];for(let i=adminScreenAnnotations.length-1;i>=0;i--){if(screenAnnotationHit(adminScreenAnnotations[i],p,m,22))hits.push(i);}if(hits.length){if(!adminScreenDrawSnapshotTaken){saveScreenAnnotationHistory();adminScreenDrawSnapshotTaken=true;}for(const i of hits)adminScreenAnnotations.splice(i,1);renderScreenAnnotations();}}
-function setScreenDrawTool(tool){adminScreenDrawTool=tool;document.querySelectorAll('[data-screen-draw-tool]').forEach(b=>{const active=b.dataset.screenDrawTool===tool;b.style.outline=active?'2px solid #f59e0b':'none';b.style.fontWeight=active?'800':'400';});const label={pen:'Lápiz',arrow:'Flecha',circle:'Círculo',eraser:'Borrador'}[tool]||'Lápiz';const s=$('screenDrawStatus');if(s)s.textContent='Herramienta: '+label+'. '+(tool==='eraser'?'Arrastra sobre las marcas para borrarlas.':'Activa «Dibujar sobre la vista» y arrastra sobre la pantalla.');}
+function setScreenDrawTool(tool){adminScreenDrawTool=tool;document.querySelectorAll('[data-screen-draw-tool]').forEach(b=>{const active=b.dataset.screenDrawTool===tool;b.style.outline=active?'2px solid #f59e0b':'none';b.style.fontWeight=active?'800':'400';});const label={pen:'Lápiz',arrow:'Flecha',circle:'Círculo',eraser:'Borrador'}[tool]||'Lápiz';const s=$('screenDrawStatus');if(s)s.textContent='Herramienta: '+label+'. '+(tool==='eraser'?'Arrastra sobre las marcas del teléfono para borrarlas.':'Activa «Dibujar en el teléfono» y arrastra; las marcas aparecerán en el móvil.');}
 function enableScreenControlUi(active){
   const v=$('adminScreenPreview'),stage=$('adminScreenStage'),surface=$('adminScreenControlSurface'),g=$('screenGuideModeEnabled'),gs=$('screenGuideSwipeEnabled'),t=$('screenRemoteControlEnabled'),draw=$('screenDrawModeEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl'),undo=$('screenDrawUndo'),clear=$('screenDrawClear');
   [g,gs,t,draw,b,h,r,undo,clear,...document.querySelectorAll('[data-screen-draw-tool]')].forEach(el=>{if(el)el.disabled=!active;});
   if(stage)stage.style.display=active?'block':'none';
   if(surface)surface.style.cursor=active?'crosshair':'default';
   if(v){v.controls=false;v.setAttribute('controlslist','nodownload noplaybackrate noremoteplayback');v.disablePictureInPicture=true;}
-  const s=$('screenDrawStatus');if(s&&active)s.textContent='Pantalla conectada. Puedes dibujar sobre esta vista.';renderScreenAnnotations();
+  const s=$('screenDrawStatus');if(s&&active)s.textContent='Pantalla conectada. Puedes dibujar sobre el teléfono.';renderScreenAnnotations();
 }
 function resetScreenControlUi(){
   const v=$('adminScreenPreview'),stage=$('adminScreenStage'),surface=$('adminScreenControlSurface'),g=$('screenGuideModeEnabled'),gs=$('screenGuideSwipeEnabled'),t=$('screenRemoteControlEnabled'),draw=$('screenDrawModeEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl'),undo=$('screenDrawUndo'),clear=$('screenDrawClear'),s=$('screenRemoteControlStatus'),ds=$('screenDrawStatus');
@@ -1092,9 +1105,9 @@ function screenVideoPoint(ev,strict=false){
   });
   target.addEventListener('pointermove',ev=>{
     if(!down)return;const p=screenVideoPoint(ev,Boolean(down.tool));if(!p)return;
-    if(down.tool==='pen'){const last=down.points[down.points.length-1];if(!last||Math.hypot((p.x-last.x)*Math.max(1,v.videoWidth),(p.y-last.y)*Math.max(1,v.videoHeight))>=2)down.points.push(p);drawPreview={type:'pen',points:down.points};renderScreenAnnotations(drawPreview);}
-    else if(down.tool==='arrow'||down.tool==='circle'){drawPreview={type:down.tool,start:{x:down.x,y:down.y},end:p};renderScreenAnnotations(drawPreview);}
-    else if(down.tool==='eraser')eraseScreenAnnotationAt(p);
+    if(down.tool==='pen'){const last=down.points[down.points.length-1];if(!last||Math.hypot((p.x-last.x)*Math.max(1,v.videoWidth),(p.y-last.y)*Math.max(1,v.videoHeight))>=2)down.points.push(p);drawPreview={type:'pen',points:down.points};renderScreenAnnotations(drawPreview);queueScreenDrawingState(drawPreview);}
+    else if(down.tool==='arrow'||down.tool==='circle'){drawPreview={type:down.tool,start:{x:down.x,y:down.y},end:p};renderScreenAnnotations(drawPreview);queueScreenDrawingState(drawPreview);}
+    else if(down.tool==='eraser'){eraseScreenAnnotationAt(p);queueScreenDrawingState(null);}
   });
   target.addEventListener('pointerup',ev=>{
     if(!down)return;ev.preventDefault();const p=screenVideoPoint(ev,Boolean(down.tool))||{x:down.x,y:down.y};const dt=performance.now()-down.time;const start={x:down.x,y:down.y};const dist=Math.hypot(p.x-start.x,p.y-start.y);const finished=down;down=null;drawPreview=null;try{target.releasePointerCapture(ev.pointerId);}catch{}
@@ -1105,22 +1118,22 @@ function screenVideoPoint(ev,strict=false){
       }else if(finished.tool==='arrow'||finished.tool==='circle'){
         if(dist>.006){saveScreenAnnotationHistory();adminScreenAnnotations.push({type:finished.tool,start,end:p});}
       }
-      adminScreenDrawSnapshotTaken=false;renderScreenAnnotations();const ds=$('screenDrawStatus');if(ds)ds.textContent=finished.tool==='eraser'?'Borrador listo.':'Marca añadida a tu vista.';return;
+      adminScreenDrawSnapshotTaken=false;renderScreenAnnotations();sendScreenDrawingState(null,true);const ds=$('screenDrawStatus');if(ds)ds.textContent=finished.tool==='eraser'?'Borrador listo.':'Enviando la marca al teléfono…';return;
     }
     if(g?.checked===true){if(dist<0.035)sendScreenGuide({type:'tap',x:p.x,y:p.y});return;}
     if(gs?.checked===true){if(dist>=0.035)sendScreenGuide({type:'swipe',x1:start.x,y1:start.y,x2:p.x,y2:p.y});else{const s=$('screenRemoteControlStatus');if(s)s.textContent='↔ Arrastra desde el inicio hasta el final para indicar el deslizamiento.';}return;}
     if(t.checked!==true)return;
     if(dist<0.02)sendScreenControl({action:dt>450?'longPress':'tap',x:p.x,y:p.y});else sendScreenControl({action:'swipe',x1:start.x,y1:start.y,x2:p.x,y2:p.y,durationMs:Math.max(150,Math.min(1000,Math.round(dt||350)))})
   });
-  target.addEventListener('pointercancel',ev=>{down=null;drawPreview=null;renderScreenAnnotations();try{target.releasePointerCapture(ev.pointerId);}catch{}});
+  target.addEventListener('pointercancel',ev=>{down=null;drawPreview=null;renderScreenAnnotations();sendScreenDrawingState(null,true);try{target.releasePointerCapture(ev.pointerId);}catch{}});
   b?.addEventListener('click',()=>sendScreenControl({action:'back'}));h?.addEventListener('click',()=>sendScreenControl({action:'home'}));r?.addEventListener('click',()=>sendScreenControl({action:'recents'}));
   t?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(t.checked){if(g)g.checked=false;if(gs)gs.checked=false;if(drawMode)drawMode.checked=false;}if(s)s.textContent=t.checked?'🖱️ Control remoto activado.':'Control remoto desactivado.';if(surface)surface.style.cursor=(t.checked||g?.checked||gs?.checked||drawMode?.checked)?'crosshair':'default';});
   g?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(g.checked){if(t)t.checked=false;if(gs)gs.checked=false;if(drawMode)drawMode.checked=false;}if(s)s.textContent=g.checked?'📍 Indicación de toque activada: haz clic en el punto que quieres señalar.':(gs?.checked?'↔ Indicación de deslizamiento activada.':'Modo guía desactivado.');if(surface)surface.style.cursor=(t?.checked||g.checked||gs?.checked||drawMode?.checked)?'crosshair':'default';});
   gs?.addEventListener('change',()=>{const s=$('screenRemoteControlStatus');if(gs.checked){if(t)t.checked=false;if(g)g.checked=false;if(drawMode)drawMode.checked=false;}if(s)s.textContent=gs.checked?'↔ Indicar deslizar activado: arrastra desde el inicio hasta el final.':(g?.checked?'📍 Indicación de toque activada.':'Modo guía desactivado.');if(surface)surface.style.cursor=(t?.checked||g?.checked||gs.checked||drawMode?.checked)?'crosshair':'default';});
-  drawMode?.addEventListener('change',()=>{const ds=$('screenDrawStatus');if(drawMode.checked){if(t)t.checked=false;if(g)g.checked=false;if(gs)gs.checked=false;if(ds)ds.textContent='Dibujo activado · '+({pen:'Lápiz',arrow:'Flecha',circle:'Círculo',eraser:'Borrador'}[adminScreenDrawTool]||'Lápiz')+'. Arrastra sobre la pantalla.';}else if(ds)ds.textContent='Dibujo desactivado. Las marcas siguen visibles hasta que las borres.';if(surface)surface.style.cursor=(drawMode.checked||t?.checked||g?.checked||gs?.checked)?'crosshair':'default';});
+  drawMode?.addEventListener('change',()=>{const ds=$('screenDrawStatus');if(drawMode.checked){if(t)t.checked=false;if(g)g.checked=false;if(gs)gs.checked=false;if(ds)ds.textContent='Dibujo activado · '+({pen:'Lápiz',arrow:'Flecha',circle:'Círculo',eraser:'Borrador'}[adminScreenDrawTool]||'Lápiz')+'. Arrastra sobre la pantalla; el trazo se mostrará en el móvil.';}else if(ds)ds.textContent='Dibujo desactivado. Las marcas siguen visibles en el teléfono hasta que las borres.';if(surface)surface.style.cursor=(drawMode.checked||t?.checked||g?.checked||gs?.checked)?'crosshair':'default';});
   document.querySelectorAll('[data-screen-draw-tool]').forEach(btn=>btn.addEventListener('click',()=>{setScreenDrawTool(btn.dataset.screenDrawTool);if(drawMode){drawMode.checked=true;drawMode.dispatchEvent(new Event('change'));}}));
-  undo?.addEventListener('click',()=>{const previous=adminScreenAnnotationHistory.pop();if(!previous){const ds=$('screenDrawStatus');if(ds)ds.textContent='No hay trazos para deshacer.';return;}adminScreenAnnotations.splice(0,adminScreenAnnotations.length,...previous);renderScreenAnnotations();const ds=$('screenDrawStatus');if(ds)ds.textContent='Último cambio deshecho.';});
-  clear?.addEventListener('click',()=>{if(!adminScreenAnnotations.length)return;saveScreenAnnotationHistory();adminScreenAnnotations.length=0;renderScreenAnnotations();const ds=$('screenDrawStatus');if(ds)ds.textContent='Se han borrado todas las marcas de esta vista.';});
+  undo?.addEventListener('click',()=>{const previous=adminScreenAnnotationHistory.pop();if(!previous){const ds=$('screenDrawStatus');if(ds)ds.textContent='No hay trazos para deshacer.';return;}adminScreenAnnotations.splice(0,adminScreenAnnotations.length,...previous);renderScreenAnnotations();sendScreenDrawingState(null,true);const ds=$('screenDrawStatus');if(ds)ds.textContent='Último cambio deshecho en el teléfono.';});
+  clear?.addEventListener('click',()=>{if(!adminScreenAnnotations.length)return;saveScreenAnnotationHistory();adminScreenAnnotations.length=0;renderScreenAnnotations();sendScreenDrawingState(null,true);const ds=$('screenDrawStatus');if(ds)ds.textContent='Se han borrado todas las marcas del teléfono.';});
   v.addEventListener('loadedmetadata',()=>renderScreenAnnotations());window.addEventListener('resize',()=>renderScreenAnnotations());
   setScreenDrawTool('pen');resetScreenControlUi();
 })();
@@ -1893,4 +1906,3 @@ $('refreshLocations').onclick=loadLocations;setInterval(()=>{ if(!$('panel').cla
 </script>
 </body>
 </html>
-
