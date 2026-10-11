@@ -1082,7 +1082,7 @@ async function pcToAndroidSendOffer(){
   const peer=pcToAndroidPeer,id=pcToAndroidRequestId;
   pcToAndroidStream.getTracks().forEach(track=>peer.addTrack(track,pcToAndroidStream));
   peer.onicecandidate=e=>{if(e.candidate&&pcToAndroidRequestId===id)adminScreenSocket?.emit('adminPhoneScreenIceToUser',{requestId:id,candidate:{candidate:e.candidate.candidate,sdpMid:e.candidate.sdpMid,sdpMLineIndex:e.candidate.sdpMLineIndex}});};
-  peer.onconnectionstatechange=()=>{if(pcToAndroidRequestId!==id)return;if(peer.connectionState==='connected')pcToAndroidStatus('✅ Tu pantalla del PC está conectada al Android.');else if(peer.connectionState==='failed')pcToAndroidStatus('⚠️ No se pudo establecer la conexión WebRTC. Puede ser necesaria una configuración TURN.');};
+  peer.onconnectionstatechange=()=>{if(pcToAndroidRequestId!==id)return;if(peer.connectionState==='connected')pcToAndroidStatus('✅ Tu pantalla del PC está conectada al Android.');else if(peer.connectionState==='failed')pcToAndroidStatus('⚠️ Falló la conexión de vídeo PC → Android. Comprueba la red; puede hacer falta TURN.');else if(peer.connectionState==='disconnected')pcToAndroidStatus('⚠️ Se ha interrumpido la conexión con el móvil.');};
   const offer=await peer.createOffer();await peer.setLocalDescription(offer);
   if(pcToAndroidRequestId===id)adminScreenSocket.emit('adminPhoneScreenOfferToUser',{requestId:id,offer:{type:peer.localDescription.type,sdp:peer.localDescription.sdp}});
   pcToAndroidStatus('Enviando la pantalla completa del PC al móvil…');
