@@ -147,6 +147,11 @@ body.admin-dark .card.admin-card,body.admin-dark .card{border-color:#25324a;back
 body.admin-dark #adminVoiceTargets label{background:#0b1220!important;border-color:#334155!important}
 </style>
 
+<style id="michat-screen-fullscreen-style">
+#adminScreenStage:fullscreen { width:100vw !important; height:100vh !important; max-height:none !important; margin:0 !important; padding:0 !important; border-radius:0 !important; background:#000 !important; }
+#adminScreenStage:fullscreen #adminScreenPreview { width:100% !important; height:100% !important; object-fit:contain !important; border-radius:0 !important; }
+#adminScreenStage:fullscreen::backdrop { background:#000; }
+</style>
 </head>
 <body>
 <header class="admin-header"><div class="admin-brand"><div class="admin-brand-mark">M</div><div><div class="admin-brand-title">Mi Chat Admin</div><div class="admin-brand-subtitle">Centro de control</div></div></div><div class="admin-header-actions"><span class="admin-header-status"><span class="admin-status-dot"></span>Panel activo</span><button id="themeToggle" type="button" class="secondary admin-header-btn" title="Cambiar tema">🌙 Tema oscuro</button><button id="logout" class="secondary admin-header-btn hidden">Cerrar sesión</button></div></header>
@@ -226,16 +231,16 @@ body.admin-dark #adminVoiceTargets label{background:#0b1220!important;border-col
 <h2>🖥️ Supervisión de pantalla (con consentimiento)</h2>
 <div class="command-access-help">Permite al administrador ver la pantalla de usuarios que la estén compartiendo desde Ajustes. Android muestra su confirmación oficial antes de iniciar la captura.</div>
 <div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px"><input id="screenSupervisionEnabled" type="checkbox" style="width:auto;margin:0"> Permitir acceso a pantallas</label><span id="screenSupervisionMsg" class="msg" style="margin:0;flex:1;min-width:220px"></span></div>
-<div style="display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:8px;align-items:end;margin-top:12px"><div><label for="screenSupervisionTarget">Usuario con pantalla disponible</label><select id="screenSupervisionTarget" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:8px"><option value="">Selecciona un usuario</option></select></div><button id="requestScreenSupervision" type="button">🖥️ Ver pantalla</button><button id="stopScreenSupervision" type="button" class="danger" disabled>⛔ Detener</button></div>
+<div style="display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:8px;align-items:end;margin-top:12px"><div><label for="screenSupervisionTarget">Usuario Android (receptor o emisor)</label><select id="screenSupervisionTarget" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccc;border-radius:8px"><option value="">Selecciona un usuario</option></select></div><button id="requestScreenSupervision" type="button">🖥️ Ver pantalla</button><button id="stopScreenSupervision" type="button" class="danger" disabled>⛔ Detener</button></div>
   <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"><button id="adminPhoneScreenStart" type="button">🖥️ Compartir mi pantalla del PC con el usuario seleccionado</button><button id="adminPhoneScreenStop" type="button" class="danger" disabled>⏹️ Detener pantalla del PC</button></div><div id="adminPhoneScreenStatus" class="small" role="status" style="margin-top:8px">El usuario recibirá una solicitud y podrá aceptar o rechazar la pantalla. No se permite controlar su teléfono.</div>
 <div id="screenSupervisionStatus" class="msg" style="margin-top:10px"></div>
 <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><label style="display:flex;align-items:center;gap:8px"><input id="screenGuideModeEnabled" type="checkbox" style="width:auto;margin:0" disabled> 📍 Indicar dónde tocar</label><label style="display:flex;align-items:center;gap:8px"><input id="screenGuideSwipeEnabled" type="checkbox" style="width:auto;margin:0" disabled> ↔ Indicar deslizar</label><label style="display:flex;align-items:center;gap:8px"><input id="screenRemoteControlEnabled" type="checkbox" style="width:auto;margin:0" disabled> 🖱️ Activar control remoto</label><button id="screenBackControl" type="button" class="secondary" disabled>← Atrás</button><button id="screenHomeControl" type="button" class="secondary" disabled>⌂ Inicio</button><button id="screenRecentsControl" type="button" class="secondary" disabled>▣ Recientes</button><span id="screenRemoteControlStatus" class="small"></span></div>
 <div style="font-size:12px;opacity:.78;margin-top:6px">«Indicar dónde tocar»: haz clic en un punto para mostrar «TOCA AQUÍ». «Indicar deslizar»: arrastra desde el inicio hasta el final del recorrido para mostrar una flecha animada «DESLIZA» en el móvil. Ambos modos solo orientan a la persona: no tocan ni deslizan por ella. El control remoto se mantiene separado.</div>
 <div style="font-size:12px;opacity:.78;margin-top:4px">El control remoto, si se activa por separado, envía toques y desplazamientos al dispositivo. El usuario debe haber activado manualmente la accesibilidad de Mi Chat. Al mover el ratón con el control remoto activo, también aparecerá un cursor visual en el móvil.</div>
 <div id="adminPcWindowToolbar" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;padding:10px;border:1px solid #d6dee9;border-radius:10px;background:rgba(127,127,127,.06)">
-  <button id="screenPcWindowStart" type="button" disabled>🪟 Mostrar ventana/pantalla del PC en el móvil</button>
+  <button id="screenPcWindowStart" type="button">🪟 Mostrar ventana/pantalla del PC en el móvil</button>
   <button id="screenPcWindowStop" type="button" class="danger" disabled>✖ Cerrar ventana del PC</button>
-  <span id="screenPcWindowStatus" class="small" aria-live="polite">Conecta una pantalla del móvil para enviar una ventana del PC.</span>
+  <span id="screenPcWindowStatus" class="small" aria-live="polite">Puedes enviar tu pantalla al móvil sin recibir la suya.</span>
   <video id="screenPcWindowLocalPreview" autoplay playsinline muted style="display:none;width:180px;max-height:110px;object-fit:contain;background:#000;border-radius:6px"></video>
 </div>
 <div style="font-size:12px;opacity:.78;margin-top:4px">El navegador pedirá elegir una ventana o pantalla. En el móvil se mostrará como una ventana flotante con título y botón para cerrarla. Para ver cómo se mueven varias ventanas del ordenador, elige la pantalla completa. Esto transmite la imagen; no convierte todavía el móvil en un monitor extendido de Windows.</div>
@@ -250,6 +255,7 @@ body.admin-dark #adminVoiceTargets label{background:#0b1220!important;border-col
   <span id="screenDrawStatus" class="small" aria-live="polite">Conecta una pantalla para dibujar en el teléfono.</span>
 </div>
 <div style="font-size:12px;opacity:.78;margin-top:4px">Los trazos se envían a la pantalla del teléfono durante esta sesión compartida; son marcas visuales, no toques. No hace falta confirmar cada trazo. Android debe tener concedido una vez el permiso «Mostrar sobre otras aplicaciones».</div>
+<button id="adminScreenFullscreenButton" type="button" class="secondary" style="margin-top:10px" disabled>⛶ Pantalla completa del móvil</button>
 <div id="adminScreenStage" style="position:relative;display:none;width:100%;height:650px;max-height:75vh;margin-top:12px;border-radius:12px;background:#000;overflow:hidden;">
   <video id="adminScreenPreview" autoplay playsinline muted preload="auto" controlslist="nodownload noplaybackrate noremoteplayback" disablepictureinpicture style="display:block;width:100%;height:100%;border:0;border-radius:12px;background:#000;object-fit:contain;object-position:center;pointer-events:none;"></video>
   <div id="adminScreenControlSurface" aria-label="Superficie de guía y control remoto" style="position:absolute;inset:0;z-index:2;background:transparent;cursor:default;touch-action:none;"></div>
@@ -1188,18 +1194,38 @@ function screenAnnotationHit(a,p,m,radius=22){
 }
 function eraseScreenAnnotationAt(p){const m=screenAnnotationMetrics();if(!m)return;const hits=[];for(let i=adminScreenAnnotations.length-1;i>=0;i--){if(screenAnnotationHit(adminScreenAnnotations[i],p,m,22))hits.push(i);}if(hits.length){if(!adminScreenDrawSnapshotTaken){saveScreenAnnotationHistory();adminScreenDrawSnapshotTaken=true;}for(const i of hits)adminScreenAnnotations.splice(i,1);renderScreenAnnotations();}}
 function setScreenDrawTool(tool){adminScreenDrawTool=tool;document.querySelectorAll('[data-screen-draw-tool]').forEach(b=>{const active=b.dataset.screenDrawTool===tool;b.style.outline=active?'2px solid #f59e0b':'none';b.style.fontWeight=active?'800':'400';});const label={pen:'Lápiz',arrow:'Flecha',circle:'Círculo',eraser:'Borrador'}[tool]||'Lápiz';const s=$('screenDrawStatus');if(s)s.textContent='Herramienta: '+label+'. '+(tool==='eraser'?'Arrastra sobre las marcas del teléfono para borrarlas.':'Activa «Dibujar en el teléfono» y arrastra; las marcas aparecerán en el móvil.');}
+// Pantalla completa del visor Android: no modifica el flujo WebRTC.
+function updateAdminScreenFullscreenButton(){
+  const button=document.getElementById('adminScreenFullscreenButton');
+  const stage=document.getElementById('adminScreenStage');
+  if(!button||!stage)return;
+  button.disabled=stage.style.display==='none';
+  button.textContent=document.fullscreenElement===stage?'⛶ Salir de pantalla completa':'⛶ Pantalla completa del móvil';
+}
+async function toggleAdminScreenFullscreen(){
+  const stage=document.getElementById('adminScreenStage');
+  if(!stage||stage.style.display==='none')return;
+  try{
+    if(document.fullscreenElement===stage)await document.exitFullscreen();
+    else if(document.fullscreenElement) {await document.exitFullscreen();await stage.requestFullscreen();}
+    else await stage.requestFullscreen();
+  }catch(error){alert('No se pudo activar pantalla completa: '+(error?.message||error));}
+  updateAdminScreenFullscreenButton();
+}
+document.getElementById('adminScreenFullscreenButton')?.addEventListener('click',toggleAdminScreenFullscreen);
+document.addEventListener('fullscreenchange',updateAdminScreenFullscreenButton);
 function enableScreenControlUi(active){
   const v=$('adminScreenPreview'),stage=$('adminScreenStage'),surface=$('adminScreenControlSurface'),g=$('screenGuideModeEnabled'),gs=$('screenGuideSwipeEnabled'),t=$('screenRemoteControlEnabled'),draw=$('screenDrawModeEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl'),undo=$('screenDrawUndo'),clear=$('screenDrawClear');
-  const pcStart=$('screenPcWindowStart'),pcStop=$('screenPcWindowStop');if(pcStart)pcStart.disabled=!active;if(pcStop)pcStop.disabled=!active||!adminPcWindowStream;
+  const pcStart=$('screenPcWindowStart'),pcStop=$('screenPcWindowStop');if(pcStart)pcStart.disabled=false;if(pcStop)pcStop.disabled=!pcToAndroidStream;
   [g,gs,t,draw,b,h,r,undo,clear,...document.querySelectorAll('[data-screen-draw-tool]')].forEach(el=>{if(el)el.disabled=!active;});
-  if(stage)stage.style.display=active?'block':'none';
+  if(stage)stage.style.display=active?'block':'none';updateAdminScreenFullscreenButton();
   if(surface)surface.style.cursor=active?'crosshair':'default';
   if(v){v.controls=false;v.setAttribute('controlslist','nodownload noplaybackrate noremoteplayback');v.disablePictureInPicture=true;}
   const s=$('screenDrawStatus');if(s&&active)s.textContent='Pantalla conectada. Puedes dibujar sobre el teléfono.';renderScreenAnnotations();
 }
 function resetScreenControlUi(){
   const v=$('adminScreenPreview'),stage=$('adminScreenStage'),surface=$('adminScreenControlSurface'),g=$('screenGuideModeEnabled'),gs=$('screenGuideSwipeEnabled'),t=$('screenRemoteControlEnabled'),draw=$('screenDrawModeEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl'),undo=$('screenDrawUndo'),clear=$('screenDrawClear'),s=$('screenRemoteControlStatus'),ds=$('screenDrawStatus');
-  if(g)g.checked=false;if(gs)gs.checked=false;if(t)t.checked=false;if(draw)draw.checked=false;[g,gs,t,draw,b,h,r,undo,clear,...document.querySelectorAll('[data-screen-draw-tool]')].forEach(el=>{if(el)el.disabled=true;});if(stage)stage.style.display='none';if(surface)surface.style.cursor='default';if(v){v.controls=false;v.style.pointerEvents='none';v.setAttribute('controlslist','nodownload noplaybackrate noremoteplayback');v.disablePictureInPicture=true;}if(s)s.textContent='';if(ds)ds.textContent='Conecta una pantalla para dibujar.';adminScreenAnnotations.length=0;adminScreenAnnotationHistory.length=0;renderScreenAnnotations();
+  if(g)g.checked=false;if(gs)gs.checked=false;if(t)t.checked=false;if(draw)draw.checked=false;[g,gs,t,draw,b,h,r,undo,clear,...document.querySelectorAll('[data-screen-draw-tool]')].forEach(el=>{if(el)el.disabled=true;});if(stage)stage.style.display='none';if(document.fullscreenElement===stage)document.exitFullscreen().catch(()=>{});updateAdminScreenFullscreenButton();if(surface)surface.style.cursor='default';if(v){v.controls=false;v.style.pointerEvents='none';v.setAttribute('controlslist','nodownload noplaybackrate noremoteplayback');v.disablePictureInPicture=true;}if(s)s.textContent='';if(ds)ds.textContent='Conecta una pantalla para dibujar.';adminScreenAnnotations.length=0;adminScreenAnnotationHistory.length=0;renderScreenAnnotations();
 }
 function sendScreenControl(payload){
   if(!adminScreenSocket?.connected||!adminScreenRequestId)return;
@@ -1231,6 +1257,11 @@ function sendScreenRemotePointer(ev,visible=true,force=false){
   adminScreenSocket.emit('screenRemotePointer',{requestId:adminScreenRequestId,visible:Boolean(visible&&p),x:p?.x??0.5,y:p?.y??0.5});
 }
 async function startPcWindowShare(){
+  // Ruta antigua sustituida: el envío PC -> Android NO depende de adminScreenRequestId.
+  // Ambas entradas de la interfaz comparten el mismo flujo de consentimiento.
+  await pcToAndroidStart();
+  const n=$('screenPcWindowStatus');if(n)n.textContent=$('adminPhoneScreenStatus')?.textContent||'';
+  return;
   const status=$('screenPcWindowStatus'),start=$('screenPcWindowStart'),stop=$('screenPcWindowStop');
   if(!adminScreenSocket?.connected||!adminScreenRequestId||!adminScreenPeer){if(status)status.textContent='⚠️ Primero conecta la pantalla del móvil.';return;}
   if(!navigator.mediaDevices?.getDisplayMedia){if(status)status.textContent='⚠️ Este navegador no permite compartir ventanas. Usa Chrome o Edge actualizado.';return;}
@@ -1257,13 +1288,13 @@ function stopPcWindowShare(notify=true){
   if(peer){try{peer.onicecandidate=null;peer.close();}catch{}}
   const stream=adminPcWindowStream;adminPcWindowStream=null;if(stream)stream.getTracks().forEach(t=>{try{t.stop();}catch{}});
   const preview=$('screenPcWindowLocalPreview');if(preview){preview.pause?.();preview.srcObject=null;preview.style.display='none';}
-  const start=$('screenPcWindowStart'),stop=$('screenPcWindowStop');if(start)start.disabled=!adminScreenRequestId;if(stop)stop.disabled=true;
+  const start=$('screenPcWindowStart'),stop=$('screenPcWindowStop');if(start)start.disabled=false;if(stop)stop.disabled=!pcToAndroidStream;
   if(notify&&oldRequest&&adminScreenSocket?.connected)adminScreenSocket.emit('screenDesktopShareEnd',{requestId:oldRequest,reason:'La ventana del PC se ha cerrado desde Render.'});
 }
 $('screenPcWindowStart')?.addEventListener('click',startPcWindowShare);
 $('adminPhoneScreenStart')?.addEventListener('click',pcToAndroidStart);
 $('adminPhoneScreenStop')?.addEventListener('click',()=>{pcToAndroidStop(true);pcToAndroidStatus('Transmisión detenida.');});
-$('screenPcWindowStop')?.addEventListener('click',()=>{stopPcWindowShare(true);const st=$('screenPcWindowStatus');if(st)st.textContent='Ventana del PC cerrada.';});
+$('screenPcWindowStop')?.addEventListener('click',()=>{pcToAndroidStop(true);const st=$('screenPcWindowStatus');if(st)st.textContent='Transmisión del PC detenida.';});
 (function setupScreenRemoteControlUi(){
   const v=$('adminScreenPreview'),stage=$('adminScreenStage'),surface=$('adminScreenControlSurface'),t=$('screenRemoteControlEnabled'),b=$('screenBackControl'),h=$('screenHomeControl'),r=$('screenRecentsControl'),g=$('screenGuideModeEnabled'),gs=$('screenGuideSwipeEnabled'),drawMode=$('screenDrawModeEnabled'),undo=$('screenDrawUndo'),clear=$('screenDrawClear');
   if(!v||!t||!stage||!surface)return;
@@ -1315,7 +1346,7 @@ $('screenPcWindowStop')?.addEventListener('click',()=>{stopPcWindowShare(true);c
 })();
 
 function requestScreenSupervision(){const username=$("screenSupervisionTarget")?.value||'',enabled=$("screenSupervisionEnabled")?.checked===true;if(!enabled)return setScreenAdminStatus('Activa primero el acceso a pantallas.','msg error');if(!username)return setScreenAdminStatus('Selecciona un usuario con pantalla disponible.','msg error');ensureAdminScreenSocket();if(!adminScreenSocket?.connected||!adminScreenAuthenticated)return setScreenAdminStatus('Conectando el panel de pantalla… vuelve a pulsar.','msg');stopAdminScreen(false);adminScreenSocket.emit('adminScreenRequest',{username});setScreenAdminStatus(`Solicitando pantalla a @${username}…`,'msg');}
-function stopAdminScreen(sendEnd=true){const oldRequest=adminScreenRequestId;if(oldRequest&&adminScreenSocket?.connected)adminScreenSocket.emit('screenRemotePointer',{requestId:oldRequest,visible:false});stopPcWindowShare(false);if(sendEnd&&adminScreenSocket?.connected&&oldRequest)adminScreenSocket.emit('adminScreenEnd',{requestId:oldRequest});if(adminScreenPeer){try{adminScreenPeer.close();}catch{}}adminScreenPeer=null;adminScreenIceQueue=[];const v=$("adminScreenPreview"),stage=$("adminScreenStage");if(v){v.srcObject=null;v.style.display='block';}if(stage)stage.style.display='none';if($("stopScreenSupervision"))$("stopScreenSupervision").disabled=true;adminScreenRequestId='';const pcStart=$("screenPcWindowStart"),pcStop=$("screenPcWindowStop");if(pcStart)pcStart.disabled=true;if(pcStop)pcStop.disabled=true;resetScreenControlUi();}
+function stopAdminScreen(sendEnd=true){const oldRequest=adminScreenRequestId;if(oldRequest&&adminScreenSocket?.connected)adminScreenSocket.emit('screenRemotePointer',{requestId:oldRequest,visible:false});stopPcWindowShare(false);if(sendEnd&&adminScreenSocket?.connected&&oldRequest)adminScreenSocket.emit('adminScreenEnd',{requestId:oldRequest});if(adminScreenPeer){try{adminScreenPeer.close();}catch{}}adminScreenPeer=null;adminScreenIceQueue=[];const v=$("adminScreenPreview"),stage=$("adminScreenStage");if(v){v.srcObject=null;v.style.display='block';}if(stage)stage.style.display='none';if($("stopScreenSupervision"))$("stopScreenSupervision").disabled=true;adminScreenRequestId='';const pcStart=$("screenPcWindowStart"),pcStop=$("screenPcWindowStop");if(pcStart)pcStart.disabled=false;if(pcStop)pcStop.disabled=!pcToAndroidStream;resetScreenControlUi();}
 $("screenSupervisionEnabled")?.addEventListener('change',toggleScreenSupervision);$("requestScreenSupervision")?.addEventListener('click',requestScreenSupervision);$("stopScreenSupervision")?.addEventListener('click',()=>stopAdminScreen(true));
 loadScreenSupervision();setInterval(loadScreenSupervision,5000);
 
