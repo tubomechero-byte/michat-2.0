@@ -1059,8 +1059,11 @@ async function pcToAndroidStart(){
  if(!$('screenSupervisionEnabled')?.checked)return pcToAndroidStatus('Activa primero el acceso a pantallas.');
  if(!target)return pcToAndroidStatus('Selecciona primero un usuario Android.');
  if(!navigator.mediaDevices?.getDisplayMedia)return pcToAndroidStatus('Abre Admin por HTTPS en Chrome o Edge actualizado.');
+ // Validar la sesión antes de pedir al navegador permiso para capturar la pantalla.
+ try{await api('/api/admin/me');}catch(e){return pcToAndroidStatus('Sesión de administrador caducada o no válida. Cierra sesión y vuelve a entrar. '+(e.message||''));}
  ensureAdminScreenSocket();
- if(!adminScreenSocket?.connected||!adminScreenAuthenticated)return pcToAndroidStatus('Conectando con el servidor. Vuelve a pulsar.');
+ if(!adminScreenSocket?.connected)return pcToAndroidStatus('Conectando con Render. Espera unos segundos e inténtalo de nuevo.');
+ if(!adminScreenAuthenticated){adminScreenSocket.emit('adminAuthenticate',localStorage.getItem(tokenKey)||'');return pcToAndroidStatus('Autenticando conexión de pantalla. Espera unos segundos y vuelve a pulsar.');}
  pcToAndroidStop(true);
  try{
   // El navegador solicita permiso de captura al propietario del PC.
@@ -1094,8 +1097,9 @@ function ensureAdminScreenSocket(){
 if(adminScreenSocket&&adminScreenSocket.connected)return;
 adminScreenSocket=io();
 adminScreenSocket.on('connect',()=>adminScreenSocket.emit('adminAuthenticate',localStorage.getItem(tokenKey)||''));
-adminScreenSocket.on('adminAuthenticationError',m=>{adminScreenAuthenticated=false;setScreenAdminStatus(m||'No autorizado.','msg error');});
+adminScreenSocket.on('adminAuthenticationError',m=>{adminScreenAuthenticated=false;setScreenAdminStatus(m||'No autorizado.','msg error');pcToAndroidStatus('No se pudo autenticar la transmisión: '+String(m||'Sesión no válida')+'. Cierra sesión y vuelve a entrar.');});
 adminScreenSocket.on('adminAuthenticated',()=>{adminScreenAuthenticated=true;});
+adminScreenSocket.on('disconnect',()=>{adminScreenAuthenticated=false;if(pcToAndroidStream)pcToAndroidStatus('Conexión con Render interrumpida. Detén y vuelve a iniciar la transmisión.');});
 adminScreenSocket.on('adminScreenError',m=>{setScreenAdminStatus(String(m||'No se pudo iniciar la pantalla.'),'msg error');adminScreenRequestId='';resetScreenControlUi();});
 adminScreenSocket.on('adminPhoneScreenError',m=>{pcToAndroidStatus(String(m||'No se pudo iniciar la transmisión.'));pcToAndroidStop(false);});
 adminScreenSocket.on('adminPhoneScreenRequested',d=>{if(!pcToAndroidStream)return;pcToAndroidRequestId=String(d?.requestId||'');pcToAndroidStatus('Solicitud enviada; esperando aceptación del móvil…');});
