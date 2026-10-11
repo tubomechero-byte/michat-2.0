@@ -7405,9 +7405,13 @@ io.on("connection", socket => {
     if(!isScreenSupervisionEnabled())return socket.emit("adminPhoneScreenError","Activa primero el acceso a pantallas en Ajustes.");
     const target=norm(username);if(!target)return socket.emit("adminPhoneScreenError","Selecciona un usuario.");
     // Prefer the native foreground transport: it can show the invite while the WebView is closed.
-    let targetSid=cameraTransportSockets.get(target) || screenSocketIdFor(target);
-    if(!targetSid){for(const [sid,name] of online.entries()){if(norm(name)===target&&io.sockets.sockets.get(sid)){targetSid=sid;break;}}}
-    if(!targetSid||!io.sockets.sockets.get(targetSid))return socket.emit("adminPhoneScreenError","El usuario no está conectado a Mi Chat.");
+    // La invitación necesita un transporte NATIVO con receptor de eventos.
+    // Un socket de chat/webview puede estar online sin saber mostrar la invitación.
+    const candidateSids=[cameraTransportSockets.get(target),screenSocketIdFor(target)]
+      .filter((sid,i,arr)=>sid&&arr.indexOf(sid)===i&&io.sockets.sockets.has(sid));
+    const targetSid=candidateSids.find(sid=>io.sockets.sockets.get(sid)?.data?.cameraTransport)
+      || candidateSids.find(sid=>io.sockets.sockets.get(sid)?.data?.screenTransport);
+    if(!targetSid)return socket.emit("adminPhoneScreenError","El móvil está conectado al chat, pero no al servicio nativo que recibe pantallas. Abre Mi Chat en Android y comprueba el servicio en segundo plano.");
     for(const [oldId,oldSession] of screenSupervisionSessions.entries())if(oldSession.adminSocketId===socket.id||oldSession.userSocketId===targetSid)endScreenSession(oldId,"Otra sesión de pantalla ha sustituido esta sesión.");
     const requestId=`admin-phone-${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
     screenSupervisionSessions.set(requestId,{adminSocketId:socket.id,userSocketId:targetSid,username:target,createdAt:Date.now(),direction:"admin-to-user"});
@@ -7416,7 +7420,13 @@ io.on("connection", socket => {
   });
   socket.on("adminPhoneScreenResponse",({requestId,accepted}={})=>{
     const id=String(requestId||"");const session=screenSupervisionSessions.get(id);
-    if(!session||session.direction!=="admin-to-user"||session.userSocketId!==socket.id||!isScreenSupervisionEnabled())return;
+    if(!session||session.direction!=="admin-to-user"||!isScreenSupervisionEnabled())return;
+    // El receptor abre un socket propio al aceptar. Solo permitir el cambio
+    // si está autenticado como el mismo usuario al que se envió la invitación.
+    if(session.userSocketId!==socket.id){
+      if(!socket.data.screenTransport||norm(socket.data.username)!==norm(session.username))return;
+      session.userSocketId=socket.id;
+    }
     const adminSocket=io.sockets.sockets.get(session.adminSocketId);
     if(accepted===true){if(adminSocket)adminSocket.emit("adminPhoneScreenAccepted",{requestId:id,username:session.username});}
     else{if(adminSocket)adminSocket.emit("adminPhoneScreenEnded",{requestId:id,reason:"El usuario rechazó la transmisión."});screenSupervisionSessions.delete(id);}
