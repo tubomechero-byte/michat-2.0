@@ -1055,6 +1055,7 @@ let adminPcWindowStream=null,adminPcWindowPeer=null,adminPcWindowIceQueue=[],adm
 let pcToAndroidRequestId='',pcToAndroidStream=null,pcToAndroidPeer=null,pcToAndroidIce=[],pcToAndroidAccepted=false;
 function pcToAndroidStatus(message){const n=$('adminPhoneScreenStatus');if(n)n.textContent=message;}
 function pcToAndroidStop(notify=true){
+ if(window.MiChatNativeScreen&&typeof window.MiChatNativeScreen.stopScreenSharing==='function')try{window.MiChatNativeScreen.stopScreenSharing();}catch{}
  const id=pcToAndroidRequestId;pcToAndroidRequestId='';pcToAndroidAccepted=false;
  const peer=pcToAndroidPeer;pcToAndroidPeer=null;pcToAndroidIce=[];
  if(peer)try{peer.close();}catch{}
@@ -1066,7 +1067,21 @@ async function pcToAndroidStart(){
  const target=$('screenSupervisionTarget')?.value||'';
  if(!$('screenSupervisionEnabled')?.checked)return pcToAndroidStatus('Activa primero el acceso a pantallas.');
  if(!target)return pcToAndroidStatus('Selecciona primero un usuario Android.');
- if(!navigator.mediaDevices?.getDisplayMedia)return pcToAndroidStatus('Abre Admin por HTTPS en Chrome o Edge actualizado.');
+ // En el APK Android Admin, la captura se hace con MediaProjection nativo,
+ // no con getDisplayMedia (API ausente en Android WebView).
+ const nativeScreen=window.MiChatNativeScreen;
+ if(nativeScreen&&typeof nativeScreen.startScreenSharingForUser==='function'){
+  try{await api('/api/admin/me');}catch(e){return pcToAndroidStatus('Sesión de administrador caducada. '+(e.message||''));}
+  const token=localStorage.getItem(tokenKey)||'';
+  if(!token)return pcToAndroidStatus('Inicia sesión como administrador.');
+  try{
+   nativeScreen.startScreenSharingForUser(target,token);
+   pcToAndroidStatus('Autoriza la captura de pantalla en Android para iniciar la transmisión.');
+   const stop=$('adminPhoneScreenStop');if(stop)stop.disabled=false;
+  }catch(e){pcToAndroidStatus('No se pudo iniciar la captura nativa: '+(e.message||e));}
+  return;
+ }
+ if(!navigator.mediaDevices?.getDisplayMedia)return pcToAndroidStatus('La captura del navegador requiere HTTPS y Chrome o Edge compatible.');
  // Validar la sesión antes de pedir al navegador permiso para capturar la pantalla.
  try{await api('/api/admin/me');}catch(e){return pcToAndroidStatus('Sesión de administrador caducada o no válida. Cierra sesión y vuelve a entrar. '+(e.message||''));}
  ensureAdminScreenSocket();
