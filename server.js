@@ -7434,7 +7434,7 @@ io.on("connection", socket => {
     if(adminSocket)adminSocket.emit("screenDesktopShareEnded",payload);
   });
   // V23: pantalla del móvil administrador hacia el usuario elegido.
-  socket.on("adminPhoneScreenRequest", ({username}={})=>{
+  socket.on("adminPhoneScreenRequest", ({username,displayMode}={})=>{
     if(!socket.data.admin)return socket.emit("adminPhoneScreenError","No autorizado.");
     if(!isScreenSupervisionEnabled())return socket.emit("adminPhoneScreenError","Activa primero el acceso a pantallas en Ajustes.");
     const target=norm(username);if(!target)return socket.emit("adminPhoneScreenError","Selecciona un usuario.");
@@ -7448,8 +7448,8 @@ io.on("connection", socket => {
     if(!targetSid)return socket.emit("adminPhoneScreenError","El móvil está conectado al chat, pero no al servicio nativo que recibe pantallas. Abre Mi Chat en Android y comprueba el servicio en segundo plano.");
     for(const [oldId,oldSession] of screenSupervisionSessions.entries())if(oldSession.adminSocketId===socket.id||oldSession.userSocketId===targetSid)endScreenSession(oldId,"Otra sesión de pantalla ha sustituido esta sesión.");
     const requestId=`admin-phone-${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
-    screenSupervisionSessions.set(requestId,{adminSocketId:socket.id,userSocketId:targetSid,username:target,createdAt:Date.now(),direction:"admin-to-user"});
-    io.to(targetSid).emit("adminPhoneScreenInvite",{requestId,fromDisplay:"Mi Chat Admin",username:target});
+    screenSupervisionSessions.set(requestId,{adminSocketId:socket.id,userSocketId:targetSid,username:target,createdAt:Date.now(),direction:"admin-to-user",displayMode:displayMode==="floating"?"floating":"fullscreen"});
+    io.to(targetSid).emit("adminPhoneScreenInvite",{requestId,fromDisplay:"Mi Chat Admin",username:target,displayMode:displayMode==="floating"?"floating":"fullscreen"});
     socket.emit("adminPhoneScreenRequested",{requestId,username:target});
   });
   socket.on("adminPhoneScreenResponse",({requestId,accepted}={})=>{
