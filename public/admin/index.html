@@ -365,7 +365,7 @@ async function loadDeviceStatus(){
    const battery=s.batteryPercent==null?'—':`${Math.round(Number(s.batteryPercent))}%${s.charging?' · cargando':''}`;
    const device=[s.model,s.androidVersion?'Android '+s.androidVersion:''].filter(Boolean).join(' · ')||'Sin datos Android';
    const updated=s.updatedAt?new Date(s.updatedAt).toLocaleString('es-ES'):'Sin informe';
-   const actions=['wifi','bluetooth','battery','app','flashlight'].map(action=>`<button type="button" class="secondary" style="margin:2px" data-device-action="${action}" data-device-user="${escAttr(item.username)}" ${online?'':'disabled'}>${deviceActionLabel(action)}</button>`).join('');
+   const actions=['wifi','bluetooth','battery','app','flashlight'].map(action=>`<button type="button" class="secondary" style="margin:2px" data-device-action="${action}" data-device-user="${escAttr(item.username)}" ${online?'':'disabled'}>${deviceActionLabel(action)}</button>`).join('') + `<button type="button" class="secondary" style="margin:2px" data-activation-user="${escAttr(item.username)}">Solicitar activar</button>`;
    return `<tr><td>@${esc(item.username)}<br><span class="small">${online?'Conectado':'Desconectado'}</span></td><td>${esc(s.network||'—')}</td><td>${esc(battery)}</td><td>${esc(s.wifi||'—')}</td><td>${esc(s.bluetooth||'—')}</td><td>${esc(device)}<br><span class="small">${esc(s.appVersion?'Mi Chat '+s.appVersion:'')}</span></td><td>${esc(updated)}</td><td>${actions}</td></tr>`;
   }).join('')||'<tr><td colspan="8">No hay usuarios registrados.</td></tr>';
   if(msg){msg.className='msg ok';msg.textContent=`Estado actualizado · ${new Date(data.observedAt||Date.now()).toLocaleTimeString('es-ES')}`;}
@@ -378,6 +378,14 @@ async function sendDeviceSettingsRequest(username,action){
   const msg=$('deviceStatusMsg');if(msg){msg.className='msg ok';msg.textContent=result.message||'Solicitud enviada.';}
  }catch(e){const msg=$('deviceStatusMsg');if(msg){msg.className='msg error';msg.textContent=e.message||'No se pudo enviar la solicitud.';}}
 }
+document.addEventListener('click',async ev=>{
+ const btn=ev.target?.closest?.('[data-activation-user]');
+ if(!btn)return;
+ const username=btn.getAttribute('data-activation-user');
+ if(!confirm(`Enviar solicitud de activación a @${username}?`))return;
+ try {const result=await api('/api/admin/request-activation',{method:'POST',body:JSON.stringify({username})});$('deviceStatusMsg').textContent=result.message;}
+ catch(e){$('deviceStatusMsg').textContent=e.message||'Error enviando solicitud';}
+});
 document.addEventListener('click',ev=>{
  const btn=ev.target&&ev.target.closest?ev.target.closest('[data-device-action]'):null;
  if(btn)sendDeviceSettingsRequest(btn.getAttribute('data-device-user')||'',btn.getAttribute('data-device-action')||'');
