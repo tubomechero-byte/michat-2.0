@@ -1071,7 +1071,7 @@ function pcToAndroidStop(notify=true){
  if(notify&&id&&adminScreenSocket?.connected)adminScreenSocket.emit('adminPhoneScreenEnd',{requestId:id});
  const stop=$('adminPhoneScreenStop');if(stop)stop.disabled=true;
 }
-async function pcToAndroidStart(){
+async function pcToAndroidStart(mode='fullscreen'){
  const target=$('screenSupervisionTarget')?.value||'';
  if(!$('screenSupervisionEnabled')?.checked)return pcToAndroidStatus('Activa primero el acceso a pantallas.');
  if(!target)return pcToAndroidStatus('Selecciona primero un usuario Android.');
@@ -1083,6 +1083,7 @@ async function pcToAndroidStart(){
   const token=localStorage.getItem(tokenKey)||'';
   if(!token)return pcToAndroidStatus('Inicia sesión como administrador.');
   try{
+   if(mode==='floating'){pcToAndroidStatus('La captura desde APK Admin usa el modo completo; para ventana flotante comparte desde Chrome/Edge en PC.');return;}
    nativeScreen.startScreenSharingForUser(target,token);
    pcToAndroidStatus('Autoriza la captura de pantalla en Android para iniciar la transmisión.');
    const stop=$('adminPhoneScreenStop');if(stop)stop.disabled=false;
@@ -1102,7 +1103,7 @@ async function pcToAndroidStart(){
   if(!stream.getVideoTracks().length){stream.getTracks().forEach(t=>t.stop());return;}
   pcToAndroidStream=stream;stream.getVideoTracks()[0].addEventListener('ended',()=>{pcToAndroidStop(true);pcToAndroidStatus('Has detenido la captura del PC.');},{once:true});
   pcToAndroidStatus('Solicitando al usuario Android que acepte ver tu pantalla…');
-  adminScreenSocket.emit('adminPhoneScreenRequest',{username:target});
+  adminScreenSocket.emit('adminPhoneScreenRequest',{username:target,displayMode:mode});
   const stop=$('adminPhoneScreenStop');if(stop)stop.disabled=false;
  }catch(e){pcToAndroidStop(false);pcToAndroidStatus(e?.name==='NotAllowedError'?'No autorizaste compartir la pantalla.':String(e?.message||'No se pudo iniciar la captura.'));}
 }
@@ -1284,7 +1285,7 @@ function sendScreenRemotePointer(ev,visible=true,force=false){
 async function startPcWindowShare(){
   // Ruta antigua sustituida: el envío PC -> Android NO depende de adminScreenRequestId.
   // Ambas entradas de la interfaz comparten el mismo flujo de consentimiento.
-  await pcToAndroidStart();
+  await pcToAndroidStart('floating');
   const n=$('screenPcWindowStatus');if(n)n.textContent=$('adminPhoneScreenStatus')?.textContent||'';
   return;
   const status=$('screenPcWindowStatus'),start=$('screenPcWindowStart'),stop=$('screenPcWindowStop');
