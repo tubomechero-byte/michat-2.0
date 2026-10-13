@@ -1966,7 +1966,7 @@ app.use(express.json({ limit: "12mb" }));
 app.get("/api/update/latest", async (req, res) => {
   try {
     const manifest = await readLatestUpdateManifest();
-    if (!manifest) return res.status(404).json({ available: false });
+    if (!manifest || manifest.available === false) return res.status(404).json({ available: false });
     res.set("Cache-Control", "no-store");
     res.json({ ...manifest, available: true });
   } catch (error) {
@@ -1981,7 +1981,7 @@ app.get("/api/admin/update-files", requireAdmin, async (req, res) => {
     const listing = await listSupabaseStorageFiles(UPDATE_BUCKET, 5000);
     const files = (listing.files || [])
       .filter(item => String(item.path || "").toLowerCase().endsWith(".apk"))
-      .map(item => ({ ...item, current: !!manifest && String(manifest.fileName || "") === String(item.path || "") }));
+      .map(item => ({ ...item, current: !!manifest && manifest.available !== false && String(manifest.fileName || "") === String(item.path || "") }));
     files.sort((a,b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
     res.json({ files, current: manifest || null });
   } catch (error) {
@@ -1994,7 +1994,7 @@ app.delete("/api/admin/update-files", requireAdmin, async (req, res) => {
     const fileName = String(req.body?.fileName || "").replace(/^\/+/, "").trim();
     if (!fileName || !fileName.toLowerCase().endsWith(".apk")) return res.status(400).json({ error: "Archivo de actualización no válido." });
     const manifest = await readLatestUpdateManifest();
-    if (manifest && String(manifest.fileName || "") === fileName) {
+    if (manifest && manifest.available !== false && String(manifest.fileName || "") === fileName) {
       return res.status(409).json({ error: "No puedes borrar la actualización actualmente publicada." });
     }
     await supabaseStorageRequest(`object/${encodeURIComponent(UPDATE_BUCKET)}`, {
@@ -2005,6 +2005,26 @@ app.delete("/api/admin/update-files", requireAdmin, async (req, res) => {
     res.json({ success: true, fileName });
   } catch (error) {
     res.status(500).json({ error: error.message || "No se pudo borrar el APK." });
+  }
+});
+
+// Retirar la publicación sin borrar automáticamente el APK almacenado.
+// Un manifiesto desactivado persiste en Supabase y evita que reaparezca tras reiniciar Render.
+app.delete("/api/admin/update-current", requireAdmin, async (req, res) => {
+  try {
+    await ensureUpdateBucket();
+    const current = await readLatestUpdateManifest();
+    if (!current || current.available === false) return res.json({ success: true, alreadyRemoved: true });
+    const revoked = { available: false, revokedAt: new Date().toISOString(), revokedVersionCode: Number(current.versionCode || 0) };
+    await uploadUpdateObject(UPDATE_MANIFEST_PATH, Buffer.from(JSON.stringify(revoked), "utf8"), "application/json");
+    for (const user of users()) {
+      const username = String(user?.username || "").trim();
+      if (username) sendPushToUser(username, { type: "update_cancelled", versionCode: String(current.versionCode || 0) });
+    }
+    addAdminActivity(`@${req.admin.username} retiró la actualización publicada ${current.versionName || ""}.`);
+    res.set("Cache-Control", "no-store").json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message || "No se pudo retirar la actualización." });
   }
 });
 
