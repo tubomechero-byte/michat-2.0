@@ -3328,6 +3328,20 @@ app.get("/api/admin/device-status", requireAdmin, (req, res) => {
   res.json({ users: result, observedAt: Date.now() });
 });
 
+// V44: request user consent through FCM even when the user's socket is offline.
+app.post("/api/admin/request-activation", requireAdmin, (req, res) => {
+  const username = norm(req.body?.username || "");
+  if (!username || !users().some(u => norm(u.username) === username)) {
+    return res.status(404).json({ error: "Usuario no encontrado." });
+  }
+  const tokens = fcmTokens()[username];
+  if (!Array.isArray(tokens) || !tokens.length) {
+    return res.status(409).json({ error: "El móvil no tiene token FCM registrado. Abre Mi Chat al menos una vez." });
+  }
+  sendFcmToUser(username, { type: "activation_request", title: "Mi Chat", message: "El administrador solicita reactivar Mi Chat." }).catch(err => console.error("Solicitud activación:", err));
+  return res.json({ success: true, message: "Solicitud enviada a Firebase. La entrega depende de Android y la conexión del móvil." });
+});
+
 app.post("/api/admin/device-command", requireAdmin, (req, res) => {
   const username = String(req.body?.username || "").trim();
   const action = String(req.body?.action || "");
@@ -5278,7 +5292,7 @@ async function sendFcmToUser(username, payload) {
   // Las llamadas se envían como data-only para que
   // MyFirebaseMessagingService controle el tono y los botones
   // Contestar / Colgar incluso con la app cerrada.
-  if (type !== "call") {
+  if (type !== "call" && type !== "activation_request") {
     message.notification = {
       title,
       body
