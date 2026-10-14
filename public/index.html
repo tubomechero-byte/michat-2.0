@@ -1133,6 +1133,21 @@ html.darkTheme .mobileBottomNav button.active .navPill{background:#0b4f47}
 @media (min-width: 901px){
   #mobileBottomNav{display:none!important;}
 }
+
+/* V57: pantalla Privacidad; controles existentes de supervisión intactos */
+#settingsModal .modalBox{max-width:580px;max-height:88vh;overflow:auto}
+.privacyPersonalSection{border:1px solid var(--border-color,#e2e6e9);border-radius:15px;padding:16px;margin:15px 0;background:var(--panel-bg,#fff)}
+.privacyPersonalSection h3{margin:0 0 7px;font-size:17px}
+.privacyHelp{font-size:12px;line-height:1.55;color:#667781;margin:6px 0 14px}
+.privacyChoice{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #e7ebec}
+.privacyChoice:last-of-type{border-bottom:0}
+.privacyChoice label{font-size:14px;font-weight:600}
+.privacyChoice select{max-width:175px;min-width:130px;padding:8px 9px;border:1px solid #cbd5d8;border-radius:9px;background:var(--panel-bg,#fff);color:inherit}
+.privacyAdminHeading{display:flex;align-items:center;gap:8px;margin:18px 0 7px}
+.privacyExtraOptions{margin:8px 0 18px;border-radius:12px;border:1px solid #e2e6e9;padding:12px}
+.privacyExtraOptions summary{cursor:pointer;font-weight:650}
+.privacyExtraOptions .settingsMenu{margin-top:12px}
+.privacySaveMessage{display:block;min-height:18px;font-size:12px;color:#128c7e;margin-top:5px}
 </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -1830,6 +1845,54 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
  html #layout.mobileChat + #mobileBottomNav{display:none!important}
 }
 </style>
+
+<style id="michat-v56-professional-ui">
+/* Professional, original iconography stored locally as PNG; preserve legacy event bindings. */
+:root{--v56-green:#087d5a;--v56-mint:#d6f4e7;--v56-bg:#f6f7f8;--v56-ink:#17251f;--v56-line:#e8eced}
+.v56-icon{width:21px;height:21px;object-fit:contain;vertical-align:middle;flex-shrink:0}
+.v56-subscriptions-icon{width:94px;height:94px;margin:0 auto 24px;background:#e5f6ed;border-radius:28px;display:grid;place-items:center}
+.v56-subscriptions-icon img{width:52px;height:52px}
+.waEmptyLogo img{width:55px;height:55px;object-fit:contain}
+@media(max-width:740px){
+html body,html #app,html #layout{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif!important}
+html .headerProfileName:after{font-weight:760!important;color:#087d5a!important;letter-spacing:-.8px!important}
+html .sidebarHeader .headerTop{height:70px!important;min-height:70px!important;padding-inline:20px!important}
+html #chatsPage .search{padding:6px 17px 9px!important}
+html #chatsPage .search:before{content:''!important;top:18px!important;left:32px!important;width:21px;height:21px;background:url('/ui-v56/icons/search.png') center/contain no-repeat}
+html #searchInput{background:#f2f4f4!important;font-size:15px!important;height:48px!important;border-radius:28px!important}
+html #waFilterBar{padding:10px 17px 11px!important;gap:8px!important}
+html #waFilterBar .waFilterBtn{font-size:13px!important;min-height:34px!important;padding:7px 13px!important}
+html #waFilterBar .waFilterBtn.active{background:#d9f2e4!important;border-color:transparent!important;color:#086e4a!important}
+.v55-chat-shortcuts{padding:5px 12px 8px!important}
+.v55-chat-shortcuts button{font-size:14px!important;border-radius:11px!important;min-height:47px!important}
+.v55-chat-shortcuts button:active,.profileActionBtn:active{background:#eff8f3!important}
+.v55-chat-shortcuts .v56-icon{width:22px;height:22px}
+html #users .user,html #users .userItem,html #users .contact{min-height:77px!important;border-bottom:1px solid #f1f3f3!important}
+.v55-new-chat{background:#0a8f60!important;border-radius:17px!important;box-shadow:0 6px 18px #0b50302e!important}
+html #mobileBottomNav{height:74px!important;min-height:74px!important;background:#fff!important;border-top:1px solid #e5e9e6!important}
+html #mobileBottomNav button .navPill{height:33px!important;min-width:58px!important;border-radius:19px!important}
+html #mobileBottomNav button.active .navPill{background:#d5f3e3!important}
+html #mobileBottomNav button .navIcon{font-size:21px!important}
+html #mobileBottomNav button .navLabel{font-size:11px!important}
+html .tabPageHeader h2{font-size:27px!important;font-weight:750!important}
+html .tabPageHeader{padding:17px 18px 12px!important;min-height:76px!important}
+.v55-profile-cover{height:116px!important;background:#f3f7f5!important;background-image:none!important}
+.v55-profile-cover>span{background:transparent!important;font-size:12px!important;color:#58685f!important}
+.v55-profile-art{top:46px!important;background:#d8f2e3!important;border:5px solid white!important;box-shadow:0 6px 20px #0c31201c!important}
+.v55-profile-art .v56-icon{width:46px;height:46px}
+html .profileCard{padding-top:30px!important}
+html .profileActionBtn{min-height:75px!important;border-bottom:1px solid #f0f2f1!important}
+html .profileActionBtn strong{display:flex;gap:15px;align-items:center;font-size:15px!important;font-weight:600!important}
+html .profileActionBtn span{font-size:12px!important;padding-left:37px!important}
+html .quickActionsMenu{background:#f4f5f7!important;border:1px solid #e2e7e9!important;border-radius:20px!important;box-shadow:0 14px 35px #0003!important;padding:12px!important}
+html .quickActionsMenu button{border-radius:12px!important;font-size:15px!important;font-weight:500!important;min-height:47px!important}
+html .quickActionsMenu .actionBtn,html .quickActionsMenu .waMenuNavButton{background:#fff!important;color:#1c2923!important}
+html .quickActionsMenu button:active{background:#dff2e7!important}
+html .quickActionsMenu i{color:#1d3026!important}
+html .authBox{border:1px solid #eff0ee!important}
+html .authButton{background:#087d5a!important}
+}
+</style>
 </head>
 
 <body>
@@ -1911,7 +1974,7 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
 <div id="privacyCustomizeModal" class="modal" style="display:none;z-index:100001;" aria-hidden="true">
   <div class="modalBox" style="max-width:560px;max-height:88vh;overflow:auto;">
     <h2 style="margin-top:0">⚙️ Personalizar configuraciones de privacidad</h2>
-    <p style="line-height:1.5;color:#4b5563">Todas aparecen activadas inicialmente. Desmarca cualquiera que no quieras permitir; puedes cambiarlo más tarde desde Ajustes. Estos interruptores son preferencias de Mi Chat: Android seguirá pidiendo sus propios permisos cuando corresponda.</p>
+    <p style="line-height:1.5;color:#4b5563">Todas aparecen activadas inicialmente. Desmarca cualquiera que no quieras permitir; puedes cambiarlo más tarde desde Privacidad. Estos interruptores son preferencias de Mi Chat: Android seguirá pidiendo sus propios permisos cuando corresponda.</p>
     <div id="registrationPrivacyOptions" style="display:flex;flex-direction:column;gap:9px;">
       <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyLocation" checked><span><b>📍 Ubicación</b><br><small>Permitir el uso de ubicación cuando utilices funciones que la necesiten.</small></span></label>
       <label class="messageLoggingSetting"><input type="checkbox" id="regPrivacyCamera" checked><span><b>📷 Cámara</b><br><small>Permitir solicitudes de cámara del administrador.</small></span></label>
@@ -1989,7 +2052,7 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
         <button type="button" class="desktopRailBtn" data-desktop-tab="profile" title="Perfil" aria-label="Perfil">
           <span class="desktopRailAvatar" id="desktopRailAvatar"><span>?</span></span>
         </button>
-        <button id="desktopSettingsButton" type="button" class="desktopRailBtn" title="Ajustes" aria-label="Ajustes">
+        <button id="desktopSettingsButton" type="button" class="desktopRailBtn" title="Privacidad" aria-label="Privacidad">
           <span class="desktopRailIcon"><i class="fa-solid fa-gear"></i></span>
         </button>
       </div>
@@ -2024,7 +2087,7 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
           <button type="button" class="waMenuNavButton" data-wa-menu-tab="calls"><i class="fa-solid fa-phone" style="width:20px"></i>Llamadas</button>
           <button type="button" class="waMenuNavButton" data-wa-menu-tab="profile"><i class="fa-solid fa-user" style="width:20px"></i>Perfil</button>
           <div class="waMenuDivider"></div>
-          <button id="settingsButton" type="button"><i class="fa-solid fa-gear" style="width:20px;margin-right:8px"></i>Ajustes</button>
+          <button id="settingsButton" type="button"><i class="fa-solid fa-shield-halved" style="width:20px;margin-right:8px"></i>Privacidad</button>
           <button id="logoutButton" type="button"><i class="fa-solid fa-right-from-bracket" style="width:20px;margin-right:8px"></i>Salir</button>
         </div>
       </header>
@@ -2040,7 +2103,7 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
           <span id="customChatFilters" style="display:contents"></span>
           <button type="button" id="addCustomChatList" class="waFilterBtn" title="Crear lista" aria-label="Crear lista">＋</button>
         </div>
-        <div class="v55-chat-shortcuts" aria-label="Accesos de chats"><button type="button" id="v55RequestsLink">📥 <span>Solicitudes</span><span class="v55-next">›</span></button><button type="button" id="v55GroupsLink">▣ <span>Grupos y comunidades</span><span class="v55-next">›</span></button></div><div id="users"></div><button id="v55NewChatFab" class="v55-new-chat" type="button" title="Nuevo chat" aria-label="Nuevo chat"><i class="fa-solid fa-square-plus"></i></button>
+        <div class="v55-chat-shortcuts" aria-label="Accesos de chats"><button type="button" id="v55RequestsLink"><img class="v56-icon" src="/ui-v56/icons/inbox.png" alt=""> <span>Solicitudes</span><span class="v55-next">›</span></button><button type="button" id="v55GroupsLink"><img class="v56-icon" src="/ui-v56/icons/users.png" alt=""> <span>Grupos y comunidades</span><span class="v55-next">›</span></button></div><div id="users"></div><button id="v55NewChatFab" class="v55-new-chat" type="button" title="Nuevo chat" aria-label="Nuevo chat"><i class="fa-solid fa-square-plus"></i></button>
       </section>
 
       <section id="newsPage" class="mainTabPage hiddenTab newsPage">
@@ -2066,36 +2129,36 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
         <div class="tabPageHeader">
           <div class="tabPageHeaderText"><h2>Llamadas</h2><div class="tabPageHeaderSub">Historial de llamadas</div></div>
         </div>
-        <div class="v55-call-shortcuts"><button type="button" id="v55CallNew"><span>☎</span>Llamar</button><button type="button" id="v55CallGroups"><span>♧</span>Grupos</button><button type="button" id="v55CallSearch"><span>⌕</span>Buscar</button></div><h3 class="v55-call-caption">Recientes</h3><div id="callsList" class="callsList"></div>
+        <div class="v55-call-shortcuts"><button type="button" id="v55CallNew"><span><img class="v56-icon" src="/ui-v56/icons/call.png" alt=""></span>Llamar</button><button type="button" id="v55CallGroups"><span><img class="v56-icon" src="/ui-v56/icons/users.png" alt=""></span>Grupos</button><button type="button" id="v55CallSearch"><span><img class="v56-icon" src="/ui-v56/icons/search.png" alt=""></span>Buscar</button></div><h3 class="v55-call-caption">Recientes</h3><div id="callsList" class="callsList"></div>
       </section>
 
       <section id="profilePage" class="mainTabPage hiddenTab profilePage">
         <div class="tabPageHeader">
           <div class="tabPageHeaderText"><h2>Perfil</h2><div class="tabPageHeaderSub">Tu cuenta y configuración</div></div>
         </div>
-        <div class="v55-profile-cover"><span>Exprésate con emojis</span><div class="v55-profile-art">✦</div></div><div class="profilePageInner">
+        <div class="v55-profile-cover"><span>Tu perfil de Mi Chat</span><div class="v55-profile-art"><img class="v56-icon" src="/ui-v56/icons/profile.png" alt=""></div></div><div class="profilePageInner">
           <div id="profileTabCard" class="profileCard"></div>
           <div class="profileActions">
-            <button id="profileEditButton" class="profileActionBtn" type="button"><strong>👤 Editar perfil</strong><span>Cambia tu nombre, foto, correo o teléfono.</span></button>
-            <button id="profileSettingsButton" class="profileActionBtn" type="button"><strong>⚙️ Ajustes</strong><span>Notificaciones, privacidad y otras opciones.</span></button>
-            <button id="profileAccountButton" class="profileActionBtn" type="button"><strong>🔐 Cuenta</strong><span>Usuario y contraseña.</span></button>
-            <button id="profileListsButton" class="profileActionBtn" type="button"><strong>📋 Listas</strong><span>Organiza tus chats en apartados personalizados.</span></button>
-            <button id="profileSubscriptionsButton" class="profileActionBtn" type="button"><strong>💎 Suscripciones</strong><span>Descubre las próximas novedades.</span></button>
-            <button id="profileBlockedButton" class="profileActionBtn" type="button"><strong>🚫 Usuarios bloqueados</strong><span>Gestiona tus bloqueos.</span></button>
+            <button id="profileEditButton" class="profileActionBtn" type="button"><strong><img class="v56-icon" src="/ui-v56/icons/edit.png" alt="">Editar perfil</strong><span>Cambia tu nombre, foto, correo o teléfono.</span></button>
+            <button id="profileSettingsButton" class="profileActionBtn" type="button"><strong><img class="v56-icon" src="/ui-v56/icons/shield.png" alt="">Privacidad</strong><span>Información personal y acceso del administrador.</span></button>
+            <button id="profileAccountButton" class="profileActionBtn" type="button"><strong><img class="v56-icon" src="/ui-v56/icons/lock.png" alt="">Cuenta</strong><span>Usuario y contraseña.</span></button>
+            <button id="profileListsButton" class="profileActionBtn" type="button"><strong><img class="v56-icon" src="/ui-v56/icons/list.png" alt="">Listas</strong><span>Organiza tus chats en apartados personalizados.</span></button>
+            <button id="profileSubscriptionsButton" class="profileActionBtn" type="button"><strong><img class="v56-icon" src="/ui-v56/icons/spark.png" alt="">Suscripciones</strong><span>Descubre las próximas novedades.</span></button>
+            <button id="profileBlockedButton" class="profileActionBtn" type="button"><strong><img class="v56-icon" src="/ui-v56/icons/shield.png" alt="">Usuarios bloqueados</strong><span>Gestiona tus bloqueos.</span></button>
             <button id="profileLogoutButton" class="profileActionBtn" type="button"><strong>Salir</strong><span>Cerrar sesión de Mi Chat.</span></button>
           </div>
         </div>
       </section>
       <section id="subscriptionPage" class="mainTabPage hiddenTab profilePage" style="overflow:auto">
         <div class="tabPageHeader"><button id="subscriptionBack" type="button" class="profileActionBtn" style="width:auto;padding:10px 14px">← Volver</button><h2>Suscripciones</h2></div>
-        <div style="text-align:center;padding:80px 25px"><div style="font-size:64px">💎</div><h1>Disponible pronto</h1><p>Estamos preparando nuevas funciones para Mi Chat.</p></div>
+        <div style="text-align:center;padding:80px 25px"><div class="v56-subscriptions-icon"><img src="/ui-v56/icons/spark.png" alt=""></div><h1>Disponible pronto</h1><p>Estamos preparando nuevas funciones para Mi Chat.</p></div>
       </section>
     </aside>
 
     <main class="chat">
       <section id="emptyState">
         <div class="waEmptyInner">
-          <div class="waEmptyLogo"><i class="fa-brands fa-whatsapp"></i></div>
+          <div class="waEmptyLogo"><img src="/ui-v56/icons/chat.png" alt=""></div>
           <h1>Mi Chat</h1>
           <p>Envía y recibe mensajes sin necesidad de mantener esta ventana abierta todo el tiempo.<br>Selecciona una conversación para empezar a chatear.</p>
           <div class="waEncryption"><i class="fa-solid fa-lock"></i><span>Tus conversaciones están protegidas</span></div>
@@ -2111,8 +2174,8 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
             <div id="chatSubtitle" class="chatSubtitle">Usa el botón de nuevo chat para iniciar una conversación.</div>
           </div>
           <div class="chatTools">
-            <button id="callButton" class="toolBtn callBtn hidden" type="button" title="Llamada">📞</button>
-            <button id="videoCallButton" class="toolBtn videoBtn hidden" type="button" title="Videollamada">📹</button>
+            <button id="callButton" class="toolBtn callBtn hidden" type="button" title="Llamada"><img class="v56-icon" src="/ui-v56/icons/call.png" alt=""></button>
+            <button id="videoCallButton" class="toolBtn videoBtn hidden" type="button" title="Videollamada"><img class="v56-icon" src="/ui-v56/icons/video.png" alt=""></button>
             <button id="hangupButton" class="toolBtn hangBtn hidden" type="button" title="Colgar">📵</button>
             <button id="chatSearchButton" class="toolBtn" type="button" title="Buscar"><i class="fa-solid fa-magnifying-glass"></i></button>
             <div id="groupActionsWrap" class="groupActionsWrap" aria-hidden="true">
@@ -2328,9 +2391,20 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
 <!-- CONFIGURACIÓN -->
 <div id="settingsModal" class="modal">
   <div class="modalBox">
-    <h2>⚙️ Configuración</h2>
+    <h2 style="display:flex;align-items:center;gap:10px"><img src="/ui-v56/icons/shield.png" alt="" style="width:25px;height:25px"> Privacidad</h2>
+    <section class="privacyPersonalSection" aria-labelledby="privacyPersonalTitle">
+      <h3 id="privacyPersonalTitle">Quién puede ver mi información personal</h3>
+      <p class="privacyHelp">Elige quién podrá ver cada dato. Estas opciones se guardan en este dispositivo; la aplicación del control de visibilidad en el servidor aún está pendiente.</p>
+      <div class="privacyChoice"><label for="privacyLastSeen">Hora de últ. vez y En línea</label><select id="privacyLastSeen"><option value="everyone">Todos</option><option value="contacts">Mis contactos</option><option value="nobody">Nadie</option></select></div>
+      <div class="privacyChoice"><label for="privacyAvatar">Foto de perfil</label><select id="privacyAvatar"><option value="everyone">Todos</option><option value="contacts">Mis contactos</option><option value="nobody">Nadie</option></select></div>
+      <div class="privacyChoice"><label for="privacyBio">Info</label><select id="privacyBio"><option value="everyone">Todos</option><option value="contacts">Mis contactos</option><option value="nobody">Nadie</option></select></div>
+      <div class="privacyChoice"><label for="privacyStatus">Estado</label><select id="privacyStatus"><option value="everyone">Todos</option><option value="contacts">Mis contactos</option><option value="nobody">Nadie</option></select></div>
+      <span id="privacySavedMessage" class="privacySaveMessage" role="status"></span>
+    </section>
+    <h3 class="privacyAdminHeading"><img src="/ui-v56/icons/lock.png" alt="" style="width:21px;height:21px"> Administrador</h3>
+    <p class="privacyHelp">Decide qué funciones de supervisión permites. Android seguirá solicitando sus autorizaciones obligatorias.</p>
 
-    <div class="settingsMenu">
+    <details class="privacyExtraOptions"><summary>Otras opciones de la cuenta</summary><div class="settingsMenu">
 
       <button id="settingsProfile" class="settingsItem">
         <div class="settingsItemTitle">👤 Nombre y foto</div>
@@ -2372,6 +2446,14 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
         </div>
       </button>
 
+    </div></details>
+
+    <div class="messageLoggingSetting" id="adminLocationPrivacyBlock">
+      <label><input id="adminLocationPrivacyToggle" type="checkbox"><span>
+        <div class="messageLoggingSettingTitle"><img class="v56-icon" src="/ui-v56/icons/location.png" alt=""> Compartir ubicación con el administrador</div>
+        <div class="messageLoggingSettingSub">Permite o deja de compartir tu ubicación en tiempo real. Android puede requerir autorización adicional.</div>
+      </span></label>
+      <div id="adminLocationPrivacyStatus" class="messageLoggingSettingStatus" aria-live="polite"></div>
     </div>
 
     <div id="cameraSupervisionActiveNotice" style="display:none;margin-top:12px;padding:12px 14px;border-radius:10px;background:#b91c1c;color:#fff;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.18);">
@@ -5314,6 +5396,8 @@ callAdminLocationButton?.addEventListener("click", async ()=>{
     const data = await response.json().catch(()=>({}));
     if(!response.ok) throw new Error(data.error || "No se pudo cambiar el uso compartido con el administrador.");
     adminLocationSharingEnabled = data.enabled === true;
+    const locToggle = document.getElementById("adminLocationPrivacyToggle");
+    if (locToggle) locToggle.checked = adminLocationSharingEnabled;
     syncNativeLocationSharing(adminLocationSharingEnabled);
     if(data.enabled === true){
       startLocationSharingWatch();
@@ -5328,6 +5412,23 @@ callAdminLocationButton?.addEventListener("click", async ()=>{
   }finally{
     callAdminLocationButton.disabled = false;
   }
+});
+document.getElementById("adminLocationPrivacyToggle")?.addEventListener("change", async (event) => {
+  const checkbox = event.currentTarget;
+  const status = document.getElementById("adminLocationPrivacyStatus");
+  const requested = checkbox.checked;
+  checkbox.disabled = true;
+  if(status) status.textContent = "Guardando…";
+  // Se utiliza la misma operación ya existente en el botón de ubicación para Admin.
+  if(callAdminLocationButton && (adminLocationSharingEnabled !== requested)) {
+    callAdminLocationButton.click();
+    // El código del botón es asíncrono: consultar el estado real al finalizar.
+    await new Promise(resolve => setTimeout(resolve, 550));
+    await loadLocationSharingPreference();
+  }
+  checkbox.checked = adminLocationSharingEnabled === true;
+  checkbox.disabled = false;
+  if(status) status.textContent = checkbox.checked === requested ? "Preferencia actualizada." : "No se pudo cambiar la preferencia.";
 });
 cancelLocationShare?.addEventListener("click", closeLocationShareModal);
 locationShareModal?.addEventListener("click", e => { if(e.target === locationShareModal) closeLocationShareModal(); });
@@ -7066,6 +7167,8 @@ async function loadLocationSharingPreference(){
     const data=await response.json().catch(()=>({}));
     if(!response.ok) throw new Error(data.error||"No se pudo cargar el estado de ubicación.");
     adminLocationSharingEnabled = data.enabled === true;
+    const locToggle = document.getElementById("adminLocationPrivacyToggle");
+    if (locToggle) locToggle.checked = adminLocationSharingEnabled;
     syncNativeLocationSharing(adminLocationSharingEnabled);
     updateCallAdminLocationButton();
     if(adminLocationSharingEnabled) startLocationSharingWatch();
@@ -7220,8 +7323,32 @@ $("settingsTheme").onclick = () => {
   setDarkTheme(enabled);
 };
 
+// V57: las preferencias personales son solo de interfaz hasta integrar visibilidad con el backend.
+const PERSONAL_PRIVACY_FIELDS = ["privacyLastSeen", "privacyAvatar", "privacyBio", "privacyStatus"];
+function privacyLocalKey(){
+  return "michat_personal_privacy_v57_" + (typeof myUsername !== "undefined" && myUsername ? String(myUsername) : "invitado");
+}
+function loadPersonalPrivacyChoices(){
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(privacyLocalKey()) || "{}"); } catch(e){}
+  PERSONAL_PRIVACY_FIELDS.forEach(id => {
+    const select = document.getElementById(id);
+    if (!select) return;
+    select.value = ["everyone", "contacts", "nobody"].includes(saved[id]) ? saved[id] : "contacts";
+  });
+}
+function savePersonalPrivacyChoices(){
+  const values = {};
+  PERSONAL_PRIVACY_FIELDS.forEach(id => { const el = document.getElementById(id); if(el) values[id] = el.value; });
+  try { localStorage.setItem(privacyLocalKey(), JSON.stringify(values)); } catch(e){}
+  const note = document.getElementById("privacySavedMessage");
+  if(note) note.textContent = "Preferencias guardadas en este dispositivo (aún no aplicadas al servidor).";
+}
+PERSONAL_PRIVACY_FIELDS.forEach(id => document.getElementById(id)?.addEventListener("change", savePersonalPrivacyChoices));
+
 $("settingsButton").onclick = async () => {
   $("settingsModal").style.display = "flex";
+  loadPersonalPrivacyChoices();
   await loadMessageLoggingPreference();
 };
 
