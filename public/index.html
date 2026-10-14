@@ -1708,6 +1708,51 @@ html:not(.darkTheme) .fileAttachment{background:#f0f2f5!important;color:#111b21!
 html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!important;border:1px solid var(--wa-border)!important}
 </style>
 
+<style id="michat-figma-v53-functional">
+/* V53: estilo real de las seis referencias de Figma, aplicado a componentes funcionales.
+   Los SVG originales contienen capturas incrustadas; no se usan como botones falsos. */
+@media (max-width: 740px) {
+ html:not(.darkTheme) body, html:not(.darkTheme) #app, html:not(.darkTheme) .layout,
+ html:not(.darkTheme) .sidebar, html:not(.darkTheme) .mainTabPage {background:#fff!important;color:#151918!important}
+ .sidebarHeader {background:#fff!important;border:0!important;box-shadow:none!important}
+ .sidebarHeader .headerTop {min-height:64px!important;padding:12px 14px 7px!important}
+ .headerProfileAvatar {display:none!important}
+ .headerProfileName {font-size:26px!important;font-weight:800!important;color:#08a452!important;letter-spacing:-.8px!important}
+ .topButtons .headerIconBtn {background:transparent!important;border:0!important;color:#252a28!important;font-size:21px!important}
+ #headerStatusButton {display:none!important}
+ #chatsPage .search {background:#fff!important;padding:6px 12px 10px!important}
+ #searchInput {background:#f4f4f4!important;border:0!important;border-radius:30px!important;height:43px!important;padding:0 17px 0 42px!important;font-size:14px!important}
+ #chatsPage .search {position:relative!important}
+ #chatsPage .search:before {content:'⌕';position:absolute;left:28px;top:9px;font-size:29px;color:#68726f;z-index:2;pointer-events:none}
+ #waFilterBar {display:flex!important;gap:6px!important;white-space:nowrap!important;overflow-x:auto!important;scrollbar-width:none!important;background:#fff!important;padding:9px 12px 14px!important;border:0!important}
+ #waFilterBar::-webkit-scrollbar {display:none!important}
+ .waFilterBtn {flex:0 0 auto!important;background:#fff!important;border:1px solid #ddd!important;color:#5d6664!important;border-radius:22px!important;padding:7px 13px!important;font-size:13px!important}
+ .waFilterBtn.active {background:#ddfbe4!important;border-color:#b6edc5!important;color:#13894b!important}
+ #users {background:#fff!important}
+ #users .user, #users .userItem {min-height:72px!important;border-bottom:0!important;padding:9px 14px!important;background:#fff!important}
+ #users .userAvatar, #users .avatar {border-radius:50%!important}
+ .mobileBottomNav {display:flex!important;height:70px!important;background:#fff!important;border-top:1px solid #e8ebe9!important;box-shadow:none!important;padding:5px 4px max(5px,env(safe-area-inset-bottom))!important}
+ .mobileBottomNav button {font-size:11px!important;min-width:0!important;gap:3px!important;color:#303835!important}
+ .mobileBottomNav .navPill {min-width:44px!important;min-height:28px!important;border-radius:30px!important}
+ .mobileBottomNav .navIcon {font-size:19px!important}
+ .mobileBottomNav button.active .navPill {background:#d7fbdc!important}
+ .mobileBottomNav button.active {color:#087a45!important}
+ .tabPageHeader {background:#fff!important;border:0!important;padding:16px 16px 10px!important}
+ .tabPageHeader h2 {font-size:24px!important;color:#191c1b!important;font-weight:700!important}
+ .tabPageHeaderSub {font-size:12px!important;color:#68716b!important}
+ #newsPage, #callsPage, #profilePage {background:#fff!important}
+ .profilePageInner {background:#fff!important;padding:0!important}
+ .profileActions {background:#fff!important;gap:0!important}
+ .profileActionBtn {background:#fff!important;border:0!important;border-radius:0!important;min-height:64px!important;padding:12px 22px!important;border-bottom:1px solid #f3f3f3!important;box-shadow:none!important}
+ .profileActionBtn strong {font-weight:500!important;color:#232827!important}
+ .profileActionBtn span {font-size:12px!important;color:#747b78!important}
+ .profileCard {background:#fff!important;box-shadow:none!important;border:0!important;border-radius:0!important}
+ #messages {background-color:#ece5d9!important}
+ #messages .mine .bubble {background:#d8ffd6!important}
+ #messages .bubble {border-radius:10px!important}
+ .messageInput {background:#f3f0ec!important}
+}
+</style>
 </head>
 
 <body>
@@ -1909,7 +1954,7 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
 
       <section id="chatsPage" class="mainTabPage">
         <div class="search">
-          <input id="searchInput" placeholder="Buscar un chat o iniciar uno nuevo" autocomplete="off">
+          <input id="searchInput" placeholder="Preguntar o buscar" autocomplete="off">
         </div>
         <div id="waFilterBar" aria-label="Filtros de chats">
           <button type="button" class="waFilterBtn active" data-filter="all">Todos</button>
@@ -1923,7 +1968,7 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
 
       <section id="newsPage" class="mainTabPage hiddenTab newsPage">
         <div class="tabPageHeader storiesHeader">
-          <div class="tabPageHeaderText"><h2>Estados</h2></div>
+          <div class="tabPageHeaderText"><h2>Novedades</h2></div>
           <div class="storiesHeaderActions">
             <button id="newsStoryMenuButton" class="storiesHeaderIconBtn" type="button" aria-label="Más opciones">⋮</button>
             <button id="newsCreateStoryButton" class="storiesHeaderIconBtn storiesHeaderAddBtn" type="button" aria-label="Crear estado">＋</button>
@@ -1949,7 +1994,7 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
 
       <section id="profilePage" class="mainTabPage hiddenTab profilePage">
         <div class="tabPageHeader">
-          <div class="tabPageHeaderText"><h2>Tú</h2><div class="tabPageHeaderSub">Tu cuenta y configuración</div></div>
+          <div class="tabPageHeaderText"><h2>Perfil</h2><div class="tabPageHeaderSub">Tu cuenta y configuración</div></div>
         </div>
         <div class="profilePageInner">
           <div id="profileTabCard" class="profileCard"></div>
@@ -2034,19 +2079,19 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
     </button>
     <button type="button" data-main-tab="news" aria-label="Estados" title="Estados">
       <span class="navPill"><span class="navIcon"><i class="fa-solid fa-circle-notch"></i></span></span>
-      <span class="navLabel">Estados</span>
+      <span class="navLabel">Novedades</span>
     </button>
     <button type="button" data-main-tab="calls" aria-label="Llamadas" title="Llamadas">
       <span class="navPill"><span class="navIcon"><i class="fa-solid fa-phone"></i></span></span>
       <span class="navLabel">Llamadas</span>
     </button>
-    <button type="button" data-main-tab="communities" aria-label="Grupos" title="Grupos">
+    <button type="button" data-main-tab="communities" aria-label="Comunidades" title="Comunidades">
       <span class="navPill"><span class="navIcon"><i class="fa-solid fa-users"></i></span></span>
-      <span class="navLabel">Grupos</span>
+      <span class="navLabel">Comunidades</span>
     </button>
-    <button type="button" data-main-tab="profile" aria-label="Configuración" title="Configuración">
+    <button type="button" data-main-tab="profile" aria-label="Tú" title="Tú">
       <span class="navPill"><span class="navIcon"><i class="fa-solid fa-gear"></i></span></span>
-      <span class="navLabel">Ajustes</span>
+      <span class="navLabel">Tú</span>
     </button>
   </nav>
 </div>
