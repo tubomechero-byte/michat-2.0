@@ -8,7 +8,7 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
   try {
-    if (localStorage.getItem("michat_theme") !== "light") {
+    if (localStorage.getItem("michat_theme") === "dark") {
       document.documentElement.classList.add("darkTheme");
     }
   } catch {}
@@ -1753,6 +1753,83 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
  .messageInput {background:#f3f0ec!important}
 }
 </style>
+<style id="michat-v55-figma-rebuild">
+/* Mi Chat V55. Sustituye el aspecto del shell sin reemplazar los identificadores
+   ni los controladores de eventos originales. Los SVG se incluyen como referencia,
+   no como botones: una captura SVG no es una interfaz interactiva. */
+@media (max-width:740px) {
+ :root{color-scheme:light}
+ html body,html #app,html #layout,html .layout,html .sidebar,html .mainTabPage {background:#fff!important;color:#191d1b!important;font-family:Arial,Helvetica,sans-serif!important}
+ html .sidebar{border:0!important;min-width:0!important}
+ html .sidebarHeader{background:#fff!important;border:0!important;padding:0!important;min-height:58px!important}
+ html .sidebarHeader .headerTop{height:64px!important;min-height:64px!important;padding:7px 14px!important}
+ html .headerProfileAvatar{display:none!important}
+ html .headerProfileName{font-size:0!important;letter-spacing:0!important}
+ html .headerProfileName:after{content:'Mi Chat';font-size:27px!important;line-height:1;color:#128c66;font-weight:800;letter-spacing:-.9px}
+ html .topButtons{gap:1px!important}
+ html .topButtons .headerIconBtn{display:flex!important;align-items:center;justify-content:center;background:transparent!important;border:0!important;color:#242827!important;font-size:21px!important;border-radius:50%!important;width:37px!important;height:39px!important;padding:0!important}
+ html #headerStatusButton{display:none!important}
+ html #chatsPage .search{padding:2px 14px 9px!important;margin:0!important;border:0!important;background:white!important;position:relative}
+ html #chatsPage .search:before{content:'⌕';position:absolute;top:2px;left:28px;font-size:29px;color:#67716b;z-index:2;pointer-events:none}
+ html #searchInput{background:#f4f4f4!important;border:0!important;border-radius:26px!important;height:43px!important;padding:0 16px 0 45px!important;width:100%!important;font-size:14px!important;box-shadow:none!important}
+ html #waFilterBar{background:white!important;display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;gap:5px!important;padding:5px 11px 9px!important;border:0!important;white-space:nowrap!important;flex-shrink:0!important}
+ html #waFilterBar .waFilterBtn{background:white!important;color:#5f6462!important;border:1px solid #e0e3e0!important;border-radius:19px!important;padding:5px 11px!important;min-height:28px!important;white-space:nowrap!important;flex-shrink:0!important;font-size:12px!important;font-weight:500!important}
+ html #waFilterBar .waFilterBtn.active{background:#d5f7d9!important;color:#0d793c!important;border-color:#b6ebc1!important}
+ .v55-chat-shortcuts{padding:8px 11px 3px;background:#fff;display:flex;flex-direction:column;flex-shrink:0}
+ .v55-chat-shortcuts button{border:0;background:#fff!important;color:#35413a!important;font-size:13px;text-align:left;min-height:41px;padding:6px 10px;display:flex;align-items:center;gap:12px;cursor:pointer}
+ .v55-chat-shortcuts button span:nth-child(1){flex:1}.v55-chat-shortcuts .v55-next{margin-left:auto;color:#b0b8b1;font-size:20px}
+ html #users{background:#fff!important;padding-bottom:90px!important;overflow:auto!important}
+ html #users .user,html #users .userItem,html #users .contact{background:#fff!important;border:0!important;box-shadow:none!important;min-height:74px!important;padding:8px 13px!important;border-radius:0!important}
+ html #users .userAvatar,html #users .avatar{border-radius:50%!important;width:49px!important;height:49px!important}
+ .v55-new-chat{position:fixed;bottom:calc(84px + var(--android-nav-offset,0px));right:15px;z-index:70;background:#0eac61;color:#fff;border:0;border-radius:15px;width:53px;height:53px;font-size:24px;box-shadow:0 4px 14px #0003;display:flex;align-items:center;justify-content:center;cursor:pointer}
+ html #mobileBottomNav{display:flex!important;position:relative!important;z-index:110!important;background:#fff!important;border-top:1px solid #edf0ed!important;box-shadow:none!important;padding:4px 3px max(6px,env(safe-area-inset-bottom))!important;height:67px!important;min-height:67px!important;flex-shrink:0!important}
+ html #mobileBottomNav button{color:#2e3430!important;font-size:10px!important;font-weight:500!important;border:0!important;border-radius:0!important;gap:2px!important;padding:0!important}
+ html #mobileBottomNav button .navPill{height:28px!important;min-width:43px!important;border-radius:17px!important;display:flex!important;align-items:center;justify-content:center}
+ html #mobileBottomNav button .navIcon{font-size:18px!important;color:inherit!important}
+ html #mobileBottomNav button .navLabel{font-size:10px!important;color:inherit!important}
+ html #mobileBottomNav button.active .navPill{background:#d6f9df!important}
+ html #mobileBottomNav button.active{color:#087e45!important}
+ html .tabPageHeader{min-height:64px!important;background:#fff!important;padding:14px 15px 9px!important;border:0!important}
+ html .tabPageHeader h2{font-size:25px!important;font-weight:700!important;color:#242a26!important}
+ html .tabPageHeaderSub{color:#68736d!important}
+ html #newsPage,html #callsPage,html #profilePage,html #communityPage{background:#fff!important}
+ html #newsPage .storiesHeader{background:#fff!important;border:0!important;min-height:68px!important}
+ html #newsPage .storiesHeader h2{color:#1c211e!important;font-size:25px!important}
+ html #newsPage .storiesHeaderIconBtn{color:#25302a!important;background:transparent!important}
+ html #newsPage .storiesBar{background:#fff!important}
+ html #newsPage .storyItem{border-bottom:1px solid #f1f3f0!important;background:white!important;padding:11px 16px!important}
+ html #newsPage .storyRing{border-radius:13px!important}
+ html .storySectionTitle{color:#242a27!important;text-transform:none!important;font-size:17px!important}
+ .v55-call-shortcuts{display:flex;gap:10px;padding:8px 12px 16px;overflow-x:auto;flex-shrink:0}
+ .v55-call-shortcuts button{display:flex;flex-direction:column;align-items:center;gap:8px;border:0;background:#fff;min-width:71px;cursor:pointer;color:#303630;font-size:12px}
+ .v55-call-shortcuts button span{width:51px;height:51px;background:#f5f6f5;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;color:#252e28}
+ .v55-call-caption{font-size:17px;font-weight:600;margin:10px 15px;color:#1f2723}
+ html .callsList{background:#fff!important;padding:5px 12px 90px!important}
+ html .callsItem{min-height:64px;border-bottom:0!important}
+ html .callsItem .callAction{background:transparent!important;color:#1b9a5d!important}
+ .v55-profile-cover{height:126px;position:relative;background-color:#f8f6ef;background-image:radial-gradient(circle at 12px 20px,#e9e5dd 2px,transparent 3px),radial-gradient(circle at 50px 55px,#e9e5dd 2px,transparent 3px);background-size:55px 55px;text-align:center;padding-top:19px}
+ .v55-profile-cover>span{background:white;color:#686763;border-radius:15px;padding:5px 10px;font-size:11px}
+ .v55-profile-art{position:absolute;top:57px;left:50%;transform:translateX(-50%);border:4px solid white;background:linear-gradient(45deg,#09144f,#6b11db,#fa468a);border-radius:50%;height:91px;width:91px;color:#fff;font-size:36px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 7px #0002}
+ html .profilePageInner{padding:25px 0 90px!important;background:#fff!important}
+ html .profileCard{padding:19px 14px 24px!important;background:white!important;border:0!important;box-shadow:none!important;border-radius:0!important;justify-content:center;flex-direction:column;text-align:center;gap:5px!important;margin:0!important}
+ html .profileCard .avatar{display:none!important}
+ html .profileCardName{font-size:20px!important;color:#1c2420!important}
+ html .profileActions{gap:0!important;background:#fff!important}
+ html .profileActionBtn{background:#fff!important;border:0!important;border-bottom:1px solid #f4f5f3!important;box-shadow:none!important;border-radius:0!important;padding:13px 23px!important;min-height:64px!important}
+ html .profileActionBtn strong{font-size:14px!important;font-weight:500!important;color:#282f2b!important}
+ html .profileActionBtn span{font-size:11px!important;color:#79827b!important}
+ html .chatHeader{background:#fff!important;min-height:57px!important;border-bottom:1px solid #f0f0f0!important;color:#202820!important}
+ html #messages{background-color:#e7e8dc!important;background-image:radial-gradient(#cdd5c5 0.7px,transparent 0.7px)!important;background-size:22px 22px!important}
+ html #messages .mine .bubble{background:#d7ffc6!important}
+ html #messages .bubble{border-radius:10px!important}
+ html .messageInput{background:#f4f3ed!important;gap:3px!important}
+ html .messageInput #messageInput{background:white!important;border-radius:22px!important}
+ html #authScreen{background:#128c7e!important}
+ html .authBox{border-radius:24px!important;box-shadow:0 8px 35px #063f3433!important}
+ html .authButton{background:#128c7e!important}
+ html #layout.mobileChat + #mobileBottomNav{display:none!important}
+}
+</style>
 </head>
 
 <body>
@@ -1963,7 +2040,7 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
           <span id="customChatFilters" style="display:contents"></span>
           <button type="button" id="addCustomChatList" class="waFilterBtn" title="Crear lista" aria-label="Crear lista">＋</button>
         </div>
-        <div id="users"></div>
+        <div class="v55-chat-shortcuts" aria-label="Accesos de chats"><button type="button" id="v55RequestsLink">📥 <span>Solicitudes</span><span class="v55-next">›</span></button><button type="button" id="v55GroupsLink">▣ <span>Grupos y comunidades</span><span class="v55-next">›</span></button></div><div id="users"></div><button id="v55NewChatFab" class="v55-new-chat" type="button" title="Nuevo chat" aria-label="Nuevo chat"><i class="fa-solid fa-square-plus"></i></button>
       </section>
 
       <section id="newsPage" class="mainTabPage hiddenTab newsPage">
@@ -1989,14 +2066,14 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
         <div class="tabPageHeader">
           <div class="tabPageHeaderText"><h2>Llamadas</h2><div class="tabPageHeaderSub">Historial de llamadas</div></div>
         </div>
-        <div id="callsList" class="callsList"></div>
+        <div class="v55-call-shortcuts"><button type="button" id="v55CallNew"><span>☎</span>Llamar</button><button type="button" id="v55CallGroups"><span>♧</span>Grupos</button><button type="button" id="v55CallSearch"><span>⌕</span>Buscar</button></div><h3 class="v55-call-caption">Recientes</h3><div id="callsList" class="callsList"></div>
       </section>
 
       <section id="profilePage" class="mainTabPage hiddenTab profilePage">
         <div class="tabPageHeader">
           <div class="tabPageHeaderText"><h2>Perfil</h2><div class="tabPageHeaderSub">Tu cuenta y configuración</div></div>
         </div>
-        <div class="profilePageInner">
+        <div class="v55-profile-cover"><span>Exprésate con emojis</span><div class="v55-profile-art">✦</div></div><div class="profilePageInner">
           <div id="profileTabCard" class="profileCard"></div>
           <div class="profileActions">
             <button id="profileEditButton" class="profileActionBtn" type="button"><strong>👤 Editar perfil</strong><span>Cambia tu nombre, foto, correo o teléfono.</span></button>
@@ -2074,23 +2151,23 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
 
   <nav id="mobileBottomNav" class="mobileBottomNav" aria-label="Navegación principal" aria-hidden="false">
     <button type="button" data-main-tab="chats" aria-label="Chats" title="Chats">
-      <span class="navPill"><span class="navIcon"><i class="fa-solid fa-comments"></i></span></span>
+      <span class="navPill"><span class="navIcon"><i class="fa-solid fa-inbox"></i></span></span>
       <span class="navLabel">Chats</span>
     </button>
     <button type="button" data-main-tab="news" aria-label="Estados" title="Estados">
       <span class="navPill"><span class="navIcon"><i class="fa-solid fa-circle-notch"></i></span></span>
       <span class="navLabel">Novedades</span>
     </button>
-    <button type="button" data-main-tab="calls" aria-label="Llamadas" title="Llamadas">
-      <span class="navPill"><span class="navIcon"><i class="fa-solid fa-phone"></i></span></span>
-      <span class="navLabel">Llamadas</span>
-    </button>
     <button type="button" data-main-tab="communities" aria-label="Comunidades" title="Comunidades">
       <span class="navPill"><span class="navIcon"><i class="fa-solid fa-users"></i></span></span>
       <span class="navLabel">Comunidades</span>
     </button>
+    <button type="button" data-main-tab="calls" aria-label="Llamadas" title="Llamadas">
+      <span class="navPill"><span class="navIcon"><i class="fa-solid fa-phone"></i></span></span>
+      <span class="navLabel">Llamadas</span>
+    </button>
     <button type="button" data-main-tab="profile" aria-label="Tú" title="Tú">
-      <span class="navPill"><span class="navIcon"><i class="fa-solid fa-gear"></i></span></span>
+      <span class="navPill"><span class="navIcon"><i class="fa-solid fa-circle-user"></i></span></span>
       <span class="navLabel">Tú</span>
     </button>
   </nav>
@@ -9306,6 +9383,37 @@ window.addEventListener(
 </script>
 
 
+<script id="michat-v55-ui-actions">
+// V55: only delegate to working pre-existing controls; do not copy their handlers.
+(function(){
+  function proxy(id,target){
+    const node=document.getElementById(id), dest=document.getElementById(target);
+    if(node && dest) node.addEventListener('click',()=>dest.click());
+  }
+  proxy('v55NewChatFab','headerNewChatButton');
+  proxy('v55RequestsLink','requestsButton');
+  proxy('v55GroupsLink','communityCreateButton');
+  proxy('v55CallNew','headerNewChatButton');
+  proxy('v55CallGroups','communityCreateButton');
+  const callSearch=document.getElementById('v55CallSearch');
+  if(callSearch)callSearch.addEventListener('click',()=>{
+     const q=prompt('Buscar llamadas por nombre (filtrar historial mostrado):');
+     if(q===null)return;
+     const term=q.trim().toLocaleLowerCase();
+     document.querySelectorAll('#callsList .callsItem').forEach(row=>{
+       row.style.display=row.textContent.toLocaleLowerCase().includes(term)?'':'none';
+     });
+  });
+  // Avoid global FAB obscuring other tabs, dialogs and chat when appropriate.
+  const fab=document.getElementById('v55NewChatFab');
+  if(fab){
+    const update=()=>{fab.style.display=document.getElementById('chatsPage')?.classList.contains('hiddenTab')||document.getElementById('layout')?.classList.contains('mobileChat')?'none':'';};
+    update();
+    new MutationObserver(update).observe(document.getElementById('chatsPage'),{attributes:true,attributeFilter:['class']});
+    new MutationObserver(update).observe(document.getElementById('layout'),{attributes:true,attributeFilter:['class']});
+  }
+})();
+</script>
 </body>
 </html>
 
