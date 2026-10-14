@@ -1221,7 +1221,8 @@ body{overflow:hidden}
 #chatsPage .search:before{display:none}
 #searchInput{height:40px!important;padding:0 14px 0 40px!important;border:0!important;border-radius:8px!important;background:var(--wa-header)!important;color:var(--wa-text)!important;box-shadow:none!important}
 #searchInput::placeholder{color:var(--wa-subtext)!important}
-#waFilterBar{display:flex;gap:8px;padding:4px 12px 9px;background:var(--wa-panel)}
+#waFilterBar{display:flex;gap:8px;padding:4px 12px 9px;background:var(--wa-panel);overflow-x:auto;white-space:nowrap;align-items:center}
+#waFilterBar .waFilterBtn{flex-shrink:0}
 .waFilterBtn{border:0;border-radius:18px;padding:7px 13px;background:var(--wa-header);color:var(--wa-subtext);font-size:12px;cursor:pointer}
 .waFilterBtn.active{background:var(--wa-active);color:#00a884}
 
@@ -1914,6 +1915,8 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
           <button type="button" class="waFilterBtn active" data-filter="all">Todos</button>
           <button type="button" class="waFilterBtn" data-filter="unread">No leídos</button>
           <button type="button" class="waFilterBtn" data-filter="groups">Grupos</button>
+          <span id="customChatFilters" style="display:contents"></span>
+          <button type="button" id="addCustomChatList" class="waFilterBtn" title="Crear lista" aria-label="Crear lista">＋</button>
         </div>
         <div id="users"></div>
       </section>
@@ -1954,10 +1957,16 @@ html.darkTheme .fileAttachment{background:#202c33!important;color:#e9edef!import
             <button id="profileEditButton" class="profileActionBtn" type="button"><strong>👤 Editar perfil</strong><span>Cambia tu nombre, foto, correo o teléfono.</span></button>
             <button id="profileSettingsButton" class="profileActionBtn" type="button"><strong>⚙️ Ajustes</strong><span>Notificaciones, privacidad y otras opciones.</span></button>
             <button id="profileAccountButton" class="profileActionBtn" type="button"><strong>🔐 Cuenta</strong><span>Usuario y contraseña.</span></button>
+            <button id="profileListsButton" class="profileActionBtn" type="button"><strong>📋 Listas</strong><span>Organiza tus chats en apartados personalizados.</span></button>
+            <button id="profileSubscriptionsButton" class="profileActionBtn" type="button"><strong>💎 Suscripciones</strong><span>Descubre las próximas novedades.</span></button>
             <button id="profileBlockedButton" class="profileActionBtn" type="button"><strong>🚫 Usuarios bloqueados</strong><span>Gestiona tus bloqueos.</span></button>
             <button id="profileLogoutButton" class="profileActionBtn" type="button"><strong>Salir</strong><span>Cerrar sesión de Mi Chat.</span></button>
           </div>
         </div>
+      </section>
+      <section id="subscriptionPage" class="mainTabPage hiddenTab profilePage" style="overflow:auto">
+        <div class="tabPageHeader"><button id="subscriptionBack" type="button" class="profileActionBtn" style="width:auto;padding:10px 14px">← Volver</button><h2>Suscripciones</h2></div>
+        <div style="text-align:center;padding:80px 25px"><div style="font-size:64px">💎</div><h1>Disponible pronto</h1><p>Estamos preparando nuevas funciones para Mi Chat.</p></div>
       </section>
     </aside>
 
@@ -2643,17 +2652,86 @@ const mainTabPages = {
   news: $("newsPage"),
   communities: $("communityPage"),
   calls: $("callsPage"),
-  profile: $("profilePage")
+  profile: $("profilePage"),
+  subscriptions: $("subscriptionPage")
 };
 const mainBottomNav = $("mobileBottomNav");
 let activeMainTab = "chats";
 let activeChatFilter = "all";
 
+// Listas locales vinculadas al nombre de usuario de esta sesión.
+let customChatLists = [];
+let chatListOwner = null;
+function chatListsStorageKey(){ return "michat_custom_lists_v1_" + String(myUsername || "").toLowerCase(); }
+function loadCustomChatLists(){
+  const owner = String(myUsername || "").toLowerCase();
+  if(owner === chatListOwner) return;
+  chatListOwner = owner;
+  try {
+    const stored = JSON.parse(localStorage.getItem(chatListsStorageKey()) || "[]");
+    customChatLists = Array.isArray(stored) ? stored.filter(x => x && typeof x.id === "string" && typeof x.name === "string" && Array.isArray(x.members)).slice(0,30) : [];
+  } catch { customChatLists = []; }
+  renderCustomChatFilters();
+}
+function saveCustomChatLists(){
+  try { localStorage.setItem(chatListsStorageKey(), JSON.stringify(customChatLists)); } catch(e) { alert("No se pudieron guardar las listas en este dispositivo."); }
+  renderCustomChatFilters();
+}
+function renderCustomChatFilters(){
+  const host = document.getElementById("customChatFilters");
+  if(!host) return;
+  host.replaceChildren();
+  customChatLists.forEach(list => {
+    const b = document.createElement("button");
+    b.type="button"; b.className="waFilterBtn"; b.dataset.filter="list:"+list.id;
+    b.textContent=list.name; b.title="Mantén pulsado para editar esta lista";
+    b.classList.toggle("active", activeChatFilter === b.dataset.filter);
+    let timer, longPressed=false;
+    b.addEventListener("pointerdown", () => { longPressed=false; timer=setTimeout(() => { longPressed=true; editChatList(list); },650); });
+    ["pointerup","pointerleave","pointercancel"].forEach(type => b.addEventListener(type, () => clearTimeout(timer)));
+    b.addEventListener("click", () => { if(!longPressed) setChatFilter(b.dataset.filter); });
+    host.appendChild(b);
+  });
+}
+function editChatList(list){
+  if(!list) return;
+  const choice = prompt(`Lista: ${list.name}\nEscribe 1 para editar miembros, 2 para cambiar nombre o 3 para eliminar.`, "1");
+  if(choice === "2"){
+    const name = prompt("Nuevo nombre de la lista:",list.name)?.trim();
+    if(name){ list.name=name.slice(0,28); saveCustomChatLists(); renderUsers(); }
+  }else if(choice === "3"){
+    if(confirm(`¿Eliminar la lista «${list.name}»? Los chats no se eliminarán.`)){
+      customChatLists=customChatLists.filter(x=>x.id!==list.id);
+      if(activeChatFilter === "list:"+list.id) activeChatFilter="all";
+      saveCustomChatLists(); setChatFilter(activeChatFilter);
+    }
+  }else if(choice === "1"){
+    const contactNames = allUsers.filter(u=>u?.username && isContact(u.username) && norm(u.username)!==norm(myUsername)).map(u=>u.username);
+    const choices = contactNames.map((name,i) => `${i+1}. ${name}${list.members.some(m=>norm(m)===norm(name)) ? " ✓" : ""}`).join("\n");
+    if(!contactNames.length){ alert("Todavía no tienes contactos para añadir."); return; }
+    const input=prompt("Introduce los números de los contactos que quieres en esta lista, separados por comas.\n"+choices, contactNames.map((n,i)=>list.members.some(m=>norm(m)===norm(n))?i+1:null).filter(Boolean).join(","));
+    if(input===null) return;
+    const indexes=input.split(",").map(x=>Number(x.trim())-1).filter(i=>Number.isInteger(i)&&i>=0&&i<contactNames.length);
+    list.members=[...new Set(indexes)].map(i=>contactNames[i]);
+    saveCustomChatLists(); renderUsers();
+  }
+}
+function createOrManageChatList(){
+  loadCustomChatLists();
+  const name=prompt("Nombre de la nueva lista (por ejemplo, Familia o Trabajo).\nPara editar una existente, mantén pulsada su pestaña.");
+  if(name===null || !name.trim()) return;
+  if(customChatLists.length>=30){ alert("Puedes crear hasta 30 listas."); return; }
+  const list={id: String(Date.now())+"_"+Math.random().toString(36).slice(2,7), name:name.trim().slice(0,28),members:[]};
+  customChatLists.push(list); saveCustomChatLists(); editChatList(list); setChatFilter("list:"+list.id);
+}
+
 function setChatFilter(filter){
-  activeChatFilter = ["all","unread","groups"].includes(filter) ? filter : "all";
+  loadCustomChatLists();
+  activeChatFilter = ["all","unread","groups"].includes(filter) || (filter.startsWith("list:") && customChatLists.some(l => l.id === filter.slice(5))) ? filter : "all";
   document.querySelectorAll("#waFilterBar .waFilterBtn").forEach(button => {
     button.classList.toggle("active", button.dataset.filter === activeChatFilter);
   });
+  renderCustomChatFilters();
   renderUsers();
 }
 
@@ -2662,7 +2740,7 @@ document.querySelectorAll("#waFilterBar .waFilterBtn").forEach(button => {
 });
 
 function switchMainTab(tab){
-  const next = ["chats","news","communities","calls","profile"].includes(tab) ? tab : "chats";
+  const next = ["chats","news","communities","calls","profile","subscriptions"].includes(tab) ? tab : "chats";
   activeMainTab = next;
 
   Object.entries(mainTabPages).forEach(([name,page]) => {
@@ -2834,6 +2912,10 @@ $("communityCreateButton").onclick = () => {
   newGroupButton?.click();
 };
 
+$("profileSubscriptionsButton").onclick = () => switchMainTab("subscriptions");
+$("subscriptionBack").onclick = () => switchMainTab("profile");
+$("profileListsButton").onclick = () => { switchMainTab("chats"); createOrManageChatList(); };
+$("addCustomChatList").onclick = () => createOrManageChatList();
 $("profileEditButton").onclick = () => $("profileModal").style.display = "flex";
 $("profileSettingsButton").onclick = () => $("settingsButton").click();
 $("profileAccountButton").onclick = () => $("settingsAccount").click();
@@ -4319,6 +4401,8 @@ function openGroupChat(group){
 }
 
 function renderUsers(){
+  loadCustomChatLists();
+  const currentList = activeChatFilter.startsWith("list:") ? customChatLists.find(l => l.id===activeChatFilter.slice(5)) : null;
 
   const query =
     searchInput.value
@@ -4334,6 +4418,7 @@ function renderUsers(){
       if(!group) return false;
       const name = String(group.name || "grupo").toLowerCase();
       if(query && !name.includes(query)) return false;
+      if(currentList) return false;
       if(activeChatFilter === "unread" && !(Number(groupUnread[group.id] || 0) > 0)) return false;
       return activeChatFilter === "all" || activeChatFilter === "unread" || activeChatFilter === "groups";
     });
@@ -4375,7 +4460,9 @@ function renderUsers(){
   let list = [];
   let mode = "contacts";
 
-  if(activeChatFilter === "groups"){
+  if(currentList){
+    list=others.filter(u => isContact(u.username) && currentList.members.some(m=>norm(m)===norm(u.username)) && (!query || String(u.displayName || "").toLowerCase().includes(query) || String(u.username).toLowerCase().includes(query)));
+  }else if(activeChatFilter === "groups"){
     list = [];
   }else if(!query){
     list = others.filter(user => {
@@ -4412,7 +4499,7 @@ function renderUsers(){
 
   if(!list.length){
     if(renderedGroupCount > 0) return;
-    const emptyMessage = activeChatFilter === "groups"
+    const emptyMessage = currentList ? "Esta lista está vacía. Mantén pulsada su pestaña para añadir contactos." : activeChatFilter === "groups"
       ? "Todavía no tienes grupos." 
       : activeChatFilter === "unread"
         ? "No tienes chats sin leer."
