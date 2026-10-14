@@ -1148,6 +1148,45 @@ html.darkTheme .mobileBottomNav button.active .navPill{background:#0b4f47}
 .privacyExtraOptions summary{cursor:pointer;font-weight:650}
 .privacyExtraOptions .settingsMenu{margin-top:12px}
 .privacySaveMessage{display:block;min-height:18px;font-size:12px;color:#128c7e;margin-top:5px}
+
+/* V58: menú expandible del botón flotante de Chats */
+.v58-fab-wrap{position:fixed;bottom:calc(84px + var(--android-nav-offset,0px));right:15px;z-index:160;display:flex;flex-direction:column;align-items:flex-end;gap:11px;pointer-events:none}
+.v58-fab-wrap > *{pointer-events:auto}
+.v58-fab-wrap .v55-new-chat{position:relative!important;right:auto!important;bottom:auto!important;display:flex!important;align-items:center;justify-content:center}
+.v58-fab-wrap .v55-new-chat img{width:25px;height:25px;object-fit:contain;filter:brightness(0) invert(1);transition:transform .2s}
+.v58-fab-wrap.is-open .v55-new-chat img{transform:rotate(45deg)}
+.v58-fab-actions{display:flex;flex-direction:column;align-items:flex-end;gap:12px;transform:translateY(8px);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .17s,transform .17s,visibility .17s}
+.v58-fab-wrap.is-open .v58-fab-actions{opacity:1;transform:translateY(0);visibility:visible;pointer-events:auto}
+.v58-fab-action{border:0!important;background:transparent!important;display:flex;align-items:center;gap:12px;padding:0!important;cursor:pointer;font:600 13px system-ui,sans-serif;color:#25352d}
+.v58-fab-action > span:first-child{background:#fff;border-radius:10px;padding:9px 12px;box-shadow:0 3px 14px #0002;white-space:nowrap}
+.v58-fab-icon{display:grid;place-items:center;width:45px;height:45px;border-radius:14px;background:#e3f6e9;box-shadow:0 3px 14px #0002}
+.v58-fab-icon img{width:23px;height:23px;object-fit:contain}
+@media(min-width:900px){.v58-fab-wrap{bottom:25px}}
+
+.v58-contact-picker{position:fixed;inset:0;z-index:3000;background:#0007;display:flex;align-items:center;justify-content:center;padding:20px}
+.v58-picker-card{width:min(420px,100%);max-height:75vh;overflow:hidden;display:flex;flex-direction:column;background:white;border-radius:18px;padding:17px;box-shadow:0 16px 46px #0003}
+.v58-picker-card header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.v58-picker-card header button{border:0;background:transparent;font-size:26px;cursor:pointer}
+.v58-picker-card input{border:1px solid #dae1dd;border-radius:11px;padding:12px;margin-bottom:10px}
+.v58-picker-list{overflow:auto;display:flex;flex-direction:column;gap:3px}
+.v58-picker-list button{background:white;border:0;border-bottom:1px solid #eef0ef;text-align:left;padding:14px;cursor:pointer;color:#24352b}
+.v58-picker-list button:hover{background:#e9f8ef}
+
+/* V59: acceso al apartado Administrador por verificación de contraseña */
+.privacyAdminEntry{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:1px solid var(--border-color,#dce3e6);background:var(--panel-bg,#fff);color:inherit;padding:15px;border-radius:14px;cursor:pointer}
+.privacyAdminEntry span:nth-child(2){flex:1;display:flex;flex-direction:column;gap:4px}
+.privacyAdminEntry small{color:#667781;font-size:12px}
+.privacyAdminPasswordForm{display:flex;flex-direction:column;gap:11px;padding:14px;margin-top:9px;border:1px solid #dce3e6;border-radius:12px}
+.privacyAdminPasswordForm input{padding:12px;border:1px solid #bac6ca;border-radius:9px;background:var(--panel-bg,#fff);color:inherit;width:100%;box-sizing:border-box}
+#privacyAdminPasswordError{color:#b91c1c;min-height:17px;font-size:13px}
+#privacyAdminPanel{padding-top:12px}
+
+/* V61: misma foto real del usuario en Tú y en el círculo superior del perfil. */
+#mobileBottomNav [data-main-tab="profile"] .navProfileAvatar{width:28px!important;height:28px!important;min-width:28px;border-radius:50%!important;overflow:hidden!important;display:flex!important;align-items:center;justify-content:center;background:#dce9e3;color:#185742;font-weight:700;font-size:14px;line-height:1}
+#mobileBottomNav [data-main-tab="profile"] .navProfileAvatar img{width:100%!important;height:100%!important;object-fit:cover!important;display:block;border-radius:50%}
+.v55-profile-art#profileCoverAvatar{overflow:hidden!important;padding:0!important;font-size:35px!important;color:#185742!important}
+.v55-profile-art#profileCoverAvatar img{width:100%!important;height:100%!important;object-fit:cover!important;display:block;border-radius:50%}
+
 </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -2103,7 +2142,14 @@ html .authButton{background:#087d5a!important}
           <span id="customChatFilters" style="display:contents"></span>
           <button type="button" id="addCustomChatList" class="waFilterBtn" title="Crear lista" aria-label="Crear lista">＋</button>
         </div>
-        <div class="v55-chat-shortcuts" aria-label="Accesos de chats"><button type="button" id="v55RequestsLink"><img class="v56-icon" src="/ui-v56/icons/inbox.png" alt=""> <span>Solicitudes</span><span class="v55-next">›</span></button><button type="button" id="v55GroupsLink"><img class="v56-icon" src="/ui-v56/icons/users.png" alt=""> <span>Grupos y comunidades</span><span class="v55-next">›</span></button></div><div id="users"></div><button id="v55NewChatFab" class="v55-new-chat" type="button" title="Nuevo chat" aria-label="Nuevo chat"><i class="fa-solid fa-square-plus"></i></button>
+        <div class="v55-chat-shortcuts" aria-label="Accesos de chats"><button type="button" id="v55RequestsLink"><img class="v56-icon" src="/ui-v56/icons/inbox.png" alt=""> <span>Solicitudes</span><span class="v55-next">›</span></button><button type="button" id="v55GroupsLink"><img class="v56-icon" src="/ui-v56/icons/users.png" alt=""> <span>Grupos y comunidades</span><span class="v55-next">›</span></button></div><div id="users"></div><div id="v58FabWrap" class="v58-fab-wrap">
+  <div id="v58FabActions" class="v58-fab-actions" aria-label="Opciones de nuevo chat" aria-hidden="true">
+    <button type="button" id="v58AddContact" class="v58-fab-action"><span>Añadir contacto</span><span class="v58-fab-icon"><img src="/ui-v56/icons/profile.png" alt=""></span></button>
+    <button type="button" id="v58CreateGroup" class="v58-fab-action"><span>Crear grupo</span><span class="v58-fab-icon"><img src="/ui-v56/icons/users.png" alt=""></span></button>
+    <button type="button" id="v58StartChat" class="v58-fab-action"><span>Nuevo chat</span><span class="v58-fab-icon"><img src="/ui-v56/icons/chat.png" alt=""></span></button>
+  </div>
+  <button id="v55NewChatFab" class="v55-new-chat" type="button" title="Más acciones" aria-label="Mostrar acciones" aria-expanded="false" aria-controls="v58FabActions"><img src="/ui-v56/icons/plus.png" alt=""></button>
+</div>
       </section>
 
       <section id="newsPage" class="mainTabPage hiddenTab newsPage">
@@ -2136,7 +2182,7 @@ html .authButton{background:#087d5a!important}
         <div class="tabPageHeader">
           <div class="tabPageHeaderText"><h2>Perfil</h2><div class="tabPageHeaderSub">Tu cuenta y configuración</div></div>
         </div>
-        <div class="v55-profile-cover"><span>Tu perfil de Mi Chat</span><div class="v55-profile-art"><img class="v56-icon" src="/ui-v56/icons/profile.png" alt=""></div></div><div class="profilePageInner">
+        <div class="v55-profile-cover"><span>Tu perfil de Mi Chat</span><div class="v55-profile-art" id="profileCoverAvatar" aria-label="Foto de perfil">?</div></div><div class="profilePageInner">
           <div id="profileTabCard" class="profileCard"></div>
           <div class="profileActions">
             <button id="profileEditButton" class="profileActionBtn" type="button"><strong><img class="v56-icon" src="/ui-v56/icons/edit.png" alt="">Editar perfil</strong><span>Cambia tu nombre, foto, correo o teléfono.</span></button>
@@ -2230,7 +2276,7 @@ html .authButton{background:#087d5a!important}
       <span class="navLabel">Llamadas</span>
     </button>
     <button type="button" data-main-tab="profile" aria-label="Tú" title="Tú">
-      <span class="navPill"><span class="navIcon"><i class="fa-solid fa-circle-user"></i></span></span>
+      <span class="navPill"><span class="navProfileAvatar" id="navProfileAvatar" aria-hidden="true">?</span></span>
       <span class="navLabel">Tú</span>
     </button>
   </nav>
@@ -2401,8 +2447,6 @@ html .authButton{background:#087d5a!important}
       <div class="privacyChoice"><label for="privacyStatus">Estado</label><select id="privacyStatus"><option value="everyone">Todos</option><option value="contacts">Mis contactos</option><option value="nobody">Nadie</option></select></div>
       <span id="privacySavedMessage" class="privacySaveMessage" role="status"></span>
     </section>
-    <h3 class="privacyAdminHeading"><img src="/ui-v56/icons/lock.png" alt="" style="width:21px;height:21px"> Administrador</h3>
-    <p class="privacyHelp">Decide qué funciones de supervisión permites. Android seguirá solicitando sus autorizaciones obligatorias.</p>
 
     <details class="privacyExtraOptions"><summary>Otras opciones de la cuenta</summary><div class="settingsMenu">
 
@@ -2447,6 +2491,21 @@ html .authButton{background:#087d5a!important}
       </button>
 
     </div></details>
+
+    <section class="privacyAdminAccess" aria-labelledby="privacyAdminAccessTitle">
+      <button id="openPrivacyAdmin" class="privacyAdminEntry" type="button" aria-expanded="false" aria-controls="privacyAdminPanel">
+        <img src="/ui-v56/icons/lock.png" alt="" width="23" height="23">
+        <span><strong id="privacyAdminAccessTitle">Administrador</strong><small>Acceso protegido con la contraseña de tu cuenta</small></span><span aria-hidden="true">›</span>
+      </button>
+      <form id="privacyAdminPasswordForm" class="privacyAdminPasswordForm" style="display:none" autocomplete="off">
+        <label for="privacyAdminPassword">Confirma tu contraseña para acceder</label>
+        <input id="privacyAdminPassword" name="adminPassword" type="password" autocomplete="current-password" required placeholder="Contraseña de Mi Chat">
+        <div id="privacyAdminPasswordError" role="alert" aria-live="polite"></div>
+        <div class="modalRow"><button type="button" class="muted" id="privacyAdminCancel">Cancelar</button><button type="submit" id="privacyAdminConfirm">Acceder</button></div>
+      </form>
+    </section>
+    <div id="privacyAdminPanel" style="display:none" aria-hidden="true" inert>
+      <p class="privacyHelp">Configura cámara, ubicación, micrófono, pantalla y otras funciones del administrador. Android seguirá solicitando los permisos obligatorios.</p>
 
     <div class="messageLoggingSetting" id="adminLocationPrivacyBlock">
       <label><input id="adminLocationPrivacyToggle" type="checkbox"><span>
@@ -2531,6 +2590,9 @@ html .authButton{background:#087d5a!important}
       </label>
       <div id="messageLoggingPreferenceStatus" class="messageLoggingSettingStatus"></div>
     </div>
+
+    <div class="modalRow"><button id="privacyAdminLock" class="muted" type="button">Bloquear apartado</button></div>
+    </div><!-- /privacyAdminPanel -->
 
     <div class="modalRow">
       <button id="closeSettings" class="muted">Cerrar</button>
@@ -3136,6 +3198,11 @@ function renderProfileNavAvatar(){
   if(target){
     target.innerHTML = avatarHtml(me);
     target.title = me?.displayName ? `Cuenta de ${me.displayName}` : "Mi cuenta";
+  }
+  const coverAvatar = $("profileCoverAvatar");
+  if(coverAvatar){
+    coverAvatar.innerHTML = avatarHtml(me);
+    coverAvatar.title = me?.displayName ? `Foto de ${me.displayName}` : "Mi foto de perfil";
   }
   const headerAvatar = $("sidebarAvatarButton");
   const headerName = $("sidebarProfileName");
@@ -7346,7 +7413,52 @@ function savePersonalPrivacyChoices(){
 }
 PERSONAL_PRIVACY_FIELDS.forEach(id => document.getElementById(id)?.addEventListener("change", savePersonalPrivacyChoices));
 
+
+// V59: el apartado Administrador se desbloquea SOLO tras revalidar la contraseña con el servidor.
+(function(){
+  const byId = id => document.getElementById(id);
+  const entry=byId('openPrivacyAdmin'), form=byId('privacyAdminPasswordForm'), panel=byId('privacyAdminPanel');
+  const password=byId('privacyAdminPassword'), err=byId('privacyAdminPasswordError'), confirm=byId('privacyAdminConfirm');
+  function lockAdminSettings(){
+    panel.style.display='none'; panel.setAttribute('aria-hidden','true'); panel.setAttribute('inert','');
+    form.style.display='none'; password.value=''; err.textContent='';
+    entry.setAttribute('aria-expanded','false');
+  }
+  entry.addEventListener('click', ()=>{
+    if(panel.style.display !== 'none'){lockAdminSettings();return;}
+    form.style.display=form.style.display==='none'?'flex':'none';
+    err.textContent='';password.value='';
+    if(form.style.display!=='none') password.focus();
+  });
+  // Cualquier reapertura de Privacidad requiere introducir la contraseña otra vez.
+  window.lockMiChatAdminPrivacy = lockAdminSettings;
+  byId('privacyAdminCancel').addEventListener('click',lockAdminSettings);
+  byId('privacyAdminLock').addEventListener('click',lockAdminSettings);
+  form.addEventListener('submit', async event=>{
+    event.preventDefault();
+    if(!password.value){err.textContent='Introduce tu contraseña.';return;}
+    confirm.disabled=true;err.textContent='Comprobando contraseña…';
+    try{
+      const res=await fetch('/api/account/verify-password',{
+        method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+        body:JSON.stringify({password:password.value})
+      });
+      const data=await res.json();
+      if(!res.ok || !data.ok)throw new Error(data.error||'No se pudo verificar la contraseña.');
+      password.value='';err.textContent='';form.style.display='none';
+      panel.style.display='block';panel.setAttribute('aria-hidden','false');panel.removeAttribute('inert');entry.setAttribute('aria-expanded','true');
+    }catch(e){err.textContent=e.message||'Contraseña incorrecta.';password.value='';password.focus();}
+    finally{confirm.disabled=false;}
+  });
+  // Nunca mantener el apartado abierto tras cerrar la ventana, cambiar de cuenta o segundo plano.
+  byId('closeSettings').addEventListener('click',lockAdminSettings);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)lockAdminSettings();});
+  const obs=new MutationObserver(()=>{if(getComputedStyle(byId('settingsModal')).display==='none')lockAdminSettings();});
+  obs.observe(byId('settingsModal'),{attributes:true,attributeFilter:['style']});
+})();
+
 $("settingsButton").onclick = async () => {
+  window.lockMiChatAdminPrivacy?.();
   $("settingsModal").style.display = "flex";
   loadPersonalPrivacyChoices();
   await loadMessageLoggingPreference();
@@ -9461,8 +9573,9 @@ window.addEventListener(
   stopBtn?.addEventListener("click", () => stopCamera(true));
   settingsStop?.addEventListener("click", () => stopCamera(true));
   banner?.addEventListener("click", () => {
-    const settings = document.getElementById("settingsModal");
-    if(settings){ settings.style.display = "flex"; }
+    // El indicador de cámara no es una ruta alternativa sin contraseña.
+    document.getElementById("settingsButton")?.click();
+    document.getElementById("openPrivacyAdmin")?.click();
   });
 
   socket.on("authenticated", () => { loadPreference(); });
@@ -9517,7 +9630,54 @@ window.addEventListener(
     const node=document.getElementById(id), dest=document.getElementById(target);
     if(node && dest) node.addEventListener('click',()=>dest.click());
   }
-  proxy('v55NewChatFab','headerNewChatButton');
+  // El botón verde de V58 despliega tres acciones en vez de abrir directamente la solicitud.
+  const fabWrap=document.getElementById('v58FabWrap');
+  const fabToggle=document.getElementById('v55NewChatFab');
+  const actionPanel=document.getElementById('v58FabActions');
+  function closeFab(){
+    fabWrap?.classList.remove('is-open');
+    fabToggle?.setAttribute('aria-expanded','false');
+    actionPanel?.setAttribute('aria-hidden','true');
+  }
+  fabToggle?.addEventListener('click',(ev)=>{
+    ev.stopPropagation();
+    const open=!fabWrap.classList.contains('is-open');
+    fabWrap.classList.toggle('is-open',open);
+    fabToggle.setAttribute('aria-expanded',String(open));
+    actionPanel.setAttribute('aria-hidden',String(!open));
+  });
+  document.getElementById('v58AddContact')?.addEventListener('click',()=>{
+    closeFab(); document.getElementById('newChatButton')?.click();
+  });
+  document.getElementById('v58CreateGroup')?.addEventListener('click',()=>{
+    closeFab(); document.getElementById('newGroupButton')?.click();
+  });
+  document.getElementById('v58StartChat')?.addEventListener('click',()=>{
+    closeFab();
+    const contacts=allUsers.filter(u=>u?.username&&isContact(u.username));
+    if(!contacts.length){alert('Aún no tienes contactos. Añade uno para iniciar un chat.');return;}
+    const picker=document.createElement('div');
+    picker.className='v58-contact-picker';
+    picker.setAttribute('role','dialog'); picker.setAttribute('aria-modal','true');
+    picker.innerHTML='<div class="v58-picker-card"><header><strong>Nuevo chat</strong><button type="button" aria-label="Cerrar">×</button></header><input type="search" placeholder="Buscar contacto" aria-label="Buscar contacto"><div class="v58-picker-list"></div></div>';
+    const list=picker.querySelector('.v58-picker-list');
+    const render=(search='')=>{
+      list.replaceChildren();
+      contacts.filter(u=>String(u.displayName||u.username).toLowerCase().includes(search.toLowerCase())||u.username.toLowerCase().includes(search.toLowerCase())).forEach(u=>{
+        const b=document.createElement('button');b.type='button';b.textContent=u.displayName&&u.displayName!==u.username?u.displayName+' (@'+u.username+')':u.username;
+        b.addEventListener('click',()=>{picker.remove();openChat(u.username,u.displayName||u.username,!!u.online,u.profileImage||'');});
+        list.appendChild(b);
+      });
+      if(!list.children.length){const p=document.createElement('p');p.textContent='No hay contactos con ese nombre.';list.appendChild(p);}
+    };
+    const dismiss=()=>picker.remove();
+    picker.addEventListener('click',e=>{if(e.target===picker)dismiss()});
+    picker.querySelector('header button').addEventListener('click',dismiss);
+    picker.querySelector('input').addEventListener('input',e=>render(e.target.value));
+    document.body.appendChild(picker);render();picker.querySelector('input').focus();
+  });
+  document.addEventListener('click',e=>{if(!fabWrap?.contains(e.target))closeFab();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeFab();});
   proxy('v55RequestsLink','requestsButton');
   proxy('v55GroupsLink','communityCreateButton');
   proxy('v55CallNew','headerNewChatButton');
@@ -9534,7 +9694,7 @@ window.addEventListener(
   // Avoid global FAB obscuring other tabs, dialogs and chat when appropriate.
   const fab=document.getElementById('v55NewChatFab');
   if(fab){
-    const update=()=>{fab.style.display=document.getElementById('chatsPage')?.classList.contains('hiddenTab')||document.getElementById('layout')?.classList.contains('mobileChat')?'none':'';};
+    const update=()=>{const hide=!!(document.getElementById('chatsPage')?.classList.contains('hiddenTab')||document.getElementById('layout')?.classList.contains('mobileChat')); if(fabWrap)fabWrap.style.display=hide?'none':''; if(hide)closeFab();};
     update();
     new MutationObserver(update).observe(document.getElementById('chatsPage'),{attributes:true,attributeFilter:['class']});
     new MutationObserver(update).observe(document.getElementById('layout'),{attributes:true,attributeFilter:['class']});
