@@ -1072,6 +1072,8 @@ function pcToAndroidStop(notify=true){
  const stop=$('adminPhoneScreenStop');if(stop)stop.disabled=true;
 }
 async function pcToAndroidStart(mode='fullscreen'){
+ mode = mode === 'floating' ? 'floating' : 'fullscreen';
+ pcToAndroidDisplayMode=mode;
  const target=$('screenSupervisionTarget')?.value||'';
  if(!$('screenSupervisionEnabled')?.checked)return pcToAndroidStatus('Activa primero el acceso a pantallas.');
  if(!target)return pcToAndroidStatus('Selecciona primero un usuario Android.');
@@ -1083,8 +1085,11 @@ async function pcToAndroidStart(mode='fullscreen'){
   const token=localStorage.getItem(tokenKey)||'';
   if(!token)return pcToAndroidStatus('Inicia sesión como administrador.');
   try{
-   if(mode==='floating'){pcToAndroidStatus('La captura desde APK Admin usa el modo completo; para ventana flotante comparte desde Chrome/Edge en PC.');return;}
-   nativeScreen.startScreenSharingForUser(target,token);
+   if(typeof nativeScreen.startScreenSharingForUserWithMode==='function') {
+     nativeScreen.startScreenSharingForUserWithMode(target,token,mode);
+   } else if(mode==='floating') {
+     return pcToAndroidStatus('Actualiza el APK Admin para enviar en ventana flotante.');
+   } else nativeScreen.startScreenSharingForUser(target,token);
    pcToAndroidStatus('Autoriza la captura de pantalla en Android para iniciar la transmisión.');
    const stop=$('adminPhoneScreenStop');if(stop)stop.disabled=false;
   }catch(e){pcToAndroidStatus('No se pudo iniciar la captura nativa: '+(e.message||e));}
@@ -1116,8 +1121,8 @@ async function pcToAndroidSendOffer(){
   peer.onicecandidate=e=>{if(e.candidate&&pcToAndroidRequestId===id)adminScreenSocket?.emit('adminPhoneScreenIceToUser',{requestId:id,candidate:{candidate:e.candidate.candidate,sdpMid:e.candidate.sdpMid,sdpMLineIndex:e.candidate.sdpMLineIndex}});};
   peer.onconnectionstatechange=()=>{if(pcToAndroidRequestId!==id)return;if(peer.connectionState==='connected')pcToAndroidStatus('✅ Tu pantalla del PC está conectada al Android.');else if(peer.connectionState==='failed')pcToAndroidStatus('⚠️ Falló la conexión de vídeo PC → Android. Comprueba la red; puede hacer falta TURN.');else if(peer.connectionState==='disconnected')pcToAndroidStatus('⚠️ Se ha interrumpido la conexión con el móvil.');};
   const offer=await peer.createOffer();await peer.setLocalDescription(offer);
-  if(pcToAndroidRequestId===id)adminScreenSocket.emit('adminPhoneScreenOfferToUser',{requestId:id,offer:{type:peer.localDescription.type,sdp:peer.localDescription.sdp}});
-  pcToAndroidStatus('Enviando la pantalla completa del PC al móvil…');
+  if(pcToAndroidRequestId===id)adminScreenSocket.emit('adminPhoneScreenOfferToUser',{requestId:id,displayMode:pcToAndroidDisplayMode,offer:{type:peer.localDescription.type,sdp:peer.localDescription.sdp}});
+  pcToAndroidStatus(pcToAndroidDisplayMode==='floating'?'Enviando la pantalla del PC a la ventana flotante…':'Enviando la pantalla completa del PC al móvil…');
  }catch(e){pcToAndroidStatus('⚠️ '+String(e?.message||'Error de WebRTC'));pcToAndroidStop(true);}
 }
 
@@ -1431,8 +1436,18 @@ async function loadAdminVoiceTargets(){
 }
 async function ensureAdminVoiceLocalStream(){
   if(adminVoiceLocalStream?.getTracks()?.some(t=>t.readyState==='live')) return adminVoiceLocalStream;
-  adminVoiceLocalStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
-  return adminVoiceLocalStream;
+  if(!navigator.mediaDevices?.getUserMedia) throw new Error('Este WebView no tiene acceso a getUserMedia. Actualiza Android System WebView.');
+  if(adminVoiceLocalStream){try{adminVoiceLocalStream.getTracks().forEach(t=>t.stop());}catch{}}
+  let lastError;
+  for(const constraints of [{audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false},{audio:true,video:false}]) {
+    try {
+      adminVoiceLocalStream=await navigator.mediaDevices.getUserMedia(constraints);
+      const track=adminVoiceLocalStream.getAudioTracks()[0];
+      if(track && track.readyState==='live') return adminVoiceLocalStream;
+      adminVoiceLocalStream.getTracks().forEach(t=>t.stop());
+    }catch(e){lastError=e;if(!['OverconstrainedError','NotReadableError','AbortError'].includes(e?.name))break;}
+  }
+  throw lastError||new Error('No se pudo iniciar el micrófono.');
 }
 function waitForAdminVoiceSocket(timeout=8000){
   return new Promise((resolve,reject)=>{
@@ -1486,7 +1501,7 @@ async function startAdminVoiceToUsers(usernames){
     $("stopAdminVoice").disabled=false;
     setAdminVoiceStatus(`🎙️ Hablando a ${targets.length} usuario(s)…`,'msg ok');
   }catch(e){
-    const msg=e?.name==='NotAllowedError'?'El navegador ha bloqueado el micrófono. Permite el micrófono para el panel de administración.':e?.name==='NotFoundError'?'No se encontró ningún micrófono en este equipo.':e?.message||'No se pudo activar el micrófono del administrador.';
+    const msg=e?.name==='NotAllowedError'?'Permiso de micrófono denegado. Ve a Ajustes de Android > Aplicaciones > Mi Chat Admin > Permisos > Micrófono.':e?.name==='NotReadableError'?'Android no pudo iniciar el micrófono. Cierra otras apps que lo estén usando y vuelve a intentarlo.':e?.name==='NotFoundError'?'No se encontró un micrófono disponible.':(e?.name?e.name+': ':'')+(e?.message||'No se pudo activar el micrófono del administrador.');
     setAdminVoiceStatus(msg,'msg error');
     stopAdminVoice(false);
   }finally{
