@@ -2159,6 +2159,15 @@ html.darkTheme #chatsPage #searchInput {
   html.darkTheme #mobileBottomNav button.active .navPill {background:#005c4b!important}
 }
 </style>
+<style id="michat-archive-style">
+.archive-mini-btn{background:transparent;border:1px solid var(--wa-border,#c7c7c7);border-radius:12px;padding:5px 9px;color:inherit;cursor:pointer;font-size:12px}
+.archive-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.56);z-index:2147480000;display:flex;align-items:center;justify-content:center;padding:18px}
+.archive-modal-card{width:min(470px,100%);max-height:85vh;overflow-y:auto;background:var(--wa-panel,#fff);color:var(--wa-text,#161616);border-radius:18px;padding:18px;box-shadow:0 18px 42px #0004}
+.archive-modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.archive-chat-row{display:flex;gap:7px;align-items:center;padding:12px 0;border-top:1px solid var(--wa-border,#ddd)}
+.archive-chat-row span{flex:1;min-width:0;overflow-wrap:anywhere}
+.archive-modal-card button{border:1px solid var(--wa-border,#ccc);background:var(--wa-bg,#f3f4f6);color:inherit;border-radius:10px;padding:7px;cursor:pointer}
+</style>
 </head>
 
 <body>
@@ -2369,7 +2378,7 @@ html.darkTheme #chatsPage #searchInput {
           <span id="customChatFilters" style="display:contents"></span>
           <button type="button" id="addCustomChatList" class="waFilterBtn" title="Crear lista" aria-label="Crear lista">＋</button>
         </div>
-        <div class="v55-chat-shortcuts" aria-label="Accesos de chats"><button type="button" id="v55RequestsLink"><img class="v56-icon" src="/ui-v56/icons/inbox.png" alt=""> <span>Solicitudes</span><span class="v55-next">›</span></button><button type="button" id="v55GroupsLink"><img class="v56-icon" src="/ui-v56/icons/users.png" alt=""> <span>Grupos y comunidades</span><span class="v55-next">›</span></button></div><div id="users"></div><div id="v58FabWrap" class="v58-fab-wrap">
+        <div class="v55-chat-shortcuts" aria-label="Accesos de chats"><button type="button" id="v55RequestsLink"><img class="v56-icon" src="/ui-v56/icons/inbox.png" alt=""> <span>Solicitudes</span><span class="v55-next">›</span></button><button type="button" id="v55GroupsLink"><img class="v56-icon" src="/ui-v56/icons/inbox.png" alt=""> <span>Chats archivados</span><span class="v55-next">›</span></button></div><div id="users"></div><div id="v58FabWrap" class="v58-fab-wrap">
   <div id="v58FabActions" class="v58-fab-actions" aria-label="Opciones de nuevo chat" aria-hidden="true">
     <button type="button" id="v58AddContact" class="v58-fab-action"><span>Añadir contacto</span><span class="v58-fab-icon"><img src="/ui-v56/icons/profile.png" alt=""></span></button>
     <button type="button" id="v58CreateGroup" class="v58-fab-action"><span>Crear grupo</span><span class="v58-fab-icon"><img src="/ui-v56/icons/users.png" alt=""></span></button>
@@ -3086,6 +3095,35 @@ let groupUnread = {};
 let authMode = "login";
 let unread = {};
 let conversations = {};
+// Última actividad por conversación, obtenida del servidor al iniciar sesión.
+// Incluye mensajes enviados y recibidos; el más reciente va primero.
+let recentChatActivity = Object.create(null);
+function messageActivityTime(message){
+  const raw = message?.time || message?.createdAt || message?.timestamp || 0;
+  const value = typeof raw === "number" ? raw : Date.parse(raw);
+  return Number.isFinite(value) ? value : 0;
+}
+function updateChatActivity(key, message){
+  if(!key) return;
+  const when = messageActivityTime(message);
+  if(when > (recentChatActivity[key] || 0)) recentChatActivity[key] = when;
+}
+function chatActivity(key){ return Number(recentChatActivity[key] || 0); }
+function sortVisibleChatRows(){
+  // No cambiar el orden de los resultados del buscador de usuarios.
+  if(searchInput.value.trim()) return;
+  const rows = Array.from(usersContainer.querySelectorAll(':scope > .user[data-chat-key]'));
+  rows.sort((a,b) => Number(b.dataset.activity || 0) - Number(a.dataset.activity || 0));
+  for(const row of rows) usersContainer.appendChild(row);
+}
+socket.on("chatRecentActivity", data => {
+  recentChatActivity = Object.create(null);
+  if(data && typeof data === "object") for(const [key,value] of Object.entries(data)){
+    if(Number.isFinite(Number(value))) recentChatActivity[key] = Number(value);
+  }
+  renderUsers();
+});
+
 let pendingContactUser = null;
 let locationLiveWatchId = null;
 let activeOutgoingLocationShareId = "";
@@ -4902,6 +4940,52 @@ function openGroupChat(group){
   socket.emit("getGroupConversation",group.id); socket.emit("markGroupRead",group.id);
 }
 
+// Chats archivados: preferencia local por cuenta; no elimina chats ni mensajes.
+let archiveOwner=null, archivedChatKeys=new Set();
+function archiveStorageKey(){return 'michat_archived_chats_v1_'+String(myUsername||'').toLowerCase();}
+function loadArchivedChats(){
+  const owner=String(myUsername||'').toLowerCase();
+  if(owner===archiveOwner)return;
+  archiveOwner=owner;
+  try{const value=JSON.parse(localStorage.getItem(archiveStorageKey())||'[]');archivedChatKeys=new Set(Array.isArray(value)?value.filter(x=>typeof x==='string'):[]);}catch(_){archivedChatKeys=new Set();}
+}
+function isChatArchived(key){loadArchivedChats();return archivedChatKeys.has(key);}
+function changeArchivedChat(key,archive){
+  loadArchivedChats();
+  if(archive)archivedChatKeys.add(key);else archivedChatKeys.delete(key);
+  try{localStorage.setItem(archiveStorageKey(),JSON.stringify([...archivedChatKeys]));}catch(_){alert('No se pudo guardar el estado de archivado.');}
+  renderUsers();
+  const modal=document.getElementById('michatArchivedModal');if(modal)renderArchivedModal(modal);
+}
+function renderArchivedModal(modal){
+  loadArchivedChats();
+  const list=modal.querySelector('[data-archive-list]');if(!list)return;
+  list.replaceChildren();let amount=0;
+  allGroups.filter(g=>g && archivedChatKeys.has('g:'+String(g.id))).forEach(g=>{
+    amount++;const row=document.createElement('div');row.className='archive-chat-row';
+    const title=document.createElement('span');title.textContent=g.name||'Grupo';
+    const open=document.createElement('button');open.type='button';open.textContent='Abrir';open.addEventListener('click',()=>{modal.remove();openGroupChat(g);});
+    const unarchive=document.createElement('button');unarchive.type='button';unarchive.textContent='Desarchivar';unarchive.addEventListener('click',()=>changeArchivedChat('g:'+String(g.id),false));
+    row.append(title,open,unarchive);list.append(row);
+  });
+  allUsers.filter(u=>u?.username && norm(u.username)!==norm(myUsername) && isContact(u.username) && archivedChatKeys.has('u:'+norm(u.username))).forEach(u=>{
+    amount++;const row=document.createElement('div');row.className='archive-chat-row';
+    const title=document.createElement('span');title.textContent=u.displayName||u.username;
+    const open=document.createElement('button');open.type='button';open.textContent='Abrir';open.addEventListener('click',()=>{modal.remove();openChat(u.username,u.displayName||u.username,!!u.online,u.profileImage||'');});
+    const unarchive=document.createElement('button');unarchive.type='button';unarchive.textContent='Desarchivar';unarchive.addEventListener('click',()=>changeArchivedChat('u:'+norm(u.username),false));
+    row.append(title,open,unarchive);list.append(row);
+  });
+  if(!amount){const info=document.createElement('p');info.textContent='No tienes chats archivados. Puedes archivarlos desde la lista de Chats.';list.appendChild(info);}
+}
+function openArchivedChats(){
+  document.getElementById('michatArchivedModal')?.remove();
+  const modal=document.createElement('div');modal.id='michatArchivedModal';modal.className='archive-modal-backdrop';modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.setAttribute('aria-label','Chats archivados');
+  modal.innerHTML='<div class="archive-modal-card"><div class="archive-modal-head"><strong>Chats archivados</strong><button type="button" aria-label="Cerrar">Cerrar</button></div><div data-archive-list></div></div>';
+  modal.querySelector('button').addEventListener('click',()=>modal.remove());
+  modal.addEventListener('click',event=>{if(event.target===modal)modal.remove();});
+  document.body.append(modal);renderArchivedModal(modal);
+}
+
 function renderUsers(){
   loadCustomChatLists();
   const currentList = activeChatFilter.startsWith("list:") ? customChatLists.find(l => l.id===activeChatFilter.slice(5)) : null;
@@ -4917,7 +5001,7 @@ function renderUsers(){
   // Grupos forman parte del mismo listado de chats y respetan el filtro activo.
   if(activeChatFilter !== "all" || !query || allGroups.length){
     const visibleGroups = allGroups.filter(group => {
-      if(!group) return false;
+      if(!group || isChatArchived('g:'+String(group.id))) return false;
       const name = String(group.name || "grupo").toLowerCase();
       if(query && !name.includes(query)) return false;
       if(currentList) return false;
@@ -4925,10 +5009,13 @@ function renderUsers(){
       return activeChatFilter === "all" || activeChatFilter === "unread" || activeChatFilter === "groups";
     });
 
+    if(!query) visibleGroups.sort((a,b) => chatActivity('g:'+String(b.id)) - chatActivity('g:'+String(a.id)));
     visibleGroups.forEach(group => {
       renderedGroupCount += 1;
       const row = document.createElement("div");
       row.className = "user";
+      row.dataset.chatKey = 'g:'+String(group.id);
+      row.dataset.activity = String(chatActivity(row.dataset.chatKey));
       const count = Number(groupUnread[group.id] || 0);
       const avatar = group.avatar ? `<img src="${esc(group.avatar)}" alt="">` : "👥";
       row.innerHTML = `
@@ -4944,6 +5031,9 @@ function renderUsers(){
             </div>
           </div>
         </div>`;
+      const archiveBtn=document.createElement('button');archiveBtn.type='button';archiveBtn.className='archive-mini-btn';archiveBtn.textContent='Archivar';archiveBtn.title='Mover grupo a chats archivados';
+      archiveBtn.addEventListener('click',e=>{e.stopPropagation();changeArchivedChat('g:'+String(group.id),true);});
+      row.querySelector('.statusRow > div:last-child')?.append(archiveBtn);
       row.querySelector('[data-group-open]')?.addEventListener("click", event => {
         event.stopPropagation();
         openGroupChat(group);
@@ -4954,7 +5044,7 @@ function renderUsers(){
   }
 
   const others = allUsers.filter(user =>
-    user &&
+    user && !isChatArchived('u:'+norm(user.username)) &&
     norm(user.username) !== norm(myUsername)
   );
 
@@ -4999,6 +5089,8 @@ function renderUsers(){
     }
   }
 
+  if(!query) list.sort((a,b) => chatActivity('u:'+norm(b.username)) - chatActivity('u:'+norm(a.username)));
+
   if(!list.length){
     if(renderedGroupCount > 0) return;
     const emptyMessage = currentList ? "Esta lista está vacía. Mantén pulsada su pestaña para añadir contactos." : activeChatFilter === "groups"
@@ -5018,6 +5110,8 @@ function renderUsers(){
       document.createElement("div");
 
     row.className = "user";
+    row.dataset.chatKey = 'u:'+norm(user.username);
+    row.dataset.activity = String(chatActivity(row.dataset.chatKey));
 
     const count = unread[user.username] || 0;
     const contact = isContact(user.username);
@@ -5047,6 +5141,11 @@ function renderUsers(){
       </div>
     `;
 
+    if(contact){
+      const archiveBtn=document.createElement('button');archiveBtn.type='button';archiveBtn.className='archive-mini-btn';archiveBtn.textContent='Archivar';archiveBtn.title='Mover conversación a chats archivados';
+      archiveBtn.addEventListener('click',e=>{e.stopPropagation();changeArchivedChat('u:'+norm(user.username),true);});
+      row.querySelector('.statusRow > div:last-child')?.append(archiveBtn);
+    }
     const actionButtons = row.querySelectorAll('[data-action]');
     actionButtons.forEach(actionButton => {
       actionButton.onclick = event => {
@@ -5075,6 +5174,7 @@ function renderUsers(){
 
     usersContainer.appendChild(row);
   });
+  sortVisibleChatRows();
 }
 searchInput.oninput = renderUsers;
 
@@ -5375,12 +5475,16 @@ function handleIncomingGroupMessage(message, incoming){
   if(!conversations[key].some(item=>item.id===message.id)) conversations[key].push(message);
   if(String(selectedGroupId)===id){ addMessage(message); messagesContainer.scrollTop=messagesContainer.scrollHeight; if(incoming) socket.emit("markGroupRead",id); }
   else if(incoming){ groupUnread[id]=(groupUnread[id]||0)+1; renderGroups(); const group=allGroups.find(g=>String(g.id)===id); showNotification(group?.name||"Grupo",message.message||(message.fileName?"📎 Archivo":"Nuevo mensaje")); }
+  updateChatActivity('g:'+id,message);
+  renderUsers();
 }
 
 socket.on("conversationHistory",data => {
 
   conversations[data.username] =
     data.messages || [];
+  for(const msg of conversations[data.username]) updateChatActivity('u:'+norm(data.username),msg);
+  renderUsers();
 
   if(selectedUser === data.username){
     renderConversation(data.username);
@@ -5900,6 +6004,8 @@ socket.on("messageSent",message => {
     conversations[key].push(message);
   }
 
+  updateChatActivity('u:'+norm(key),message);
+  renderUsers();
   if(selectedUser === key){
 
     addMessage(message);
@@ -5931,6 +6037,8 @@ socket.on("privateMessage",message => {
     conversations[other].push(message);
   }
 
+  updateChatActivity('u:'+other,message);
+  renderUsers();
   if(selectedUser === other){
 
     addMessage(message);
@@ -9914,7 +10022,7 @@ window.addEventListener(
   document.addEventListener('click',e=>{if(!fabWrap?.contains(e.target))closeFab();});
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeFab();});
   proxy('v55RequestsLink','requestsButton');
-  proxy('v55GroupsLink','communityCreateButton');
+  document.getElementById('v55GroupsLink')?.addEventListener('click', openArchivedChats);
   proxy('v55CallNew','headerNewChatButton');
   proxy('v55CallGroups','communityCreateButton');
   const callSearch=document.getElementById('v55CallSearch');
