@@ -6297,6 +6297,17 @@ app.post("/api/account/username", requireUser, (req, res) => {
   res.json({ success: true, username: newUsername, token });
 });
 
+// V59: reautenticación para abrir los controles de Administrador desde Privacidad.
+// No almacena la contraseña, solo devuelve el resultado de la comprobación.
+app.post("/api/account/verify-password", requireUser, (req, res) => {
+  res.set("Cache-Control", "no-store");
+  const candidate = String(req.body?.password || "");
+  if (!candidate || !validPassword(candidate, req.user.salt, req.user.passwordHash)) {
+    return res.status(401).json({ ok: false, error: "Contraseña incorrecta." });
+  }
+  return res.json({ ok: true });
+});
+
 app.post("/api/account/password", requireUser, (req, res) => {
   const currentPassword = String(req.body?.currentPassword || "");
   const newPassword = String(req.body?.newPassword || "");
@@ -7469,7 +7480,7 @@ io.on("connection", socket => {
     const id=String(requestId||"");const session=screenSupervisionSessions.get(id);
     if(!session||session.direction!=="admin-to-user"||session.adminSocketId!==socket.id||!socket.data.admin||!isScreenSupervisionEnabled())return;
     if(!offer||String(offer.type||"")!=="offer"||typeof offer.sdp!=="string"||offer.sdp.length>150000)return;
-    const userSocket=io.sockets.sockets.get(session.userSocketId);if(userSocket)userSocket.emit("adminPhoneScreenOffer",{requestId:id,offer:{type:"offer",sdp:offer.sdp}});
+    const userSocket=io.sockets.sockets.get(session.userSocketId);if(userSocket)userSocket.emit("adminPhoneScreenOffer",{requestId:id,displayMode:session.displayMode||"fullscreen",offer:{type:"offer",sdp:offer.sdp}});
   });
   socket.on("adminPhoneScreenAnswerToAdmin",({requestId,answer}={})=>{
     const id=String(requestId||"");const session=screenSupervisionSessions.get(id);
@@ -7901,6 +7912,27 @@ io.on("connection", socket => {
     );
 
     sendUserList();
+
+    // Solo metadatos: ningún contenido de mensajes se envía con este resumen.
+    // El orden se recupera después de cerrar Mi Chat o reiniciar Android.
+    const recentActivity = Object.create(null);
+    const memberGroupIds = new Set(groupsForUser(u.username).map(g => String(g.id)));
+    const meNorm = norm(u.username);
+    for (const msg of messages()) {
+      if (!msg || (msg.deletedFor || []).includes(meNorm)) continue;
+      let key = '';
+      if (msg.groupId) {
+        if (memberGroupIds.has(String(msg.groupId))) key = 'g:' + String(msg.groupId);
+      } else if (norm(msg.from) === meNorm) {
+        key = 'u:' + norm(msg.to);
+      } else if (norm(msg.to) === meNorm) {
+        key = 'u:' + norm(msg.from);
+      }
+      if (!key) continue;
+      const t = new Date(msg.time || msg.createdAt || 0).getTime();
+      if (Number.isFinite(t) && t > (recentActivity[key] || 0)) recentActivity[key] = t;
+    }
+    socket.emit('chatRecentActivity', recentActivity);
 
     emitUnread(
       socket,
